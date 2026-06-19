@@ -51,8 +51,3 @@ boilersync-react
 # END multi-managed: generated-files
 
 !instructions/AGENTS.md
-
-*.log
-
-node_modules/
-.vscode/
