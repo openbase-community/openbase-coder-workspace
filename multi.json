@@ -62,6 +62,12 @@
       "installSets": ["default", "dev"]
     },
     {
+      "name": "agent-work-scheduler",
+      "url": "https://github.com/montaguegabe/agent-work-scheduler",
+      "description": "Deterministic Notion dependency scheduler for launching Super Agents work in isolated git worktrees.",
+      "installSets": ["dev"]
+    },
+    {
       "name": "multi-react",
       "url": "https://github.com/montaguegabe/multi-react",
       "description": "Shared React diff viewer and related UI utilities used by Multi and Openbase Coder.",
