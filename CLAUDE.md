@@ -25,4 +25,9 @@ Do not add MIT licensing to any Openbase Coder repo other than `allauth-client-s
 
 Tests under `e2e/` should be true app end-to-end tests: they must drive the iOS app with Appium or drive the browser with Selenium. Do not put direct API, app-server, or service-client integration tests in `e2e/`.
 
+Consult and maintain the workspace-level `GLOSSARY.md`. When adding docs,
+instructions, reports, or features that introduce or rely on recurring
+Openbase-specific terms, add or update concise glossary entries there rather
+than redefining terms differently across repos.
+
 When the iOS app is stuck at "waiting for agent", check `~/.openbase/logs` to confirm whether the LiveKit agent job was dispatched. If the worker logs show `received job request` and then stall in `ctx.connect()` with `wait_pc_connection timed out`, treat it as a stale local/iPhone LiveKit ICE/network state before assuming dispatch logic is broken. Restarting both the Mac and iPhone has resolved this state.

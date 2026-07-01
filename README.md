@@ -28,6 +28,10 @@ Default `~/.openbase/codex_home` instruction files are symlinked from
 Workspace skills under [`skills/skills/`](skills/skills/) are symlink-installed
 into `~/.openbase/codex_home/skills`.
 
+Shared Openbase terms are defined in the workspace [glossary](GLOSSARY.md).
+Update it when documenting or introducing terms that will recur across repos,
+agent instructions, reports, or user-facing docs.
+
 ## Coding Backends
 
 Openbase Coder setup supports Codex, Openbase Cloud, and Claude Code as coding
