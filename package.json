@@ -3,6 +3,9 @@
   "private": true,
   "packageManager": "pnpm@10.18.0",
   "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron"
+    ],
     "overrides": {
       "@types/react": "^18.3.3",
       "@types/react-dom": "^18.3.0"
