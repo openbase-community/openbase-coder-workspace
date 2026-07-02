@@ -35,13 +35,18 @@ one click from a **bundled package** (no `curl`), setup renders as a
 checklist, and pairing is button-driven. Four things stand between the design
 and a real non-developer succeeding:
 
-1. **Cloud endpoints aren't live.** The backend code was implemented in the
-   `openbase-cloud-api` repo (`openbase_api/openbase/`), but the deployed
-   Django project is **`api-core`** — the endpoints must be ported there and
-   migrated. Until then, none of the cross-device spinners (phone signed in,
-   devices paired) ever turn green; both apps detect the missing endpoints
-   (404/405/HTML responses) and fall back to "skip" mode. The flow won't
-   block a user, but the guided experience doesn't function.
+1. **Cloud endpoints aren't live.** The backend code is implemented in the
+   right place — `openbase-cloud-api` (`openbase_api/openbase/`) is a plugin
+   package installed into the deployed **api-core** project via `api_core.*`
+   entry points, and api-core's URL loader mounts the app at `api/openbase/`.
+   What remains is operational: merge openbase-cloud-api PR #1, deploy, and
+   run migration `0006_openbasedevice`. Until then, none of the cross-device
+   spinners (phone signed in, devices paired) ever turn green; both apps
+   detect the missing endpoints (404/405/HTML responses) and fall back to
+   "skip" mode. The flow won't block a user, but the guided experience
+   doesn't function. (One check at deploy time: if production sets the
+   `URL_PREFIXES` env var, confirm it doesn't remap `openbase_api` away from
+   the default `api/openbase/` prefix the clients call.)
 2. **Placeholder URLs.** The desktop QR points at
    `https://openbase.cloud/ios` and Path B tells users to visit
    `https://app.openbase.cloud`; those need to actually redirect to the App
