@@ -7,17 +7,29 @@ cross-device polling; the apps build their flows on both.
 See [README.md](README.md) for the flow spec and
 [cloud-api.md](cloud-api.md) for the backend contract.
 
-## openbase-cloud (private backend)
+## openbase-cloud (private backend) — DONE
 
-1. Implement the device model and the three endpoints in
-   [cloud-api.md](cloud-api.md).
-2. Set `desktop_authenticated` when the CLI/desktop OAuth token exchange
-   completes (`/api/openbase/auth/cli/token-exchange/`), and
-   `mobile_authenticated` on iOS login/signup.
-3. Derive `tailscale_paired` (both device kinds registered with Tailscale
-   identities) and top-level `cli_configured` (any desktop device reported it).
+Implemented in `openbase-cloud-api` (`openbase_api/openbase/`): the
+`OpenbaseDevice` model and the three endpoints in
+[cloud-api.md](cloud-api.md). All four onboarding flags are derived from
+device registrations (`desktop_authenticated` / `mobile_authenticated`: a
+device of that kind exists; `tailscale_paired`: both kinds carry Tailscale
+identities; `cli_configured`: any desktop reported it) — clients register
+right after login, so no login-flow hooks are needed.
 
-## desktop (Mac app, private)
+## desktop (Mac app, private) — DONE
+
+Implemented in `openbase-coder-desktop`: the onboarding shell
+(`src/DesktopShell.tsx`) gained "Phone" (QR code + `mobile_authenticated`
+polling) and "Pairing" (Tailscale install prompt + "Register this Mac" via
+`openbase-coder onboarding report` + `tailscale_paired` polling) steps; setup
+runs with `--json-progress` and renders the step checklist; the
+`intent=login-complete` deep link advances to the phone step; cloud state is
+fetched in the main process (`electron/main.cjs`) using a CLI-minted access
+token. Pairing steps are skippable and auto-complete when the backend does
+not serve the onboarding endpoints yet.
+
+Original work items:
 
 1. Onboarding window implementing the Path A state machine (A2–A5 in
    [README.md](README.md)); on launch, poll
@@ -39,18 +51,31 @@ See [README.md](README.md) for the flow spec and
    local server is up, `GET http://127.0.0.1:7999/api/onboarding/status/`
    after.
 
-## ios (private)
+## ios (private) — DONE
+
+Implemented in `openbase-ios`: `Services/OnboardingClient.swift` (cloud state
+fetch + device registration + local Tailscale detection via CGNAT interface
+addresses) and `Views/OnboardingFlowView.swift` (Path B steps with
+`OnboardingViewModel` + `OnboardingGateView` wrapping the authenticated root
+in `OpenbaseApp.swift`). The app registers `kind: "mobile"` right after
+login, re-registers with a `tailscale` block once a 100.64/10 utun address
+appears, auto-adds the desktop's MagicDNS name as the backend host, and the
+flow is skippable and auto-completes when the backend endpoints are unshipped.
+
+Original work items:
 
 1. Path B state machine (B1–B5): login → setup mode selection ("Link Your
    Computer" / "Start with Cloud (Beta)" / "View Documentation").
    Fix the signup flow issues noted in the Notion doc (separate card).
-2. B3 instruction screen ("Go to `https://app.openbase.cloud` on your Mac");
+2. Immediately after login, call `POST /api/openbase/devices/register/` with
+   `kind: "mobile"` (no `tailscale` yet) — this is what sets
+   `mobile_authenticated` for Path A's step A3.
+3. B3 instruction screen ("Go to `https://app.openbase.cloud` on your Mac");
    poll until `desktop_authenticated`.
-3. `pairDevices()`: redirect to the Tailscale app on the App Store; once the
-   app can determine its Tailscale identity, call
-   `POST /api/openbase/devices/register/` with `kind: "mobile"`; poll until
-   `tailscale_paired`.
-4. Poll until `cli_configured` for the final "all set" state.
+4. `pairDevices()`: redirect to the Tailscale app on the App Store; once the
+   app can determine its Tailscale identity, re-register with the `tailscale`
+   block; poll until `tailscale_paired`.
+5. Poll until `cli_configured` for the final "all set" state.
 
 ## cli (this workspace — implemented alongside this spec)
 
