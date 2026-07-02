@@ -27,6 +27,10 @@ Do not add MIT licensing to any Openbase Coder repo other than `allauth-client-s
 
 Tests under `e2e/` should be true app end-to-end tests: they must drive the iOS app with Appium or drive the browser with Selenium. Do not put direct API, app-server, or service-client integration tests in `e2e/`.
 
+Cross-repo engineering specs live in `specs/` (e.g. `specs/onboarding/` for
+the onboarding flow, cloud API contract, and per-repo work items). Consult
+them before implementing features that span repos.
+
 Consult and maintain the workspace-level `GLOSSARY.md`. When adding docs,
 instructions, reports, or features that introduce or rely on recurring
 Openbase-specific terms, add or update concise glossary entries there rather
