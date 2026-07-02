@@ -21,6 +21,47 @@ Related docs:
 - [cloud-api.md](cloud-api.md) — proposed openbase-cloud API contract
 - [work-items.md](work-items.md) — per-repo work items
 
+## Status and launch blockers (handoff, July 2026)
+
+All four codebases are implemented per this spec (see
+[work-items.md](work-items.md) for what landed where): CLI
+(`onboarding status/report`, `setup --json-progress`, login/setup hooks),
+backend endpoints + `OpenbaseDevice` model, desktop Phone/Pairing pages with
+QR + polling + setup checklist, and the iOS Path B flow
+(`OnboardingClient.swift`, `OnboardingFlowView.swift`).
+
+The flow is fully no-terminal by design — the Mac app installs the CLI with
+one click from a **bundled package** (no `curl`), setup renders as a
+checklist, and pairing is button-driven. Four things stand between the design
+and a real non-developer succeeding:
+
+1. **Cloud endpoints aren't live.** The backend code was implemented in the
+   `openbase-cloud-api` repo (`openbase_api/openbase/`), but the deployed
+   Django project is **`api-core`** — the endpoints must be ported there and
+   migrated. Until then, none of the cross-device spinners (phone signed in,
+   devices paired) ever turn green; both apps detect the missing endpoints
+   (404/405/HTML responses) and fall back to "skip" mode. The flow won't
+   block a user, but the guided experience doesn't function.
+2. **Placeholder URLs.** The desktop QR points at
+   `https://openbase.cloud/ios` and Path B tells users to visit
+   `https://app.openbase.cloud`; those need to actually redirect to the App
+   Store/TestFlight listing and a Mac-app download page.
+3. **Distribution.** The Mac app must ship signed/notarized with the CLI
+   package actually bundled in — verify the electron-builder packaging
+   includes it (in `pnpm dev` there may be no bundled package to activate).
+   The iOS app needs a TestFlight/App Store listing.
+4. **Tailscale is the remaining friction.** No terminal, but the user
+   installs two apps and creates a third-party Tailscale account. That's the
+   accepted v1 trade-off; a v2 could embed Tailscale via their iOS/macOS SDKs
+   or use pre-provisioned auth keys to skip account creation.
+
+To verify locally: `uv run pytest tests/test_onboarding_status_api.py
+tests/test_cloud_registration.py tests/test_onboarding_cli.py` in `cli/`
+(23 tests), `uv run openbase-coder onboarding status` for a live check,
+`pnpm dev` in `desktop/` to click through the flow, and the iOS simulator
+(delete the app first so the `openbase_onboarding_completed` UserDefaults
+flag resets).
+
 ## Onboarding states
 
 | State | Meaning | Source of truth | Set when |
@@ -101,9 +142,11 @@ Shared `pairDevices()` step — identical to B4, implement once per client.
 Shared `setupCLI()` step — identical to B5, implement once.
 
 - **Render:** single-click "Set up CLI" button in the Mac app
-- **Action:** Mac app runs the install script
-  (`curl -fsSL https://raw.githubusercontent.com/openbase-community/openbase-coder/main/cli/scripts/install.sh | sh`)
-  then `openbase-coder setup --json-progress`, rendering the NDJSON step
+- **Action:** the Mac app activates its **bundled** CLI package (as
+  implemented in `desktop/electron/main.cjs`; the
+  `curl -fsSL .../cli/scripts/install.sh | sh` script is the standalone
+  path for users without the app, and requires a published GitHub release)
+  then runs `openbase-coder setup --json-progress`, rendering the NDJSON step
   events as a checklist (see [Setup progress protocol](#setup-progress-protocol)).
 - **On success:** setup reports `cli_configured = true` to the cloud.
 - **Terminal state reached.**

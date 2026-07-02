@@ -2,6 +2,12 @@
   "name": "openbase-coder-workspace",
   "private": true,
   "packageManager": "pnpm@10.18.0",
+  "pnpm": {
+    "overrides": {
+      "@types/react": "^18.3.3",
+      "@types/react-dom": "^18.3.0"
+    }
+  },
   "scripts": {
     "build": "pnpm --recursive --if-present build",
     "test": "pnpm --recursive --if-present test",

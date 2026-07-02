@@ -49,11 +49,11 @@ Response `200`:
 }
 ```
 
-- `desktop_authenticated` / `mobile_authenticated`: set by the backend when a
-  login completes from a desktop (Mac app / CLI OAuth token exchange) or
-  mobile (iOS) client respectively. The existing CLI token exchange endpoint
-  (`/api/openbase/auth/cli/token-exchange/`) should set
-  `desktop_authenticated`.
+- `desktop_authenticated` / `mobile_authenticated`: derived — true once a
+  device of that kind has registered. The CLI registers right after
+  `openbase-coder login` and the iOS app registers right after login, so
+  registration doubles as the login signal; no allauth/login-flow hooks are
+  needed.
 - `tailscale_paired`: derived — true when at least one `desktop` and one
   `mobile` device both have a non-null `tailscale` block.
 - `cli_configured`: true when any desktop device has reported
@@ -83,8 +83,8 @@ Request:
 }
 ```
 
-Response `200`/`201`: the stored device record (same shape as entries in
-`devices` above).
+Response `200`: `{"message": "Device registered.", "device": {...}}` where
+`device` is the stored record (same shape as entries in `devices` above).
 
 ## PATCH /api/openbase/devices/self/state/
 
@@ -104,15 +104,13 @@ Request:
 }
 ```
 
-Response `200`: the updated device record.
+Response `200`: `{"message": "Device state updated.", "device": {...}}`.
+Upserts the desktop device if it has not registered yet.
 
-## Backend work summary
+## Implementation status
 
-1. Device model: `(user, kind, hostname)` unique, platform/version fields,
-   nullable `tailscale` JSON, `cli_configured`, `cli_version`,
-   `serve_healthy`, `last_seen`.
-2. The three endpoints above.
-3. `desktop_authenticated` / `mobile_authenticated` flags set from the
-   respective login flows (client type must be distinguishable at login /
-   token exchange).
-4. Derivation logic for `tailscale_paired` and top-level `cli_configured`.
+Implemented in `openbase-cloud-api` (`openbase_api/openbase/`): the
+`OpenbaseDevice` model (unique on `(user, kind, hostname)`), the three
+endpoints above (`DeviceRegisterView`, `DeviceSelfStateView`,
+`OnboardingStateView` in `views.py`), and derivation logic. All four
+onboarding flags are derived from device registrations — no login-flow hooks.
