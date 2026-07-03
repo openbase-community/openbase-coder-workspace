@@ -23,8 +23,9 @@ Then run `./scripts/setup` from this checkout. The script uses the workspace roo
 that contains it as the Openbase setup workspace, even when the checkout lives
 outside `~/.openbase`.
 
-Default `~/.openbase/codex_home` instruction files are symlinked from
-[`instructions/`](instructions/).
+Openbase instruction files are rendered from [`instructions/`](instructions/)
+into `~/.openbase/codex_home` and `~/.openbase/instructions`, with generated
+files recording their source template path.
 Workspace skills under [`skills/skills/`](skills/skills/) are symlink-installed
 into `~/.openbase/codex_home/skills`.
 

@@ -64,6 +64,11 @@ agent to collect user input before continuing, such as a plan-mode question.
 workflow, tool integration, or domain convention. Skills are loaded when a task
 matches their trigger.
 
+**Auto-linked skill**: A normal Codex skill exposed to Openbase Codex by a
+symlink from the Openbase Codex skills directory to the normal Codex skills
+directory. Auto-linked skills share one source copy and can be refreshed without
+manual per-skill linking.
+
 **Plugin**: A local bundle that can contribute skills, MCP servers, apps, and
 runtime extensions to Openbase Coder.
 
@@ -91,6 +96,10 @@ a live checklist. Step IDs and event shapes are defined in
 `~/.openbase/codex_home`, that stores Codex instructions, skills, and related
 runtime configuration.
 
+**Thread sync conflict**: A local Codex thread sync state that needs human
+review because both synced homes changed the same thread or a remote device
+snapshot diverged from the local thread.
+
 **Claude config**: The Openbase-specific Claude Code configuration directory,
 usually `~/.openbase/claude_config`, that stores Claude instructions and related
 runtime configuration.
@@ -103,7 +112,8 @@ changes across related repos.
 provide the Django API, WebSocket endpoints, service management, plugin
 management, LiveKit voice services, and Super Agents coordination.
 
-**Routine**: A persisted Openbase Coder schedule that periodically starts or
-queues a Super Agents turn through the local `openbase-coder routines` command
-surface. Routines are stored in local Super Agents state and run by the
+**Routine**: A persisted Openbase Coder schedule run through the local
+`openbase-coder routines` command surface. Agent routines start or queue a Super
+Agents turn; command routines run a normal local command without launching an AI
+agent. Routines are stored in local Super Agents state and run by the
 `openbase-routines` scheduler service.
