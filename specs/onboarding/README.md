@@ -6,19 +6,20 @@ openbase-cloud backend) can implement against.
 
 Onboarding has two entry points: **Web** (user starts on desktop) and
 **App Store** (user starts on iOS, TestFlight for now). Both paths converge at
-the same terminal state: desktop and mobile paired via Tailscale, CLI
-configured on the Mac.
+the same terminal state: a desktop and mobile are registered, each side has
+enough Tailscale rendezvous facts to reach the other, and desktop readiness is
+verified live over Tailscale.
 
 ```
-terminal_state = desktop_authenticated
-             AND mobile_authenticated
-             AND tailscale_paired
-             AND cli_configured
+terminal_state = desktop_registered
+             AND mobile_registered
+             AND tailscale_address_advertised
+             AND desktop_ready_live_over_tailscale
 ```
 
 Related docs:
 
-- [cloud-api.md](cloud-api.md) — proposed openbase-cloud API contract
+- [cloud-api.md](cloud-api.md) — openbase-cloud rendezvous API contract
 - [work-items.md](work-items.md) — per-repo work items
 
 ## Status and launch blockers (handoff, July 2026)
@@ -26,8 +27,8 @@ Related docs:
 All four codebases are implemented per this spec (see
 [work-items.md](work-items.md) for what landed where): CLI
 (`onboarding status/report`, `setup --json-progress`, login/setup hooks),
-backend endpoints + `OpenbaseDevice` model, desktop Phone/Pairing pages with
-QR + polling + setup checklist, and the iOS Path B flow
+backend rendezvous endpoints + `OpenbaseDevice` model, desktop Phone/Pairing
+pages with QR + polling + setup checklist, and the iOS Path B flow
 (`OnboardingClient.swift`, `OnboardingFlowView.swift`).
 
 The flow is fully no-terminal by design — the Mac app installs the CLI with
@@ -41,7 +42,7 @@ and a real non-developer succeeding:
    entry points, and api-core's URL loader mounts the app at `api/openbase/`.
    What remains is operational: merge openbase-cloud-api PR #1, deploy, and
    run migration `0006_openbasedevice`. Until then, none of the cross-device
-   spinners (phone signed in, devices paired) ever turn green; both apps
+   spinners (phone signed in, devices discovered) ever turn green; both apps
    detect the missing endpoints (404/405/HTML responses) and fall back to
    "skip" mode. The flow won't block a user, but the guided experience
    doesn't function. (One check at deploy time: if production sets the
@@ -71,14 +72,15 @@ flag resets).
 
 | State | Meaning | Source of truth | Set when |
 | --- | --- | --- | --- |
-| `desktop_authenticated` | User is logged into the Openbase Mac app / CLI (same account session) | openbase-cloud | Desktop/CLI OAuth token exchange completes for the user |
-| `mobile_authenticated` | User is logged into the Openbase iOS app | openbase-cloud | iOS login/signup completes for the user |
-| `tailscale_paired` | Both devices are on the user's tailnet and known to Openbase | openbase-cloud (derived) | Both a `desktop` and a `mobile` device for the user have registered a Tailscale identity (see [Device registration](#device-registration)) |
-| `cli_configured` | CLI installed and set up on the Mac | Computed by the CLI, reported to openbase-cloud | `openbase-coder setup` completes and the CLI reports state |
+| `desktop_registered` | At least one desktop device has registered for the user | openbase-cloud rendezvous registry | Desktop/CLI OAuth token exchange completes and registration succeeds |
+| `mobile_registered` | At least one mobile device has registered for the user | openbase-cloud rendezvous registry | iOS login/signup completes and registration succeeds |
+| `tailscale_address_advertised` | A desktop and mobile have enough Tailscale facts to attempt direct contact | openbase-cloud rendezvous registry | Devices register `tailscale_ip`, `tailscale_magic_dns`, or a `tailscale` block |
+| `desktop_ready_live_over_tailscale` | Desktop backend and setup are actually ready | Desktop local API over Tailscale | Mobile or desktop client queries the desktop's live status endpoint |
 
-States are **monotonic during onboarding**: once a state becomes true, clients
-may assume it stays true for the remainder of the flow. (Logout/unlink
-resetting states is out of scope for onboarding v1.)
+Cloud registration facts are freshness hints, not durable readiness truth.
+Clients should treat `last_seen` and advertised capabilities as hints, then
+verify setup/readiness directly from the desktop once Tailscale reachability is
+available.
 
 All cross-device state is observed by polling a single backend endpoint,
 `GET /api/openbase/onboarding/state/` (see [cloud-api.md](cloud-api.md)).
@@ -91,17 +93,17 @@ Per the Notion doc, Tailscale DNS exchange is automatic: devices register with
 openbase-cloud and poll for each other's appearance there — no manual DNS
 entry or QR-scanning ceremony between devices.
 
-- Each device calls `POST /api/openbase/devices/register/` with its kind
-  (`desktop` or `mobile`), hostname/platform info, and — once Tailscale is up —
-  its Tailscale identity (MagicDNS name, node hostname, tailnet, IPs).
-- Registration is an upsert keyed on `(user, kind, hostname)`; devices
-  re-register freely (e.g. after Tailscale comes up, adding the `tailscale`
-  block to an earlier registration).
-- The backend derives `tailscale_paired = true` when at least one `desktop`
-  and one `mobile` device for the user both have a Tailscale identity.
-- Mutual peer visibility (the Mac seeing the iPhone in `tailscale status`) is
-  a **health check**, not a gate for `tailscale_paired`. The CLI already
-  exposes peer discovery at `GET /api/devices/` on the local server.
+- Each device calls `POST /api/openbase/devices/register/` with a stable
+  `device_id`, its kind (`desktop` or `mobile`), hostname/display/platform
+  info, version, and advertised capabilities. Users may have multiple phones
+  and multiple desktops.
+- Once Tailscale is up, devices re-register with Tailscale identity
+  (`tailscale_ip`, MagicDNS name, node hostname, tailnet, IPs).
+- Registration is an upsert keyed on `(user, device_id)`; hostname changes must
+  not create replacement devices.
+- The backend does not store `paired`, `install_ready`, or equivalent durable
+  readiness flags. Clients use cloud data only to discover fresh candidates,
+  then query the desktop over Tailscale for peer visibility and setup status.
 
 ## Path A: entry via Web (desktop first)
 
@@ -115,8 +117,8 @@ entry or QR-scanning ceremony between devices.
 ### A2 — Desktop authentication
 
 - **Render:** login screen on Mac app launch (browser-based OAuth)
-- **On success:** backend sets `desktop_authenticated`; Mac app polls
-  onboarding state → is `mobile_authenticated` true?
+- **On success:** desktop registers; Mac app polls onboarding state → is a
+  mobile device registered?
   - **yes** → A4
   - **no** → A3
 
@@ -124,14 +126,14 @@ entry or QR-scanning ceremony between devices.
 
 - **Render:** QR code linking to the App Store listing (TestFlight for now)
 - **Copy:** "Scan to download Openbase on your iPhone"
-- **Wait:** poll onboarding state until `mobile_authenticated`
+- **Wait:** poll onboarding state until a mobile device is registered
 - **On detected:** A4
 
 ### A4 — Both devices authenticated, begin pairing
 
 Shared `pairDevices()` step — identical to B4, implement once per client.
 
-- **Trigger:** `desktop_authenticated AND mobile_authenticated`
+- **Trigger:** desktop and mobile registrations both exist
 - **Mac:** prompt the user to install Tailscale (v1 is prompt-based; silent
   background install is an open question). Once `tailscale status` reports
   the node is up, register the desktop's Tailscale identity with the cloud
@@ -139,7 +141,8 @@ Shared `pairDevices()` step — identical to B4, implement once per client.
 - **iOS:** redirect the user to the Tailscale app on the App Store, tell them
   to come back when set up. Once the iOS app can read its Tailscale identity,
   register it with the cloud.
-- **Wait:** both clients poll onboarding state until `tailscale_paired`.
+- **Wait:** both clients poll onboarding state until the other side advertises
+  a Tailscale IP or MagicDNS name, then verify direct reachability.
 - **Next:** A5
 
 ### A5 — CLI setup
@@ -153,7 +156,8 @@ Shared `setupCLI()` step — identical to B5, implement once.
   path for users without the app, and requires a published GitHub release)
   then runs `openbase-coder setup --json-progress`, rendering the NDJSON step
   events as a checklist (see [Setup progress protocol](#setup-progress-protocol)).
-- **On success:** setup reports `cli_configured = true` to the cloud.
+- **On success:** setup advertises current CLI/setup capabilities to the
+  rendezvous registry; clients verify readiness live from the desktop.
 - **Terminal state reached.**
 
 ## Path B: entry via App Store (mobile first)
@@ -162,7 +166,7 @@ Shared `setupCLI()` step — identical to B5, implement once.
 
 - **Render:** login screen on first app open
 - **Action:** user logs in or creates an account
-- **On success:** backend sets `mobile_authenticated` → B2
+- **On success:** mobile registers → B2
 
 ### B2 — Setup mode selection
 
@@ -178,7 +182,7 @@ Shared `setupCLI()` step — identical to B5, implement once.
 - **Copy:** "Go to `https://app.openbase.cloud` on your Mac to install Openbase"
 - **Secondary link:** "Installation Guide" → CLI docs
   (`cli/docs/getting-started.md`, the main open-source entrypoint)
-- **Wait:** poll onboarding state until `desktop_authenticated`
+- **Wait:** poll onboarding state until a desktop device is registered
 - **On detected:** B4
 
 ### B4 — Both devices authenticated, begin pairing
@@ -196,7 +200,7 @@ Path A (Web)          Path B (App Store)
     │                       │
    A4 ←——————————————————→ B4
     │     Both devices      │
-    │     authenticated     │
+    │      registered       │
     ↓                       ↓
   Tailscale pairing (shared pairDevices)
     ↓
@@ -227,7 +231,7 @@ Step IDs (in execution order):
 | `agent_config` | Symlink Codex/Claude config and instructions |
 | `services` | Install background services (launchd/systemd) |
 | `tailscale_serve` | Configure Tailscale Serve routes |
-| `cloud_report` | Register device + report `cli_configured` to openbase-cloud |
+| `cloud_report` | Register device + advertise current CLI/setup capabilities |
 
 `warn` is non-fatal (setup continues; e.g. Tailscale Serve unavailable).
 `error` on a required step ends the run with a nonzero exit code and
@@ -243,14 +247,13 @@ running) or `GET http://127.0.0.1:7999/api/onboarding/status/` (after).
    and configuring Tailscale silently in the background on the Mac. v1 is
    prompt-based (user installs the Tailscale app); silent install would
    require bundling `tailscaled` or Homebrew automation.
-2. **`tailscale_paired` strictness** — currently both-registered-with-cloud
-   (assumption). If flaky tailnets make this too weak, gate on mutual peer
-   visibility reported by the CLI instead.
+2. **Live desktop verification strictness** — once a peer advertises a
+   Tailscale address, decide which desktop status fields are required before
+   the mobile app marks onboarding complete.
 3. **Auth for device registration** — currently the user JWT stored by the
    CLI after login (assumption). Alternative: a dedicated machine-token scope
    (e.g. `device_state`) added to the machine-token mechanism.
 4. **Install artifact hosting** — the install script currently pulls from
    GitHub releases; S3/CDN hosting and deployment are deferred.
-5. **Cloud endpoint paths** — the paths in [cloud-api.md](cloud-api.md) are
-   proposals; confirm against openbase-cloud URL conventions before backend
-   implementation.
+5. **Cloud endpoint paths** — confirm production URL prefixing still mounts
+   the API at `api/openbase/` before deploy.

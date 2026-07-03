@@ -69,15 +69,16 @@ runtime extensions to Openbase Coder.
 
 ## Onboarding
 
-**Onboarding state**: The four flags tracked by openbase-cloud during first-run
-setup — `desktop_authenticated`, `mobile_authenticated`, `tailscale_paired`,
-and `cli_configured`. Onboarding completes when all four are true. Defined in
-`specs/onboarding/`.
+**Onboarding state**: The first-run setup state formed from cloud rendezvous
+facts and live desktop checks. Openbase-cloud records registered devices and
+fresh Tailscale addresses; clients verify desktop readiness over Tailscale.
+Defined in `specs/onboarding/`.
 
 **Device registration**: A device (desktop or mobile) upserting itself with
-openbase-cloud, including its Tailscale identity (MagicDNS name, tailnet, IPs)
-once available. The backend derives `tailscale_paired` when both a desktop and
-a mobile device for the same user are registered with Tailscale identities.
+openbase-cloud by stable `device_id`, including kind, hostname/display name,
+version, capabilities, freshness, and its Tailscale identity (MagicDNS name,
+tailnet, IPs) once available. The backend is a rendezvous registry, not durable
+pairing or install-readiness truth.
 
 **Setup progress protocol**: The NDJSON step events emitted by
 `openbase-coder setup --json-progress` so the desktop app can render setup as

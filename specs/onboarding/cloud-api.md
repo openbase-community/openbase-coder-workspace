@@ -1,116 +1,105 @@
-# Onboarding Cloud API Contract (Proposed)
+# Onboarding Cloud API Contract
 
-Endpoints to be implemented in the private openbase-cloud backend
-(openbase-cloud-workspace). Paths are proposals — confirm against existing
-openbase-cloud URL conventions before implementing. Clients in this workspace
-(the CLI) are written to tolerate these endpoints not existing yet — a
-404/405 or an HTML error page (the current backend returns Django's 403 CSRF
-HTML page for unknown API paths) is treated as "not supported yet" and
-skipped without failing — so the backend can ship after the clients. This
-also means the real endpoints must return JSON errors (standard DRF
-behavior), never HTML.
+Implemented in `openbase-cloud-api` under `openbase_api/openbase/`.
+The cloud is a rendezvous registry: it records fresh device facts so signed-in
+clients can discover each other, but it is not the source of truth for pairing,
+install readiness, or desktop health. Once a mobile app has a Tailscale IP or
+MagicDNS name for a desktop, it should query that desktop live over Tailscale
+for setup/readiness details.
 
-Authentication: all endpoints take the user's JWT (the CLI uses the access
-token stored in `~/.openbase/auth.json` after `openbase-coder login`; the
-apps use their existing session credentials). See open question 3 in
-[README.md](README.md) about a machine-token scope alternative.
+Authentication: all endpoints take the user's JWT. The CLI uses the access
+token stored in `~/.openbase/auth.json`; the apps use their existing session
+credentials.
 
 ## GET /api/openbase/onboarding/state/
 
-Single polling endpoint for all cross-device onboarding state. Polled by the
-Mac app, the iOS app, and optionally the CLI, every 2–5 s with backoff while
-an onboarding screen is waiting.
+Returns the signed-in user's registered devices. Poll this every 2-5 seconds
+with backoff while an onboarding screen is waiting for another device to appear
+or advertise a Tailscale address.
 
 Response `200`:
 
 ```jsonc
 {
-  "desktop_authenticated": true,
-  "mobile_authenticated": false,
-  "tailscale_paired": false,
-  "cli_configured": false,
+  "desktop_count": 2,
+  "mobile_count": 1,
   "devices": [
     {
+      "id": 42,
+      "device_id": "desktop-8b6b2f7a-7be1-4ad5-a5cc-0a9d7a1a3a0e",
       "kind": "desktop",
       "hostname": "zokys-macbook-pro",
+      "display_name": "Zoe's MacBook Pro",
       "platform": "darwin",
       "os_version": "15.5",
-      "app_version": "1.4.2",
+      "version": "1.4.2",
       "tailscale": {
         "dns_name": "zokys-macbook-pro.tail1234.ts.net.",
         "node_hostname": "zokys-macbook-pro",
         "tailnet": "tail1234.ts.net",
         "ips": ["100.64.0.1"]
       },
-      "cli_configured": false,
+      "tailscale_ip": "100.64.0.1",
+      "tailscale_magic_dns": "zokys-macbook-pro.tail1234.ts.net.",
+      "capabilities": {
+        "cli_configured": true,
+        "tailscale_serve_healthy": true
+      },
       "last_seen": "2026-07-01T22:00:00Z"
     }
   ]
 }
 ```
 
-- `desktop_authenticated` / `mobile_authenticated`: derived — true once a
-  device of that kind has registered. The CLI registers right after
-  `openbase-coder login` and the iOS app registers right after login, so
-  registration doubles as the login signal; no allauth/login-flow hooks are
-  needed.
-- `tailscale_paired`: derived — true when at least one `desktop` and one
-  `mobile` device both have a non-null `tailscale` block.
-- `cli_configured`: true when any desktop device has reported
-  `cli_configured` (see PATCH below).
+- `desktop_count` and `mobile_count` are counts of registered devices by kind.
+- `devices` may contain multiple phones and multiple Macs or Mac minis for the
+  same user.
+- `capabilities` are advertised facts from the device. They are useful hints,
+  not authoritative readiness gates.
+- Pairing/install readiness should be verified live from the desktop over
+  Tailscale when `tailscale_ip` or `tailscale_magic_dns` is available.
 
 ## POST /api/openbase/devices/register/
 
-Registers (or re-registers) the calling device. Upsert keyed on
-`(user, kind, hostname)` — devices call this repeatedly as their state
-evolves (e.g. first without `tailscale`, again once Tailscale is up).
+Registers or re-registers the calling device. Upsert is keyed on
+`(user, device_id)` so a user can own multiple phones and multiple desktops.
 
 Request:
 
 ```jsonc
 {
-  "kind": "desktop",            // "desktop" | "mobile"
+  "device_id": "desktop-8b6b2f7a-7be1-4ad5-a5cc-0a9d7a1a3a0e",
+  "kind": "desktop",
   "hostname": "zokys-macbook-pro",
-  "platform": "darwin",          // "darwin" | "ios" | "linux" | ...
+  "display_name": "Zoe's MacBook Pro",
+  "platform": "darwin",
   "os_version": "15.5",
-  "app_version": "1.4.2",        // app or CLI version
-  "tailscale": {                 // optional; omit/null until Tailscale is up
+  "version": "1.4.2",
+  "tailscale": {
     "dns_name": "zokys-macbook-pro.tail1234.ts.net.",
     "node_hostname": "zokys-macbook-pro",
     "tailnet": "tail1234.ts.net",
     "ips": ["100.64.0.1"]
+  },
+  "tailscale_ip": "100.64.0.1",
+  "tailscale_magic_dns": "zokys-macbook-pro.tail1234.ts.net.",
+  "capabilities": {
+    "cli_configured": true,
+    "tailscale_serve_healthy": true
   }
 }
 ```
 
 Response `200`: `{"message": "Device registered.", "device": {...}}` where
-`device` is the stored record (same shape as entries in `devices` above).
+`device` has the same shape as entries in `GET /onboarding/state/`.
 
-## PATCH /api/openbase/devices/self/state/
+Clients may first register without Tailscale facts and re-register later.
+Omitting Tailscale fields does not clear previously stored Tailscale identity;
+clients must send updated Tailscale facts when they intentionally have them.
 
-Reports CLI state for the calling desktop device (matched on
-`(user, kind="desktop", hostname)` from the request body or auth context).
-Called by the CLI at the end of `openbase-coder setup` and by
-`openbase-coder onboarding report`.
+## Removed Endpoint
 
-Request:
-
-```jsonc
-{
-  "hostname": "zokys-macbook-pro",
-  "cli_configured": true,
-  "cli_version": "1.4.2",
-  "serve_healthy": true          // Tailscale Serve routes responding
-}
-```
-
-Response `200`: `{"message": "Device state updated.", "device": {...}}`.
-Upserts the desktop device if it has not registered yet.
-
-## Implementation status
-
-Implemented in `openbase-cloud-api` (`openbase_api/openbase/`): the
-`OpenbaseDevice` model (unique on `(user, kind, hostname)`), the three
-endpoints above (`DeviceRegisterView`, `DeviceSelfStateView`,
-`OnboardingStateView` in `views.py`), and derivation logic. All four
-onboarding flags are derived from device registrations — no login-flow hooks.
+`PATCH /api/openbase/devices/self/state/` is intentionally not part of the
+contract. CLI setup status and local desktop health are advertised as
+capabilities on registration, then verified from the desktop itself when a
+client can reach it over Tailscale.
