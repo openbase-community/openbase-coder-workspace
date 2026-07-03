@@ -67,6 +67,24 @@ matches their trigger.
 **Plugin**: A local bundle that can contribute skills, MCP servers, apps, and
 runtime extensions to Openbase Coder.
 
+## Onboarding
+
+**Onboarding state**: The first-run setup state formed from cloud rendezvous
+facts and live desktop checks. Openbase-cloud records registered devices and
+fresh Tailscale addresses; clients verify desktop readiness over Tailscale.
+Defined in `specs/onboarding/`.
+
+**Device registration**: A device (desktop or mobile) upserting itself with
+openbase-cloud by stable `device_id`, including kind, hostname/display name,
+version, capabilities, freshness, and its Tailscale identity (MagicDNS name,
+tailnet, IPs) once available. The backend is a rendezvous registry, not durable
+pairing or install-readiness truth.
+
+**Setup progress protocol**: The NDJSON step events emitted by
+`openbase-coder setup --json-progress` so the desktop app can render setup as
+a live checklist. Step IDs and event shapes are defined in
+`specs/onboarding/README.md`.
+
 ## Local Configuration
 
 **Codex home**: The Openbase-specific Codex configuration directory, usually

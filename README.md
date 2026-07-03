@@ -32,6 +32,10 @@ Shared Openbase terms are defined in the workspace [glossary](GLOSSARY.md).
 Update it when documenting or introducing terms that will recur across repos,
 agent instructions, reports, or user-facing docs.
 
+Cross-repo engineering specs live in [`specs/`](specs/); see
+[`specs/onboarding/`](specs/onboarding/) for the onboarding flow spec and
+per-repo work items.
+
 ## Coding Backends
 
 Openbase Coder setup supports Codex, Openbase Cloud, and Claude Code as coding
