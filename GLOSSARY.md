@@ -158,3 +158,19 @@ management, LiveKit voice services, and Super Agents coordination.
 Agents turn; command routines run a normal local command without launching an AI
 agent. Routines are stored in local Super Agents state and run by the
 `openbase-routines` scheduler service.
+
+## Releases & Updates
+
+**Update manifest**: `update-manifest.json` published with each CLI release:
+version, channel, layout version, minimum supported version, per-target
+artifact URLs/checksums, and pinned sibling-repo SHAs. Consumed by
+`openbase-coder self-update`; optionally Ed25519-signed. See `AUTO_UPDATE.md`.
+
+**Release channel**: `stable` or `beta`, stamped into a standalone package's
+metadata at build time; prerelease tags publish to the beta channel. An
+install updates within its channel.
+
+**State schema version**: The `schema_version` field carried by Openbase-owned
+state files (`installation.json`, `dispatcher-config.json`, `plugins.json`).
+Readers refuse files written by newer versions; changes ship forward-only
+migrations (see `AUTO_UPDATE.md`).
