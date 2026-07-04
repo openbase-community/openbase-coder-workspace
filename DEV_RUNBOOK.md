@@ -75,7 +75,8 @@ Then pick the surface you're testing:
   `console/dist` directly, so a rebuild + browser refresh is enough. For hot
   reload use `pnpm dev` in `console/` (Vite dev server).
 - **desktop:** `pnpm dev` in `desktop/`.
-- **Tests:** `cd cli && uv run pytest`; `cd super-agents && uv run pytest`;
+- **Tests:** `cd cli && uv sync --extra dev && uv run pytest` (the venv lives
+  at the workspace root — uv workspace); `cd super-agents && uv run pytest`;
   frontend typechecks via `npx tsc -p tsconfig.app.json --noEmit` in
   `console/` and `desktop/`.
 - **Agent homes:** `~/.openbase/codex_home` and `~/.openbase/claude_config`

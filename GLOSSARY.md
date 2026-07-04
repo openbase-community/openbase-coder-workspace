@@ -39,6 +39,13 @@ user speech, agent audio, route-control data messages, and related voice events.
 with `openbase-coder user say AGENT_NAME MESSAGE`, commonly used for Super
 Agent introductions, plan questions, and completion notices.
 
+**Agent status packet**: A reliable LiveKit data packet on topic
+`openbase.agent.status` that the voice agent publishes when it joins a room but
+cannot operate (for example `subscription_required`, `login_required`,
+`cloud_unavailable`, or `agent_start_failed`). Payload: JSON with `type`
+(`agent_error`), `code`, `detail`, and `message_id`; clients show `detail` to
+the user instead of leaving a silent call.
+
 ## Work Products
 
 **Report**: A Markdown or other generated artifact written under a project
