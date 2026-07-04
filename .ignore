@@ -1,11 +1,17 @@
 # BEGIN multi-managed: search-inside-gitignored-repos
 # Allow us to search inside these gitignored directories
+!allauth-client-swift/
+!allauth-client-swift
 !cli/
 !cli
 !console/
 !console
 !coder-react/
 !coder-react
+!desktop/
+!desktop
+!ios/
+!ios
 !skills/
 !skills
 !super-agents/
