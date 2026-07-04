@@ -4,6 +4,32 @@ This glossary defines Openbase Coder workspace terms as they appear in docs,
 instructions, issues, reports, and agent handoffs. Add terms here when a new
 concept becomes part of the shared Openbase vocabulary.
 
+## Product Surfaces
+
+**Product surface**: One of the user-facing faces of Openbase Coder: the
+desktop app, the iOS app, the web console, and app.openbase.cloud, all backed
+by the local CLI runtime. The product docs (`cli/docs/`, published at
+docs.openbase.cloud) cover every surface and carry "In the apps" / "On
+iPhone" cross-references between them.
+
+**Desktop app**: The macOS Electron app. It bundles and activates the
+standalone CLI runtime, runs guided first-time setup, and hosts the dashboard
+UI plus Electron-only features (auto-update, LiveKit companion screen
+sharing, deep links).
+
+**Console**: The shared dashboard UI (from `coder-react`, built in
+`console`). The desktop app embeds it, the local runtime serves it in a
+browser, and the iOS app opens it in its Console and Diff tabs.
+
+**iOS app**: The phone client: voice calls with the dispatcher and Super
+Agents, threads, approvals, reports, diffs, and phone-side settings,
+connected to a Mac or DevSpace over Tailscale.
+
+**Openbase Cloud**: The account service at app.openbase.cloud: OAuth
+sign-in, device onboarding for iPhone pairing, subscription, the
+Openbase Cloud coding backend, and Cloud DevSpace launch. (Its deployment
+tooling is separate from the Openbase Coder product surfaces.)
+
 ## Agent Identity
 
 **Dispatcher**: The LiveKit voice-session agent that receives normal user speech
