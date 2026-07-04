@@ -191,6 +191,11 @@ target (electron-updater on macOS updates from the zip), and `latest-mac.yml`.
 Signing identity must remain the same Developer ID across releases or the
 updater rejects the download.
 
+For local packaged testing, `pnpm run install:local` in the desktop repo
+builds without the CLI seed/companion, stamps `openbaseDevBuild: true`
+(which disables auto-update for that build), and copies the app to
+`/Applications`.
+
 ## Channels
 
 `channel` is stamped into `openbase-coder-package.json` at build time
