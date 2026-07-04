@@ -225,7 +225,7 @@ Step IDs (in execution order):
 
 | id | Meaning |
 | --- | --- |
-| `workspace` | Clone or sync the setup workspace (dev-workspace mode only) |
+| `workspace` | Detect the bundled runtime package, or locate the development workspace checkout (never clones) |
 | `installation_config` | Write `~/.openbase/installation.json` |
 | `env` | Generate `~/.openbase/.env` (voice provider keys) |
 | `agent_config` | Symlink Codex/Claude config and instructions |

@@ -64,13 +64,27 @@ agent to collect user input before continuing, such as a plan-mode question.
 workflow, tool integration, or domain convention. Skills are loaded when a task
 matches their trigger.
 
-**Auto-linked skill**: A normal Codex skill exposed to Openbase Codex by a
-symlink from the Openbase Codex skills directory to the normal Codex skills
-directory. Auto-linked skills share one source copy and can be refreshed without
-manual per-skill linking.
+**Skills auto-link**: An off-by-default setting, toggled from the console
+skills settings, that symlinks every personal skill under `~/.agents/skills`
+into both Openbase agent homes: `~/.openbase/codex_home/skills` and
+`~/.openbase/claude_config/skills`. Auto-linked skills share one source copy;
+the `openbase-routines` service re-syncs the links roughly every five minutes,
+so newly added personal skills appear without a restart.
 
-**Plugin**: A local bundle that can contribute skills, MCP servers, apps, and
-runtime extensions to Openbase Coder.
+**Plugin**: A local Python package that can contribute bootstrappers, stacks,
+skills, Django URL modules, and iframe console pages to Openbase Coder.
+
+**Plugin console page (iframe)**: The only supported form of plugin console UI:
+a plugin declares `console_pages` entries with an `asset_dir` of prebuilt
+static assets, which the CLI copies to `~/.openbase/plugins/console-assets/`
+and serves at `/openbase-plugin-assets/...`. The console and desktop discover
+pages at runtime via `/api/plugins/console-registry/`, so no console rebuild or
+Node/npm is needed. React component pages and project views were removed.
+
+**Plugin site directory**: The stable directory `~/.openbase/plugins/site`
+where plugin Python packages install in standalone mode, outside the versioned
+runtime package so upgrades do not lose plugins. The CLI adds it to `sys.path`
+at startup. Development installs use the workspace CLI venv instead.
 
 ## Onboarding
 
@@ -92,6 +106,24 @@ a live checklist. Step IDs and event shapes are defined in
 
 ## Local Configuration
 
+**Standalone runtime package**: The bundled production runtime for Openbase
+Coder — Python, the CLI, livekit-server, a prebuilt console, instructions, and
+skills — shipped inside the desktop app or installed via `install.sh` and
+detected via `openbase-coder-package.json`. One of the two deployment modes.
+
+**Development workspace mode**: The other deployment mode: a developer clones
+the `openbase-coder-workspace` repo and runs `./scripts/setup` from its root,
+with the CLI installed editable (`uv tool install -e ./cli`) or run via
+`uv run`. `openbase-coder setup` never clones a workspace; without
+`--workspace-dir` it discovers the checkout from `~/.openbase/installation.json`
+or the editable CLI install.
+
+**Backend binary on-demand install**: Setup behavior that installs the selected
+coding backend's CLI only if it is missing: codex from GitHub release binaries
+into `~/.openbase/bin`, claude via Anthropic's official installer. Neither CLI
+ships inside the standalone runtime package, and backend-specific services are
+only installed for backends that use them.
+
 **Codex home**: The Openbase-specific Codex configuration directory, usually
 `~/.openbase/codex_home`, that stores Codex instructions, skills, and related
 runtime configuration.
@@ -102,7 +134,16 @@ snapshot diverged from the local thread.
 
 **Claude config**: The Openbase-specific Claude Code configuration directory,
 usually `~/.openbase/claude_config`, that stores Claude instructions and related
-runtime configuration.
+runtime configuration. Its `.claude.json` is the merged Claude Code user state
+Claude reads under Openbase's `CLAUDE_CONFIG_DIR`.
+
+**Claude auth bridge (keychain)**: The setup/sync behavior that lets Openbase's
+managed Claude config inherit the user's normal Claude Code login. It merges
+normal `~/.claude.json` state into `~/.openbase/claude_config/.claude.json`
+(existing Openbase values win, `mcpServers` are unioned) and, on macOS, copies
+the normal "Claude Code-credentials" keychain item to Openbase's
+config-dir-specific keychain service, avoiding a second browser OAuth. The
+fallback is `openbase-coder claude login`.
 
 **Multi-root workspace**: This checkout, which groups multiple Openbase Coder
 repositories under one `multi.json` so agents and developers can coordinate

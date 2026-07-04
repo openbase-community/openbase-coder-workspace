@@ -14,7 +14,9 @@ This workspace contains multiple repositories:
 - `multi-react`: Shared React diff viewer and related UI utilities used by Multi and Openbase Coder.
 - `boilersync-react`: Shared React components and utilities for BoilerSync template workflows.
 
-This workspace is for voice-coding with an iOS app. `openbase-coder-cli` is run on the client computer, and runs a local Django server + MCP server for coding with Claude code and managing sessions.
+This workspace is for voice-coding with native mobile apps, including the iOS app. `openbase-coder-cli` is run on the client computer, and runs a local Django server + MCP server for coding with Claude code and managing sessions.
+
+`AGENTS.md` is the source of truth for workspace agent instructions. Do not add or maintain duplicate workspace rules under `.cursor/rules`.
 
 Repository visibility and licensing:
 

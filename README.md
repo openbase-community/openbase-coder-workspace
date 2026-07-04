@@ -17,11 +17,16 @@ This repo is a [multi](https://github.com/montaguegabe/multi) workspace to manag
 - [multi-react](https://github.com/montaguegabe/multi-react) - Shared React diff viewer and related UI utilities used by Multi and Openbase Coder
 - [boilersync-react](https://github.com/montaguegabe/boilersync-react) - Shared React components and utilities for BoilerSync template workflows
 
-To get started, install multi with `uv tool install multi-workspace`.
+To get started as a developer, install multi with
+`uv tool install multi-workspace`, clone this workspace repo, and run
+`./scripts/setup` from the workspace root. The script syncs the sub-repos with
+`multi sync --install-set default`, then runs `openbase-coder setup
+--workspace-dir <workspace-root>` against this checkout. Setup never clones or
+git-updates a workspace itself; the CLI is typically installed editable
+(`uv tool install -e ./cli`) or run via `uv run` from `cli/`.
 
-Then run `./scripts/setup` from this checkout. The script uses the workspace root
-that contains it as the Openbase setup workspace, even when the checkout lives
-outside `~/.openbase`.
+End users should not clone this repo: they install the standalone runtime
+package via the Openbase Coder desktop app or the CLI's `install.sh`.
 
 Openbase instruction files are rendered from [`instructions/`](instructions/)
 into `~/.openbase/codex_home` and `~/.openbase/instructions`, with generated

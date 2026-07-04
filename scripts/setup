@@ -14,7 +14,6 @@ popd
 SETUP_ARGS=("$@")
 SETUP_ARGS_COUNT=$#
 HAS_WORKSPACE_DIR=false
-HAS_SKIP_CLONE=false
 
 prepend_setup_args() {
   if [ "$SETUP_ARGS_COUNT" -eq 0 ]; then
@@ -30,18 +29,11 @@ for arg in "$@"; do
     --workspace-dir|--workspace-dir=*)
       HAS_WORKSPACE_DIR=true
       ;;
-    --skip-clone)
-      HAS_SKIP_CLONE=true
-      ;;
   esac
 done
 
 if [ "$HAS_WORKSPACE_DIR" = false ]; then
   prepend_setup_args --workspace-dir "$ROOT_DIR"
-fi
-
-if [ "$HAS_SKIP_CLONE" = false ]; then
-  prepend_setup_args --skip-clone
 fi
 
 pushd "${ROOT_DIR}"/cli
