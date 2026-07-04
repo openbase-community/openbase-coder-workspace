@@ -16,28 +16,16 @@ e2e/ios-physical/reports/
 
 # BEGIN multi-managed: repo-directories
 # multi avoids git submodules; each entry has both forms: trailing slash matches directories, bare name matches symlinks/aliases.
-allauth-client-swift/
-allauth-client-swift
-allauth-client-kotlin/
-allauth-client-kotlin
 cli/
 cli
 console/
 console
 coder-react/
 coder-react
-desktop/
-desktop
-ios/
-ios
-android/
-android
 skills/
 skills
 super-agents/
 super-agents
-agent-work-scheduler/
-agent-work-scheduler
 multi-react/
 multi-react
 boilersync-react/
