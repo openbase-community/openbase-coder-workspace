@@ -53,3 +53,7 @@ boilersync-react
 # END multi-managed: generated-files
 
 !instructions/AGENTS.md
+
+# Repo-local agent skills (the bare `skills` subrepo pattern above would hide them)
+!.claude/skills/
+!.claude/skills/**
