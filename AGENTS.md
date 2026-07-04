@@ -33,6 +33,10 @@ Cross-repo engineering specs live in `specs/` (e.g. `specs/onboarding/` for
 the onboarding flow, cloud API contract, and per-repo work items). Consult
 them before implementing features that span repos.
 
+The developer install/test flow is documented in the workspace
+`DEV_RUNBOOK.md`; keep it accurate when setup, auth, or service behavior
+changes.
+
 Releases, distribution, and update behavior are governed by the workspace
 `AUTO_UPDATE.md` guide. Consult it before touching release workflows, the
 self-updater, state-file schemas, version handshakes, or update feeds — and

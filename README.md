@@ -25,6 +25,10 @@ To get started as a developer, install multi with
 git-updates a workspace itself; the CLI is typically installed editable
 (`uv tool install -e ./cli`) or run via `uv run` from `cli/`.
 
+The full development flow — install, authenticate, verify, exercise the iOS
+app / console / desktop app, and iterate — is in the workspace
+[`DEV_RUNBOOK.md`](DEV_RUNBOOK.md).
+
 End users should not clone this repo: they install the standalone runtime
 package via the Openbase Coder desktop app or the CLI's `install.sh`.
 
