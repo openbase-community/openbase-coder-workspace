@@ -57,3 +57,5 @@ boilersync-react
 # Repo-local agent skills (the bare `skills` subrepo pattern above would hide them)
 !.claude/skills/
 !.claude/skills/**
+!.agents/skills/
+!.agents/skills/**
