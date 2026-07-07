@@ -44,7 +44,16 @@ product (auth, remote workspaces, and the PaaS backend).
 
 - Branches: do day-to-day work on `staging`. Deploys merge **every** repo's
   staging to main in one batch, cli last (see the `deploy` skill). The
-  workspace repo requires linear history.
+  workspace AND desktop repos require **linear history** on main (no merge
+  commits) — integrate feature branches by cherry-pick/rebase, never
+  `merge --no-edit`, or the push is rejected.
+- Parallel agents: multiple agents work these checkouts concurrently. Never
+  commit, stash, or checkout over another agent's dirty files. To merge or
+  branch-switch when a checkout is dirty with someone else's work, use a
+  temporary worktree (`git worktree add /tmp/x <ref>`, operate, push,
+  remove). If files mysteriously contain stale (months-old) content,
+  suspect a Syncthing working-tree echo from another machine — park the
+  evidence in a stash and restore from HEAD; never commit resurrections.
 - Developer install/test flow: `DEV_RUNBOOK.md` — keep it accurate when
   setup, auth, or service behavior changes.
 - Cross-repo feature specs: `specs/` — consult before implementing features

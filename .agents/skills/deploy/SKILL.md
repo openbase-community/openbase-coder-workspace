@@ -111,6 +111,22 @@ mismatch.)
 
 ## 4. Desktop DMG publish
 
+**CI is the publisher.** Pushing desktop `main` runs `electron-rebuild.yml`,
+which builds, signs, notarizes, and publishes the DMG/zip/feed to S3
+(~30 min), seeding the app with the **latest released** CLI package
+(downloaded, never rebuilt). Normally the whole step is: bump
+`desktop/package.json` version, push main, watch the run. The manual flow
+below is the **fallback** for CI outages.
+
+Known CI behaviors: the `rebuild linux` job fails on every run (no Linux
+support yet — ignore it; macOS publishing still succeeds). If BOTH jobs fail
+instantly with zero steps, the org has exhausted its GitHub Actions
+spending limit — fix in org billing settings, then `gh run rerun`. A
+`workflow_dispatch`ed release shares the concurrency group with push runs
+and gets cancelled by any push to main mid-build.
+
+### Manual fallback
+
 1. Bump `version` in `desktop/package.json` when you want installed apps to
    auto-update (electron-updater only updates to *higher* versions). Commit
    via staging → main as usual (`[skip release]` not needed — desktop main
@@ -140,6 +156,15 @@ pnpm run dist:mac:publish
    HTTP 200 under
    `https://openbase-coder-desktop-releases-632795836081-us-east-1.s3.amazonaws.com/mac/`.
 
+## Timing expectations (2026-07 baselines)
+
+| Deploy | Typical duration |
+|---|---|
+| CLI auto-release (GHA) | ~3 min |
+| Desktop CI build+notarize+publish | ~30 min |
+| openbase-cloud API (`openbase-deploy`, warm cache) | ~7 min (build ~4, rollout ~3.5) |
+| Static sites (web/marketing) | ~20 s after local build |
+
 ## 5. Post-deploy checks
 
 - `openbase-coder self-update --check` on a standalone install reports the
@@ -161,3 +186,11 @@ pnpm run dist:mac:publish
   the release build fails on a frozen-lockfile mismatch.
 - PyPI publishing of `openbase-coder` itself (dev channel) only happens on a
   directly pushed tag; auto-release tags don't trigger it. Optional.
+- Version stamping: hatch-vcs only honors the unsuffixed
+  `SETUPTOOLS_SCM_PRETEND_VERSION`; the `_FOR_<dist>` variant is silently
+  ignored (the release build has a guard that fails on a bad stamp).
+- Marketing pickup is automatic: openbase-landing's "Download for Mac"
+  points at the S3 `Openbase-Coder-latest-arm64.dmg` alias (refreshed by
+  every publish), and `openbase.cloud/ios` is a forwarder page in
+  openbase-voice-marketing `public/ios/index.html` — the single place the
+  TestFlight/App Store destination is defined.

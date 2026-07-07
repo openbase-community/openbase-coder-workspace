@@ -145,7 +145,7 @@ home-relative directories continuously — including uncommitted changes and
 gitignored secrets — with VCS metadata (`.git`) categorically excluded.
 Optional; arms only when the device registry shows two or more non-phone
 devices with Tailscale identities. Plan and rationale in
-`.local/syncthing-plan-bob.md` (workspace-local).
+`specs/code-sync/PLAN.md`.
 
 **Sync folder**: One user-selected directory under `~`, identified across
 devices by its home-relative path (deterministic folder ID = hash of the
