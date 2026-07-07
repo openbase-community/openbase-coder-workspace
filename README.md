@@ -1,12 +1,17 @@
 # openbase-coder-workspace
 
+[Openbase Coder](https://openbase.cloud) is a voice IDE — speak the task,
+keep a live coding call open, approve sensitive actions, and review the diff
+from the same control surface. Product docs: https://docs.openbase.cloud.
+Agent guidance for working in this workspace is in [AGENTS.md](AGENTS.md).
+
 ## Getting started
 
 This repo is a [multi](https://github.com/montaguegabe/multi) workspace to manage multiple sub-repositories:
 
 - [allauth-client-swift](https://github.com/openbase-community/allauth-client-swift) - SwiftUI client and views for Django AllAuth headless authentication
 - [allauth-client-kotlin](https://github.com/openbase-community/allauth-client-kotlin) - Kotlin client and views for Django AllAuth headless authentication
-- [cli](https://github.com/openbase-community/openbase-coder) - CLI for Openbase Coder. This runs a Django server that provides git diffs for repos across the file system.
+- [cli](https://github.com/openbase-community/openbase-coder) - The Openbase Coder runtime (`openbase-coder`): local Django API + WebSocket server, LiveKit voice services, service management, plugins, and the product docs
 - [console](https://github.com/openbase-community/openbase-coder-console) - React frontend console for Openbase Coder
 - [coder-react](https://github.com/openbase-community/openbase-coder-react) - Shared React UI package for Openbase Coder components used by the console and desktop clients
 - [desktop](https://github.com/openbase-community/openbase-coder-desktop) - Electron desktop app for Openbase Coder

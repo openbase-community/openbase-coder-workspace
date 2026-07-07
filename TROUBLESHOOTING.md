@@ -1,5 +1,14 @@
 # Troubleshooting
 
+This guide is for **agents** debugging a running Openbase Coder install from
+this workspace: symptoms, log locations, bounded log checks, and fixes.
+User-facing troubleshooting lives in the product docs at
+`cli/docs/troubleshooting.md` (https://docs.openbase.cloud/troubleshooting/);
+put anything an end user should read there, not here.
+
+When reading logs under `~/.openbase/logs`, always use bounded reads
+(`tail -n ...` piped to a filter) — the files are huge.
+
 ## iOS Call Stuck On "Connecting..."
 
 This issue can happen when the iOS app successfully gets a LiveKit room token and opens signaling, but WebRTC media never connects.

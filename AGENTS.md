@@ -1,52 +1,79 @@
-This workspace contains multiple repositories:
+# Openbase Coder Workspace — Agent Guide
 
-- `allauth-client-swift`: SwiftUI client and views for Django AllAuth headless authentication
-- `allauth-client-kotlin`: Kotlin client and views for Django AllAuth headless authentication
-- `cli`: CLI for Openbase Coder. This runs a Django server that provides git diffs for repos across the file system.
+## What This Product Is
+
+Openbase Coder is a voice IDE — "write code from voice." The user speaks a
+task and keeps a live coding call open: a dispatcher agent answers, starts
+and steers coding sessions (threads) on the user's Mac or cloud DevSpace,
+and hands the call to Super Agents; the user approves sensitive actions and
+reviews diffs from the same control surface. Product surfaces: the iOS app,
+the macOS Electron desktop app, the shared web console, and Openbase Cloud
+(app.openbase.cloud) — all backed by the local `openbase-coder` CLI runtime.
+Openbase Cloud is also a PaaS.
+
+Product behavior and user-facing docs are in `cli/docs/`, published at
+https://docs.openbase.cloud — use the `openbase-product-knowledge` skill to
+route product questions to the right page. Workspace terms are defined in
+`GLOSSARY.md`; keep it maintained when introducing recurring
+Openbase-specific terms rather than redefining them across repos.
+
+The sibling workspace `../openbase-cloud-workspace` contains the cloud
+product (auth, remote workspaces, and the PaaS backend).
+
+## Repositories
+
+- `cli`: the Openbase Coder runtime (`openbase-coder`): local Django API +
+  WebSocket server, LiveKit voice services, launchd/systemd service
+  management, plugins, self-update, and the product docs (`cli/docs/`)
 - `console`: React frontend console for Openbase Coder
-- `coder-react`: Shared React UI package for Openbase Coder components used by the console and desktop clients
+- `coder-react`: shared React UI package used by the console and desktop
 - `desktop`: Electron desktop app for Openbase Coder
-- `ios`: Main Openbase iOS application using Tuist
-- `android`: Main Openbase Android application using Kotlin and Jetpack Compose
-- `skills`: Shared agent skills for Openbase Coder workflows.
-- `super-agents`: Python MCP wrapper for controlling Codex app-server threads, turns, compact status checks, and Super Agents coordination.
-- `agent-work-scheduler`: Deterministic Notion dependency scheduler for launching Super Agents work in isolated git worktrees.
-- `multi-react`: Shared React diff viewer and related UI utilities used by Multi and Openbase Coder.
-- `boilersync-react`: Shared React components and utilities for BoilerSync template workflows.
+- `ios`: main Openbase iOS application using Tuist
+- `android`: main Openbase Android application (Kotlin, Jetpack Compose)
+- `skills`: shared agent skills bundled with Openbase Coder
+- `super-agents`: Python MCP wrapper for Codex app-server threads, turns,
+  and Super Agents coordination
+- `agent-work-scheduler`: deterministic Notion dependency scheduler for
+  launching Super Agents work in isolated git worktrees
+- `multi-react`: shared React diff viewer used by Multi and Openbase Coder
+- `boilersync-react`: shared React components for BoilerSync workflows
+- `allauth-client-swift` / `allauth-client-kotlin`: SwiftUI / Kotlin clients
+  for Django AllAuth headless authentication
 
-This workspace is for voice-coding with native mobile apps, including the iOS app. `openbase-coder-cli` is run on the client computer, and runs a local Django server + MCP server for coding with Claude code and managing sessions.
+## Working In This Workspace
 
-`AGENTS.md` is the source of truth for workspace agent instructions. Do not add or maintain duplicate workspace rules under `.cursor/rules`.
+- Branches: do day-to-day work on `staging`. Deploys merge **every** repo's
+  staging to main in one batch, cli last (see the `deploy` skill). The
+  workspace repo requires linear history.
+- Developer install/test flow: `DEV_RUNBOOK.md` — keep it accurate when
+  setup, auth, or service behavior changes.
+- Cross-repo feature specs: `specs/` — consult before implementing features
+  that span repos.
+- Releases, distribution, and update behavior: `AUTO_UPDATE.md` — consult
+  before touching release workflows, the self-updater, state-file schemas,
+  version handshakes, or update feeds, and keep it current.
+- Debugging a running install (logs, ports, LiveKit, Tailscale):
+  `TROUBLESHOOTING.md` is the agent-facing guide (for example, iOS calls
+  stuck on "connecting" or "waiting for agent"). User-facing troubleshooting
+  belongs in `cli/docs/troubleshooting.md` instead.
+- Task tracking: https://app.notion.com/p/38a7b5b1c1d680bfa25bc2ca41718c95?v=38a7b5b1c1d680948e35000c5aa0133b
 
-Repository visibility and licensing:
+## Hard Rules
 
-- Public, AGPL-3.0-only: `cli`, `console`, `coder-react`, `skills`, `multi-react`, and `boilersync-react`.
-- Public, MIT exceptions: `allauth-client-swift`, `allauth-client-kotlin`, and `super-agents`.
-- Dev-only pending publication: `agent-work-scheduler`.
-- Private/proprietary: `android`, `desktop`, and `ios`.
-
-Do not add MIT licensing to any Openbase Coder repo other than `allauth-client-swift`, `allauth-client-kotlin`, and `super-agents`. The Android app, desktop app, and iOS app must remain private/proprietary for now and should not contain an open-source project license.
-
-Tests under `e2e/` should be true app end-to-end tests: they must drive the iOS app with Appium or drive the browser with Selenium. Do not put direct API, app-server, or service-client integration tests in `e2e/`.
-
-Cross-repo engineering specs live in `specs/` (e.g. `specs/onboarding/` for
-the onboarding flow, cloud API contract, and per-repo work items). Consult
-them before implementing features that span repos.
-
-The developer install/test flow is documented in the workspace
-`DEV_RUNBOOK.md`; keep it accurate when setup, auth, or service behavior
-changes.
-
-Releases, distribution, and update behavior are governed by the workspace
-`AUTO_UPDATE.md` guide. Consult it before touching release workflows, the
-self-updater, state-file schemas, version handshakes, or update feeds — and
-keep it current when those change.
-
-Consult and maintain the workspace-level `GLOSSARY.md`. When adding docs,
-instructions, reports, or features that introduce or rely on recurring
-Openbase-specific terms, add or update concise glossary entries there rather
-than redefining terms differently across repos.
-
-When the iOS app is stuck at "waiting for agent", check `~/.openbase/logs` to confirm whether the LiveKit agent job was dispatched. If the worker logs show `received job request` and then stall in `ctx.connect()` with `wait_pc_connection timed out`, treat it as a stale local/iPhone LiveKit ICE/network state before assuming dispatch logic is broken. Restarting both the Mac and iPhone has resolved this state.
-
-Task tracking is in https://app.notion.com/p/38a7b5b1c1d680bfa25bc2ca41718c95?v=38a7b5b1c1d680948e35000c5aa0133b.
+- `AGENTS.md` and `.agents/` are the source of truth for agent instructions
+  and repo-local skills; `CLAUDE.md` and `.claude/skills` entries are
+  symlinks to them. Edit the AGENTS/.agents side and keep the symlinks
+  intact. Do not add duplicate workspace rules under `.cursor/rules`.
+- Licensing: public AGPL-3.0-only — `cli`, `console`, `coder-react`,
+  `skills`, `multi-react`, `boilersync-react`. Public MIT exceptions —
+  `allauth-client-swift`, `allauth-client-kotlin`, `super-agents`. Dev-only
+  pending publication — `agent-work-scheduler`. Private/proprietary —
+  `android`, `desktop`, `ios`. Never add MIT licensing to any other repo,
+  and never add an open-source license to the private apps.
+- Tests under `e2e/` must be true app end-to-end tests (Appium-driven iOS or
+  Selenium-driven browser). Direct API, app-server, or service-client
+  integration tests do not belong there.
+- This machine may sync `~/Projects` with another Mac via Syncthing. `.git`
+  must never sync (see `~/Projects/.stglobalignore`); if a commit or build
+  fails mysteriously, suspect a sync flap and verify `HEAD` matches
+  `origin/<branch>` before committing.
