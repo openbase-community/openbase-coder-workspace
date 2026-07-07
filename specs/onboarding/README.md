@@ -22,51 +22,36 @@ Related docs:
 - [cloud-api.md](cloud-api.md) — openbase-cloud rendezvous API contract
 - [work-items.md](work-items.md) — per-repo work items
 
-## Status and launch blockers (handoff, July 2026)
+## Status (updated 2026-07-06)
 
-All four codebases are implemented per this spec (see
-[work-items.md](work-items.md) for what landed where): CLI
-(`onboarding status/report`, `setup --json-progress`, login/setup hooks),
-backend rendezvous endpoints + `OpenbaseDevice` model, desktop Phone/Pairing
-pages with QR + polling + setup checklist, and the iOS Path B flow
-(`OnboardingClient.swift`, `OnboardingFlowView.swift`).
+All four codebases are implemented and **deployed** per this spec (see
+[work-items.md](work-items.md) for what landed where):
 
-The flow is fully no-terminal by design — the Mac app installs the CLI with
-one click from a **bundled package** (no `curl`), setup renders as a
-checklist, and pairing is button-driven. Four things stand between the design
-and a real non-developer succeeding:
+- **Cloud endpoints are live** on app.openbase.cloud (device registry +
+  onboarding state, migration `0006_openbasedevice` applied). Clients'
+  fallback "skip" mode now only triggers against genuinely old backends.
+- **URLs are real**: `openbase.cloud/ios` forwards to the TestFlight
+  listing (single-source forwarder page in the marketing site), and Path B's
+  web URL serves the product dashboard with OAuth resume fixed for
+  signed-out users.
+- **Distribution ships**: desktop CI publishes a signed/notarized DMG on
+  every desktop main push, seeded with the latest *released* CLI package;
+  the iOS TestFlight build is current.
+- Desktop onboarding routing is **derived from observable state**
+  (`desktop/src/onboarding/deriveStep.ts`) rather than scripted page jumps;
+  acknowledgments persist in `~/.openbase/desktop-onboarding.json` so wiping
+  the Openbase home resets onboarding.
 
-1. **Cloud endpoints aren't live.** The backend code is implemented in the
-   right place — `openbase-cloud-api` (`openbase_api/openbase/`) is a plugin
-   package installed into the deployed **api-core** project via `api_core.*`
-   entry points, and api-core's URL loader mounts the app at `api/openbase/`.
-   What remains is operational: merge openbase-cloud-api PR #1, deploy, and
-   run migration `0006_openbasedevice`. Until then, none of the cross-device
-   spinners (phone signed in, devices discovered) ever turn green; both apps
-   detect the missing endpoints (404/405/HTML responses) and fall back to
-   "skip" mode. The flow won't block a user, but the guided experience
-   doesn't function. (One check at deploy time: if production sets the
-   `URL_PREFIXES` env var, confirm it doesn't remap `openbase_api` away from
-   the default `api/openbase/` prefix the clients call.)
-2. **Placeholder URLs.** The desktop QR points at
-   `https://openbase.cloud/ios` and Path B tells users to visit
-   `https://app.openbase.cloud`; those need to actually redirect to the App
-   Store/TestFlight listing and a Mac-app download page.
-3. **Distribution.** The Mac app must ship signed/notarized with the CLI
-   package actually bundled in — verify the electron-builder packaging
-   includes it (in `pnpm dev` there may be no bundled package to activate).
-   The iOS app needs a TestFlight/App Store listing.
-4. **Tailscale is the remaining friction.** No terminal, but the user
-   installs two apps and creates a third-party Tailscale account. That's the
-   accepted v1 trade-off; a v2 could embed Tailscale via their iOS/macOS SDKs
-   or use pre-provisioned auth keys to skip account creation.
+Remaining v1 trade-off: **Tailscale friction** — no terminal, but the user
+installs two apps and creates a third-party Tailscale account. A v2 could
+embed Tailscale via their SDKs or pre-provisioned auth keys.
 
 To verify locally: `uv run pytest tests/test_onboarding_status_api.py
-tests/test_cloud_registration.py tests/test_onboarding_cli.py` in `cli/`
-(23 tests), `uv run openbase-coder onboarding status` for a live check,
-`pnpm dev` in `desktop/` to click through the flow, and the iOS simulator
-(delete the app first so the `openbase_onboarding_completed` UserDefaults
-flag resets).
+tests/test_cloud_registration.py tests/test_onboarding_cli.py` in `cli/`,
+`uv run openbase-coder onboarding status` for a live check, and a clean-slate
+walk per `DEV_RUNBOOK.md` §6 (also remove
+`~/Library/Application Support/@openbase/coder-desktop` and
+`~/.openbase/desktop-onboarding.json` for a true first run).
 
 ## Onboarding states
 

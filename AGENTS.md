@@ -57,7 +57,8 @@ product (auth, remote workspaces, and the PaaS backend).
 - Developer install/test flow: `DEV_RUNBOOK.md` — keep it accurate when
   setup, auth, or service behavior changes.
 - Cross-repo feature specs: `specs/` — consult before implementing features
-  that span repos.
+  that span repos; usage policy in `specs/README.md` (public-audience docs
+  only — planning scratch stays in gitignored `.local/`).
 - Releases, distribution, and update behavior: `AUTO_UPDATE.md` — consult
   before touching release workflows, the self-updater, state-file schemas,
   version handshakes, or update feeds, and keep it current.

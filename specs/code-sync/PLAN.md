@@ -1,26 +1,19 @@
 # Syncthing Code Sync Without `.git` — Plan
 
 Goal: bidirectional, near-realtime sync of code (including secrets and
-gitignored files) between the MacBook and the Mac mini — and eventually any
-user's laptop ⇄ Mac mini or cloud DevSpace — without routing day-to-day file
+gitignored files) between a user's machines — laptop ⇄ desktop or cloud
+DevSpace — without routing day-to-day file
 changes through git commits, and without ever again letting sync corrupt git
 state. Productize this in openbase-coder so a user's secondary machine is
 always ready to take a voice call.
 
-## 1. The Incident That Motivates This
+## 1. Motivation
 
-On 2026-07-05/06, while committing in `cli/`, Syncthing synced `.git/` from
-the mini mid-operation (another agent there had just created two commits).
-The local checkout's refs/HEAD advanced under a running git process while the
-index stayed stale. The resulting commit (`c8f2e79`) silently reverted ~40
-files on `main` — deleting two docs pages and the mini's release fixes — and
-the docs site briefly deployed from it. Recovery required a forensic restore
-commit (`d993865`). The DEV_RUNBOOK "Syncthing flap" hazard is the same class
-of failure.
-
-Today's config (`~/Projects/.stignore` + `.stglobalignore`) excludes build
-outputs and `node_modules`/venvs but **syncs `.git` fully**. That is the root
-problem.
+Naive file sync of a working repository eventually corrupts it: syncing
+`.git/` between two machines while git runs on either side produces torn
+ref/index states, silently reverted commits, and lock collisions (observed
+twice in development before this design). Excluding build outputs is not
+enough; the VCS database itself must never travel over a file-sync channel.
 
 ## 2. Why Syncing `.git` Can Never Be Made Safe
 
@@ -41,7 +34,7 @@ categorically. Git state should move only through git's own transports.
 
 ## 3. Requirements
 
-- Bidirectional file sync of working trees: laptop ⇄ mini, laptop ⇄ cloud
+- Bidirectional file sync of working trees: laptop ⇄ desktop, laptop ⇄ cloud
   DevSpace.
 - Secrets (`.env`, keys) and gitignored-but-needed files sync too — git
   push/pull alone cannot do this, which is why sync exists at all.
@@ -98,7 +91,7 @@ dispatching to the machine that already has the active session. Syncthing's
 simultaneous edits of one file; the reconciler should list them for cleanup
 instead of leaving them to be found by grep.
 
-## 5. Immediate Fix for MacBook ⇄ Mini (do this now)
+## 5. Manual Interim Setup (pre-productization; applied in development)
 
 1. Quiesce: finish/park agent work on both machines; ensure both sides'
    repos are at pushed, clean states (or accept that dirty diffs will simply
@@ -124,7 +117,7 @@ instead of leaving them to be found by grep.
    of `origin`, or add direct peer remotes over Tailscale:
 
    ```bash
-   git remote add mini ssh://gabemontague@<mini-tailscale-dns>/Users/gabemontague/Projects/<...>/cli
+   git remote add peer ssh://<user>@<peer-tailscale-dns>/<path-to-repo>
    ```
 
 5. Interim, until the reconciler exists: after committing on one machine,
@@ -237,7 +230,7 @@ Sandbox teardown/re-launch re-pairs via the cloud device registry.
    policy in DEV_RUNBOOK (replaces the "suspect a sync flap" hazard with
    "`.git` is never synced").
 2. **Phase 1**: `code-sync` service managing Syncthing + generated ignores
-   for registered projects (laptop ⇄ mini), no reconciler — dirty-tree
+   for selected folders (laptop ⇄ desktop), no reconciler — dirty-tree
    semantics only.
 3. **Phase 2**: reconciler (auto-ff + conflict records) + console/iOS
    conflict UI + notifications.
@@ -247,12 +240,12 @@ Sandbox teardown/re-launch re-pairs via the cloud device registry.
 
 ---
 
-## 10. Review & Amendments (2026-07-06, second opinion)
+## 10. Design Review Amendments (2026-07-06)
 
 Verdict: **the architecture is right and should proceed as written** — the
 categorical `.git` exclusion, the two-layer split (files via Syncthing, git
 state via git's own transport), and advisory-not-locking coordination are
-the same conclusions reached independently from the 2026-07-04 incidents,
+conclusions reached independently from the development incidents,
 and the reconciler design here (peer remotes + auto-ff only when trees
 already match, conflicts surfaced product-side) is stronger than a
 bundle-based exchange: bundles fit offline couriering, while these peers are
@@ -262,8 +255,7 @@ option should be the default (no SSH provisioning; token auth exists).
 Amendments to fold in:
 
 1. **Layer 3.5 — active-device lease (receive-only folders).** §4's advisory
-   layer prevents *planned* concurrent work but not the echo-race class: the
-   2026-07-04 `package.json` deletion was a **working-tree** file flapping
+   layer prevents *planned* concurrent work but not the echo-race class: an observed development incident was a **working-tree** file flapping
    mid-commit, and excluding `.git` does not fix that class. Syncthing
    folders support per-device **receive-only** mode; the code-sync service
    should hold a simple lease — the device with recent user/agent activity
@@ -309,6 +301,6 @@ Amendments to fold in:
    `dispatcher-config.json` (same refuse-newer semantics), exposed at
    `/api/sync/settings/` for the console page.
 7. **Interim guard now shipped.** §5's stglobalignore patterns were applied
-   on 2026-07-06 (the ignore file itself syncs, so the mini inherits it);
+   during development (the ignore file itself syncs to peers);
    the `doctor` check in §6 remains the durable guard once code-sync owns
    config generation.
