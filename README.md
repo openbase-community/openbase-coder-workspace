@@ -47,9 +47,11 @@ Shared Openbase terms are defined in the workspace [glossary](GLOSSARY.md).
 Update it when documenting or introducing terms that will recur across repos,
 agent instructions, reports, or user-facing docs.
 
-Cross-repo engineering specs live in [`specs/`](specs/); see
-[`specs/onboarding/`](specs/onboarding/) for the onboarding flow spec and
-per-repo work items.
+Cross-repo engineering specs live in [`specs/`](specs/) — see
+[`specs/README.md`](specs/README.md) for what belongs there (public-audience
+architecture and contracts) and what stays local. Current specs:
+[`specs/onboarding/`](specs/onboarding/) (cross-device onboarding) and
+[`specs/code-sync/`](specs/code-sync/) (managed file sync between machines).
 
 ## Coding Backends
 
