@@ -86,6 +86,12 @@ Then pick the surface you're testing:
 
 ## 6. Resetting
 
+Syncthing policy: `.git` (and all VCS metadata) is **never synced** — the
+`~/Projects/.stglobalignore` patterns enforce this and `openbase-coder doctor`
+checks it. If a file mysteriously changes or vanishes mid-operation, suspect
+a working-tree sync race from the other machine and check
+`~/.openbase/sync-versions/` (code-sync history) before assuming data loss.
+
 To test first-run behavior from scratch: stop services
 (`openbase-coder services stop`), archive `~/.openbase` (move it aside), and
 re-run `./scripts/setup`. You lose cloud login (re-run `openbase-coder

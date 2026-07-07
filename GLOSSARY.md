@@ -137,6 +137,34 @@ pairing or install-readiness truth.
 a live checklist. Step IDs and event shapes are defined in
 `specs/onboarding/README.md`.
 
+## Code Sync
+
+**Code sync**: Openbase Coder's managed Syncthing file sync between a user's
+non-phone devices (Macs, cloud workspaces) over their tailnet. Syncs selected
+home-relative directories continuously — including uncommitted changes and
+gitignored secrets — with VCS metadata (`.git`) categorically excluded.
+Optional; arms only when the device registry shows two or more non-phone
+devices with Tailscale identities. Plan and rationale in
+`.local/syncthing-plan-bob.md` (workspace-local).
+
+**Sync folder**: One user-selected directory under `~`, identified across
+devices by its home-relative path (deterministic folder ID = hash of the
+relpath); each device mounts it at its own `$HOME/<relpath>`.
+
+**Repo reconciler**: The code-sync service that keeps git branch pointers in
+step across devices after files have already synced: fetches from the peer
+over the local API's read-only git endpoint and fast-forwards only when the
+local branch is an ancestor and the working tree already matches; anything
+else becomes a repo sync conflict surfaced in the console and iOS app.
+
+**Active-device lease**: Code-sync marks the non-active device's folders
+receive-only (via the Syncthing REST API) so a stale peer can never echo old
+state over live work; the lease follows agent/voice activity.
+
+**Sync history**: Staggered Syncthing versioning (~30-day max age) kept under
+`~/.openbase/sync-versions/`, storing old copies only of files replaced by
+incoming syncs — the undo net for uncommitted work.
+
 ## Local Configuration
 
 **Standalone runtime package**: The bundled production runtime for Openbase
