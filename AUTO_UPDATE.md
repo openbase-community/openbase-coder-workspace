@@ -120,7 +120,8 @@ Every versioned piece is inspectable without MCP:
 | super-agents | `super-agents-mcp --version` / `super-agents-backend --version` |
 | Desktop app | shown in the app UI (and macOS About menu) |
 | Console | shows the CLI/package version it is served by (they version together) |
-| livekit-server / syncthing / codex / claude | each binary's own `--version` |
+| livekit-server / codex / claude | each binary's own `--version` |
+| syncthing (optional, downloaded on `sync enable`) | pinned in `code_sync/install.py`; `syncthing --version` |
 | Plugins | `openbase-coder plugins list` |
 
 ## The CLI self-update sequence
@@ -138,7 +139,7 @@ Every versioned piece is inspectable without MCP:
 5. **Quiesce**: if a voice session is active, defer (override with `--force`).
 6. Download the target tarball, verify SHA-256, extract to
    `~/.openbase/packages/standalone/releases/<version>-<target>/`, validate the
-   package (metadata, launcher, livekit-server, syncthing), smoke-run
+   package (metadata, launcher, livekit-server), smoke-run
    `bin/openbase-coder --version`.
 7. **Atomic flip**: repoint the `current` symlink (temp symlink + rename);
    keep the outgoing release behind a `previous` symlink; prune older releases
