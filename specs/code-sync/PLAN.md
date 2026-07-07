@@ -100,7 +100,7 @@ instead of leaving them to be found by grep.
    folder-relative; cover nested subrepos and linked worktrees):
 
    ```text
-   // VCS metadata must never sync (torn git state; see 2026-07-05 incident)
+   // VCS metadata must never sync (torn git state; see §1)
    (?d).git
    (?d)**/.git
    (?d)**/.jj
