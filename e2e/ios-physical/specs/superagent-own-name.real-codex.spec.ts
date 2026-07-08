@@ -1,4 +1,3 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { browser, expect } from "@wdio/globals";
 import { speakText } from "../support/audio/speakText.js";
@@ -14,14 +13,19 @@ import {
   openCallSurface,
   startCall,
 } from "../support/phoneApp.js";
+import {
+  createCleanWorkspace,
+  readFileTrimmed,
+  waitForFile,
+  writeBriefing,
+  writeTaskInstructions,
+} from "../support/fileTasks.js";
 import { readLiveKitLogCursor, waitForLiveKitLogEvidence } from "../support/voice/livekitLogs.js";
 
 const threadName = "own-name-test";
 const agentName = "Kenny";
-const loremSentence = "Lorem ipsum dolor sit amet.";
-const loremFileName = "lorem-ipsum.txt";
-const folderAdjectives = ["amber", "brave", "calm", "clear", "happy", "lucky", "quiet", "swift"];
-const folderNouns = ["apple", "bridge", "field", "garden", "harbor", "meadow", "river", "window"];
+const testSentence = "red blue green";
+const testFileName = "kenny.txt";
 const responsePattern = new RegExp(
   `stage=tts_(?:stream_flush|synthesize_start).*text_excerpt=.*\\b${agentName}\\b`,
   "i",
@@ -42,26 +46,35 @@ describe("Openbase iOS Super Agent own-name voice response", () => {
 
     let callStarted = false;
     let testError: unknown;
-    const tmpDir = join("/tmp", `openbase-${randomFolderName()}`);
-    const loremFilePath = join(tmpDir, loremFileName);
+    const testRoot = join(process.env.HOME ?? ".", "openbase-live-test");
+    const workspace = createCleanWorkspace(testRoot);
+    const testFilePath = workspace.path(testFileName);
     const spokenPrompt = [
-      `Thread name: ${threadName}.`,
-      `Working directory: ${tmpDir}.`,
-      `Write exactly this sentence to ${loremFileName}: ${loremSentence}`,
+      "Hi Openbase.",
+      "In my home folder, open the folder named openbase live test.",
+      "Follow the briefing markdown file in that folder.",
+      "Reply when the briefing is complete.",
     ].join(" ");
 
     try {
-      rmSync(tmpDir, { recursive: true, force: true });
-      mkdirSync(tmpDir, { recursive: true });
-      writeFileSync(
-        join(tmpDir, "AGENTS.md"),
+      writeTaskInstructions(
+        join(testRoot, "AGENTS.md"),
         [
           "You are Kenny.",
-          `For this test, complete the requested file task in ${tmpDir}.`,
+          "For this live E2E test, read briefing.md in this folder and follow it exactly.",
           `After the file is written, reply with a short sentence that includes the name ${agentName}.`,
-          "",
-        ].join("\n"),
-        "utf8",
+        ],
+      );
+      writeBriefing(
+        workspace.path("briefing.md"),
+        "Openbase Live E2E Own Name Briefing",
+        [
+          `Thread name: ${threadName}.`,
+          `Working directory: ${testRoot}`,
+          `Create this file: ${testFilePath}`,
+          `Write exactly this text into the file, with no extra words: ${testSentence}`,
+          `After writing the file, reply with a short sentence that includes the name ${agentName}.`,
+        ],
       );
 
       await activateOpenbaseApp(env);
@@ -78,8 +91,8 @@ describe("Openbase iOS Super Agent own-name voice response", () => {
       const evidence = await waitForLiveKitLogEvidence(env, responsePattern, 240_000, { after: responseLogCursor });
       expect(evidence.path).toBe(env.livekitLogPath);
 
-      await waitForFile(loremFilePath, 30_000);
-      expect(readFileSync(loremFilePath, "utf8").trim()).toBe(loremSentence);
+      await waitForFile(testFilePath, 30_000);
+      expect(readFileTrimmed(testFilePath)).toBe(testSentence);
     } catch (error) {
       testError = error;
       throw error;
@@ -97,21 +110,3 @@ describe("Openbase iOS Super Agent own-name voice response", () => {
     }
   });
 });
-
-async function waitForFile(path: string, timeoutMs: number): Promise<void> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    if (existsSync(path)) {
-      return;
-    }
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-  throw new Error(`Timed out waiting for file ${path}`);
-}
-
-function randomFolderName(): string {
-  const adjective = folderAdjectives[Math.floor(Math.random() * folderAdjectives.length)];
-  const noun = folderNouns[Math.floor(Math.random() * folderNouns.length)];
-  const number = Math.floor(100 + Math.random() * 900);
-  return `${adjective}-${noun}-${number}`;
-}

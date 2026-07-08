@@ -31,8 +31,11 @@ product (auth, remote workspaces, and the PaaS backend).
 - `ios`: main Openbase iOS application using Tuist
 - `android`: main Openbase Android application (Kotlin, Jetpack Compose)
 - `skills`: shared agent skills bundled with Openbase Coder
-- `super-agents`: Python MCP wrapper for Codex app-server threads, turns,
-  and Super Agents coordination
+- `super-agents`: standalone MIT Python MCP server/library for Codex
+  app-server threads, turns, and Super Agents coordination. Keep it usable
+  outside Openbase Coder: generic coordination primitives may live there;
+  Openbase product-domain features belong in Openbase Coder repos or an
+  adapter layer.
 - `agent-work-scheduler`: deterministic Notion dependency scheduler for
   launching Super Agents work in isolated git worktrees
 - `multi-react`: shared React diff viewer used by Multi and Openbase Coder
@@ -56,6 +59,17 @@ product (auth, remote workspaces, and the PaaS backend).
   evidence in a stash and restore from HEAD; never commit resurrections.
 - Developer install/test flow: `DEV_RUNBOOK.md` — keep it accurate when
   setup, auth, or service behavior changes.
+- Live physical-phone E2E testing: `LIVE_E2E_TESTING.md` — consult before
+  running manual iOS full-system tests; those runs use real services and must
+  not be mocked.
+- Workspace-local live E2E skill: `.agents/skills/live-no-mock-e2e/SKILL.md`
+  — use it before planning or running live no-mock E2E; it requires a pre-run
+  RMOT opened in Typora and production Openbase Cloud targeting.
+- Live share-readiness gate: `manual:e2e:ios:parallel-agents-truth` launches
+  parallel Super Agents from a prepared briefing, verifies their Markdown
+  reports, tests transfer to the Bill Gates report agent, asks what happened,
+  and exits back to dispatch. Keep exact paths/names/topics out of spoken
+  prompts and in the briefing file.
 - Cross-repo feature specs: `specs/` — consult before implementing features
   that span repos; usage policy in `specs/README.md` (public-audience docs
   only — planning scratch stays in gitignored `.local/`).
@@ -80,6 +94,14 @@ product (auth, remote workspaces, and the PaaS backend).
   pending publication — `agent-work-scheduler`. Private/proprietary —
   `android`, `desktop`, `ios`. Never add MIT licensing to any other repo,
   and never add an open-source license to the private apps.
+- Super Agents boundary: this root-level workspace rule applies whenever
+  working on `super-agents`, because subrepo `AGENTS.md` files may not be
+  loaded by default. `super-agents` must remain a standalone MCP product that
+  can be installed and used without Openbase Coder. Do not add product domain
+  features such as Openbase teams, team activity feeds, reports, Cloud account
+  state, billing, onboarding, or app-specific UX flows directly to
+  `super-agents`; put those in `cli`, `skills`, `console`, the apps, or a
+  narrow adapter that calls generic Super Agents primitives.
 - Tests under `e2e/` must be true app end-to-end tests (Appium-driven iOS or
   Selenium-driven browser). Direct API, app-server, or service-client
   integration tests do not belong there.

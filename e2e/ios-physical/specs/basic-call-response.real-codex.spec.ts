@@ -12,7 +12,8 @@ import { expectedDispatcherReasoning, readNormalDispatcherReasoning } from "../s
 import { readLiveKitLogCursor, waitForLiveKitLogEvidence } from "../support/voice/livekitLogs.js";
 
 const spokenPrompt = "Hey are you there?";
-const responsePattern = /stage=tts_(?:stream_flush|synthesize_start).*text_excerpt=.*\b(yes|i'?m here|i am here)\b/i;
+const responsePattern =
+  /stage=tts_(?:stream_flush|synthesize_start).*text_excerpt=.*\b(yes|yep|i['’]?m here|i am here)\b/i;
 
 describe("Openbase iOS basic voice response via LiveKit logs", () => {
   const env = loadDeviceEnv({ requirePhysicalDevice: true });

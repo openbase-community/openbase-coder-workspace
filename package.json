@@ -17,6 +17,7 @@
     "e2e:ios:doctor": "pnpm --dir e2e/ios-physical e2e:ios:doctor",
     "manual:e2e:ios:basic-call-response": "pnpm --dir e2e/ios-physical manual:e2e:ios:basic-call-response",
     "manual:e2e:ios:superagent-own-name": "pnpm --dir e2e/ios-physical manual:e2e:ios:superagent-own-name",
+    "manual:e2e:ios:parallel-agents-truth": "pnpm --dir e2e/ios-physical manual:e2e:ios:parallel-agents-truth",
     "e2e:ios:audio:check": "pnpm --dir e2e/ios-physical e2e:ios:audio:check",
     "e2e:voice:check": "pnpm --dir e2e/ios-physical e2e:voice:check",
     "e2e:ios:install-driver": "pnpm --dir e2e/ios-physical e2e:ios:install-driver",

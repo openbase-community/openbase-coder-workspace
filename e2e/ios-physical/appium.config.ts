@@ -1,7 +1,9 @@
 import { buildCapabilities } from "./support/capabilities.js";
+import { assertExpectedCloudTarget, detectCloudTarget } from "./support/cloudTarget.js";
 import { loadDeviceEnv } from "./support/deviceEnv.js";
 import { assertNormalDispatcherReasoningIsLow } from "./support/dispatcherSettings.js";
 import { assertConfiguredPhysicalIosDevice } from "./support/iosDevices.js";
+import { assertExpectedRuntimeTarget, detectRuntimeTarget } from "./support/runtimeTarget.js";
 
 const env = loadDeviceEnv({ requirePhysicalDevice: true });
 if (!env.allowRealCodex || !env.confirmRealCodex) {
@@ -11,13 +13,19 @@ if (!env.allowRealCodex || !env.confirmRealCodex) {
   );
 }
 assertConfiguredPhysicalIosDevice(env);
+assertExpectedRuntimeTarget();
+assertExpectedCloudTarget();
 assertNormalDispatcherReasoningIsLow();
+const cloudTarget = detectCloudTarget();
+const runtimeTarget = detectRuntimeTarget();
 
 console.warn(
   [
     "",
     "[manual-only] Openbase iOS physical E2E is running.",
     "This spec drives Gabe's physical iPhone and uses real Openbase/Codex/LiveKit services.",
+    `Openbase runtime target: ${runtimeTarget.detail}.`,
+    `Openbase cloud target: ${cloudTarget.detail}.`,
     "The runner refuses to start unless the normal dispatcher reasoning setting is low.",
     "Run only when explicitly instructed.",
     "",
@@ -29,10 +37,12 @@ export const config = {
   specs: [
     "./specs/basic-call-response.real-codex.spec.ts",
     "./specs/superagent-own-name.real-codex.spec.ts",
+    "./specs/parallel-agents-truth.real-codex.spec.ts",
   ],
   suites: {
     basicCallResponse: ["./specs/basic-call-response.real-codex.spec.ts"],
     superagentOwnName: ["./specs/superagent-own-name.real-codex.spec.ts"],
+    parallelAgentsTruth: ["./specs/parallel-agents-truth.real-codex.spec.ts"],
   },
   maxInstances: 1,
   logLevel: env.appiumLogLevel,

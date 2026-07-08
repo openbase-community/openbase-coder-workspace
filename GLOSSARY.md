@@ -12,6 +12,17 @@ by the local CLI runtime. The product docs (`cli/docs/`, published at
 docs.openbase.cloud) cover every surface and carry "In the apps" / "On
 iPhone" cross-references between them.
 
+**Live E2E test**: A manual full-system test that drives real product surfaces
+and real services rather than mocks or test doubles. In Openbase Coder, the
+most sensitive live E2E path is the physical iPhone voice suite because it uses
+the installed iOS app, Appium/WebDriverAgent, LiveKit, Cartesia audio, and real
+agent backends.
+
+**Physical iPhone E2E**: The `e2e/ios-physical` suite that drives Gabe's real
+iPhone through Appium/XCUITest against the modern Openbase iOS app bundle. It
+is manual-only and requires explicit permission before running because it can
+spend API credits and produce audible speech.
+
 **Desktop app**: The macOS Electron app. It bundles and activates the
 standalone CLI runtime, runs guided first-time setup, and hosts the dashboard
 UI plus Electron-only features (auto-update, LiveKit companion screen
@@ -219,6 +230,14 @@ management, LiveKit voice services, and Super Agents coordination.
 Agents turn; command routines run a normal local command without launching an AI
 agent. Routines are stored in local Super Agents state and run by the
 `openbase-routines` scheduler service.
+
+**Cloud idle heartbeat**: The `openbase-cloud-heartbeat` service (cloud
+DevSpaces only, installed by `openbase-coder provision`) that runs
+`openbase-coder cloud heartbeat`. It samples the local server's
+`/api/threads/activity/` endpoint between beats and posts to the cloud API
+whether any agent runs were running or launched during the window; Openbase
+Cloud stops DevSpaces with no run activity. DCV connections and console
+browsing intentionally do not count.
 
 ## Releases & Updates
 

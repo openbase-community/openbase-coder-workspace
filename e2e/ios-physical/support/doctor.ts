@@ -1,9 +1,11 @@
 import { accessSync, constants } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
+import { detectCloudTarget } from "./cloudTarget.js";
 import { loadDeviceEnv, workspaceRoot } from "./deviceEnv.js";
 import { readNormalDispatcherReasoning, readNormalSuperAgentsReasoning } from "./dispatcherSettings.js";
 import { assertConfiguredPhysicalIosDevice } from "./iosDevices.js";
+import { detectRuntimeTarget } from "./runtimeTarget.js";
 
 type Check = {
   name: string;
@@ -27,6 +29,8 @@ checks.push(envCheck("OPENBASE_IOS_DEVICE_NAME", env.deviceName, true));
 checks.push(envCheck("OPENBASE_IOS_BUNDLE_ID", env.bundleId, true));
 checks.push(envCheck("OPENBASE_IOS_XCODE_ORG_ID", env.xcodeOrgId ?? "", false));
 checks.push(physicalIosDeviceCheck());
+checks.push(runtimeTargetCheck());
+checks.push(cloudTargetCheck());
 
 if (env.appPath) {
   checks.push(fileCheck("OPENBASE_IOS_APP_PATH", env.appPath));
@@ -136,6 +140,40 @@ function physicalIosDeviceCheck(): Check {
   } catch (error) {
     return {
       name: "physical iOS device",
+      ok: false,
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function runtimeTargetCheck(): Check {
+  try {
+    const target = detectRuntimeTarget();
+    return {
+      name: "Openbase runtime target",
+      ok: target.ok,
+      detail: target.detail,
+    };
+  } catch (error) {
+    return {
+      name: "Openbase runtime target",
+      ok: false,
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function cloudTargetCheck(): Check {
+  try {
+    const target = detectCloudTarget();
+    return {
+      name: "Openbase cloud target",
+      ok: target.ok,
+      detail: target.detail,
+    };
+  } catch (error) {
+    return {
+      name: "Openbase cloud target",
       ok: false,
       detail: error instanceof Error ? error.message : String(error),
     };

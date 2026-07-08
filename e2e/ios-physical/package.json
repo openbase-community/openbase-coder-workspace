@@ -9,6 +9,7 @@
     "e2e:ios:doctor": "tsx support/doctor.ts",
     "manual:e2e:ios:basic-call-response": "OPENBASE_E2E_ALLOW_REAL_CODEX=1 OPENBASE_E2E_CONFIRM_REAL_CODEX=1 wdio run appium.config.ts --suite basicCallResponse",
     "manual:e2e:ios:superagent-own-name": "OPENBASE_E2E_ALLOW_REAL_CODEX=1 OPENBASE_E2E_CONFIRM_REAL_CODEX=1 wdio run appium.config.ts --suite superagentOwnName",
+    "manual:e2e:ios:parallel-agents-truth": "OPENBASE_E2E_ALLOW_REAL_CODEX=1 OPENBASE_E2E_CONFIRM_REAL_CODEX=1 wdio run appium.config.ts --suite parallelAgentsTruth",
     "e2e:ios:audio:check": "tsx support/audio/checkAudio.ts",
     "e2e:voice:check": "tsx support/voice/checkVoiceTools.ts",
     "e2e:ios:install-driver": "appium driver install xcuitest"

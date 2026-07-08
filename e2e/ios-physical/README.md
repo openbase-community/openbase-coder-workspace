@@ -6,8 +6,20 @@ This package contains physical iPhone E2E tests for Openbase Coder:
 
 - `specs/basic-call-response.real-codex.spec.ts`
 - `specs/superagent-own-name.real-codex.spec.ts`
+- `specs/parallel-agents-truth.real-codex.spec.ts`
 
 It intentionally uses the normal Codex/Openbase configuration from the current shell and installed launchctl services.
+Live no-mock runs should use production Openbase Cloud unless Gabe explicitly
+asks for another target. Set `OPENBASE_E2E_EXPECT_WEB_BACKEND` and
+`OPENBASE_E2E_EXPECT_CODING_BACKEND` so the runner fails before using the wrong
+cloud/backend.
+Set `OPENBASE_E2E_EXPECT_RUNTIME` to make the target explicit:
+
+- `electron-bundled`: the active standalone runtime must match the installed
+  desktop app's bundled CLI package.
+- `standalone`: any active standalone runtime is acceptable.
+- `workspace`: the active runtime must be a development workspace checkout.
+- `any`: report the active runtime without enforcing a mode.
 
 ## Setup
 
@@ -40,6 +52,8 @@ pnpm --dir e2e/ios-physical typecheck
 ```
 
 `e2e:ios:doctor` validates local prerequisites, confirms the configured iOS UDID is a physical device rather than a simulator, and confirms the normal dispatcher reasoning setting is `low`. Audio stimulus checks only require Cartesia credentials when `OPENBASE_E2E_ENABLE_AUDIO_STIMULUS=1`.
+It also reports the active Openbase runtime target and fails if
+`OPENBASE_E2E_EXPECT_RUNTIME` is set to a mode that does not match.
 
 The helpers use stable accessibility identifiers when the app exposes them and fall back to visible labels where possible. Future iOS app changes should add identifiers such as `nav.call`, `settings.backend.host`, `settings.backend.add`, `call.start`, and `call.end`.
 
@@ -78,6 +92,13 @@ Turn-start logs should include `stage=turn_start_request`, `model`, `service_tie
 
 The real voice smoke test opens the call surface, requires a successful click on `call.start`, speaks its hard-coded prompt through Cartesia-generated Mac audio, waits for a matching TTS response in LiveKit logs, asserts the normal dispatcher setting is `low`, and hangs up. It uses `OPENBASE_E2E_LIVEKIT_LOG_PATH` without STT.
 
+The parallel-agent truth test is the live share-readiness gate. It asks the
+dispatcher to follow a prepared `briefing.md` under `~/openbase-live-test`,
+start two Super Agents in separate folders, wait for Elon Musk and Bill Gates
+Markdown reports, verify the voice route moves to the Bill report agent, ask
+what happened, and verify exit back to dispatch. The spoken prompt intentionally
+does not carry exact paths, filenames, report topics, or names.
+
 ## Real Codex Guardrail
 
 The test refuses to start unless:
@@ -90,6 +111,7 @@ Run it manually:
 
 ```bash
 OPENBASE_E2E_ENABLE_AUDIO_STIMULUS=1 CARTESIA_API_KEY=... pnpm --dir e2e/ios-physical manual:e2e:ios:basic-call-response
+OPENBASE_E2E_ENABLE_AUDIO_STIMULUS=1 CARTESIA_API_KEY=... pnpm --dir e2e/ios-physical manual:e2e:ios:parallel-agents-truth
 ```
 
 It uses the normal Codex/Openbase home configuration from the current shell and installed services. Do not run it unless you intend to use Gabe's real Openbase Coder, Codex, LiveKit, and Cartesia setup.
