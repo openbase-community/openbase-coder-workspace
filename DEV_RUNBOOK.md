@@ -28,6 +28,9 @@ uv tool install -e ./cli   # recommended: `openbase-coder` on PATH = your checko
 downloads LiveKit model files, builds the console, generates
 `~/.openbase` (env, agent homes, dispatcher config), installs the launchd
 services, and configures Tailscale Serve. It never clones anything itself.
+If a standalone install or another development workspace install already
+exists, it stops and points to https://docs.openbase.cloud/uninstall/ before
+making changes.
 
 ## 3. Authenticate
 

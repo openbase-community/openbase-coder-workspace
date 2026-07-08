@@ -4,6 +4,72 @@ set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 ROOT_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
+INSTALLATION_PATH="${HOME}/.openbase/installation.json"
+STANDALONE_CLI_PATH="${HOME}/.openbase/packages/standalone/current/bin/openbase-coder"
+UNINSTALL_URL="https://docs.openbase.cloud/uninstall/"
+
+real_path() {
+  local target="$1"
+  if [ -d "$target" ]; then
+    (cd "$target" && pwd -P)
+  else
+    local parent
+    parent="$(dirname "$target")"
+    local name
+    name="$(basename "$target")"
+    (cd "$parent" 2>/dev/null && printf "%s/%s\n" "$(pwd -P)" "$name")
+  fi
+}
+
+existing_install_message() {
+  cat <<EOF
+Existing Openbase Coder installation found.
+
+This development setup script is for a clean source-workspace install. To switch
+from an existing standalone or different workspace install, uninstall Openbase
+Coder first:
+
+  ${UNINSTALL_URL}
+
+After uninstalling, rerun ./scripts/setup from this workspace.
+EOF
+}
+
+check_existing_installation() {
+  local root_real
+  root_real="$(real_path "$ROOT_DIR")"
+
+  if [ -f "$INSTALLATION_PATH" ]; then
+    local standalone
+    standalone="$(sed -nE 's/.*"standalone"[[:space:]]*:[[:space:]]*(true|false).*/\1/p' "$INSTALLATION_PATH" | tail -n 1)"
+    local workspace_path
+    workspace_path="$(sed -nE 's/.*"workspace_path"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' "$INSTALLATION_PATH" | tail -n 1)"
+
+    if [ "$standalone" = "true" ]; then
+      existing_install_message
+      exit 1
+    fi
+
+    if [ -n "$workspace_path" ] && [ -d "$workspace_path" ]; then
+      local workspace_real
+      workspace_real="$(real_path "$workspace_path")"
+      if [ "$workspace_real" = "$root_real" ]; then
+        echo "Existing development installation already points at this workspace; continuing."
+        return
+      fi
+    fi
+
+    existing_install_message
+    exit 1
+  fi
+
+  if [ -e "$STANDALONE_CLI_PATH" ]; then
+    existing_install_message
+    exit 1
+  fi
+}
+
+check_existing_installation
 
 # Clone the public/runtime install repos.
 pushd "$ROOT_DIR"

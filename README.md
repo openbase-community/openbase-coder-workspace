@@ -29,6 +29,9 @@ To get started as a developer, install multi with
 --workspace-dir <workspace-root>` against this checkout. Setup never clones or
 git-updates a workspace itself; the CLI is typically installed editable
 (`uv tool install -e ./cli`) or run via `uv run` from `cli/`.
+If a standalone or different workspace install already exists, `./scripts/setup`
+stops and points you to https://docs.openbase.cloud/uninstall/ before making
+changes.
 
 The full development flow — install, authenticate, verify, exercise the iOS
 app / console / desktop app, and iterate — is in the workspace
