@@ -91,8 +91,8 @@ Original work items:
    `report_cli_state()` against the [cloud-api.md](cloud-api.md) endpoints;
    tolerate the endpoints being unshipped (404/405 or HTML error pages);
    cache the last result in `~/.openbase/onboarding.json`.
-4. Hooks: register/report at the end of `openbase-coder login` and
-   `openbase-coder setup`; explicit `openbase-coder onboarding report` for
-   retries and the Mac app's pairing step.
+4. Hooks: register/report at the end of `openbase-coder login`; explicit
+   `openbase-coder onboarding report` for retries and the Mac app's pairing
+   step. Setup stays local and does not attempt cloud registration.
 5. `openbase-coder setup --json-progress`: NDJSON step events per the
    [setup progress protocol](README.md#setup-progress-protocol).
