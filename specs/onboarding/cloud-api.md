@@ -97,6 +97,26 @@ Clients may first register without Tailscale facts and re-register later.
 Omitting Tailscale fields does not clear previously stored Tailscale identity;
 clients must send updated Tailscale facts when they intentionally have them.
 
+## POST /api/openbase/devices/deregister/
+
+Removes stale device registry entries for the signed-in user. The iOS app calls
+this with its own `device_id` during logout, and installation tests may pass
+`{"all": true}` to start from a clean rendezvous registry.
+
+Request for one device:
+
+```jsonc
+{"device_id": "mobile-8b6b2f7a-7be1-4ad5-a5cc-0a9d7a1a3a0e"}
+```
+
+Request for a clean installation-test reset:
+
+```jsonc
+{"all": true}
+```
+
+Response `200`: `{"message": "Device registry updated.", "deleted_count": 1}`.
+
 ## Removed Endpoint
 
 `PATCH /api/openbase/devices/self/state/` is intentionally not part of the

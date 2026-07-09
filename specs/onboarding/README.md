@@ -216,7 +216,6 @@ Step IDs (in execution order):
 | `agent_config` | Symlink Codex/Claude config and instructions |
 | `services` | Install background services (launchd/systemd) |
 | `tailscale_serve` | Configure Tailscale Serve routes |
-| `cloud_report` | Register device + advertise current CLI/setup capabilities |
 
 `warn` is non-fatal (setup continues; e.g. Tailscale Serve unavailable).
 `error` on a required step ends the run with a nonzero exit code and
