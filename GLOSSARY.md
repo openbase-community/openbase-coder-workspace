@@ -83,6 +83,24 @@ cannot operate (for example `subscription_required`, `login_required`,
 (`agent_error`), `code`, `detail`, and `message_id`; clients show `detail` to
 the user instead of leaving a silent call.
 
+**Voice dispatch provider**: The `voice_dispatch_provider` setting in
+`dispatcher-config.json` selecting how calls reach a dispatcher: `livekit`
+(default — the local LiveKit pipeline and full dispatcher) or `vocalbridge`
+(hosted VocalBridge dispatch). Toggled in console settings under "Voice
+dispatch" and read by `POST /api/livekit-room-token/`.
+
+**VocalBridge dispatch**: The alternative voice dispatch mode where calls
+connect to a hosted VocalBridge voice agent (vocalbridgeai.com, LiveKit
+Cloud). VocalBridge owns speech (STT/TTS/turn-taking) and delegates domain
+questions over the room data channel (`query_agent`/`agent_response`); the
+CLI joins the room as a silent responder and answers them with the
+VocalBridge dispatcher agent.
+
+**VocalBridge dispatcher agent**: The deliberately restricted Super Agents
+thread (label `vocalbridge-dispatcher`, read-only sandbox) that answers
+VocalBridge-delegated queries. It may only coordinate Super Agents over MCP
+and explore the file system read-only — it is truly only a dispatcher.
+
 ## Work Products
 
 **Report**: A Markdown or other generated artifact written under a project
