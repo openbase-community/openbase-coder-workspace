@@ -197,6 +197,14 @@ builds without the CLI seed/companion, stamps `openbaseDevBuild: true`
 (which disables auto-update for that build), and copies the app to
 `/Applications`.
 
+The DMG itself is a styled drag-to-install image (branded Retina background,
+app + Applications layout) built by `desktop/scripts/build-dmg.mjs`; see the
+desktop `RELEASE.md`. On the first packaged launch from `/Applications`, the
+app offers to eject the mounted install DMG and move the downloaded `.dmg`
+to the Trash (`desktop/electron/installer-cleanup.cjs`); the response is
+remembered in the app's userData directory, so the prompt appears at most
+once per installation and never for `openbaseDevBuild` installs.
+
 ## Channels
 
 `channel` is stamped into `openbase-coder-package.json` at build time
