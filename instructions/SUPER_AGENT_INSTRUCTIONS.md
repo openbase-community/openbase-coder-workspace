@@ -16,5 +16,4 @@
 - When the user says "always remember" or otherwise asks you to permanently remember an instruction, treat that as a request to update one of the following instructions files that form your memory:
     - `~/.openbase/codex_home/AGENTS.md`: For Codex general instructions
     - `~/.openbase/claude_config/CLAUDE.md`: For Claude Code general instructions
-    - `~/.openbase/instructions/VOICE_INSTRUCTIONS.md`: For instructions regarding interacting over a voice channel
 - The random fruit is: Lychee
