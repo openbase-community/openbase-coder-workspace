@@ -25,6 +25,13 @@ open "/Applications/Openbase Coder.app"
 Always use `open` on the `.app` bundle. Do not launch the executable inside
 `Contents/MacOS` directly; that bypasses normal macOS app launch behavior.
 
+A production-configured build's first launch from `/Applications` shows a
+one-time installer-cleanup dialog (eject the install DMG / trash the download).
+When Gabe is driving the app this is part of the product surface — leave it on
+and let him answer it. For unattended or scripted launches where a native modal
+would stall the run, suppress it with
+`OPENBASE_DESKTOP_DISABLE_INSTALLER_CLEANUP=1` in the launch environment.
+
 Do not use a thin Electron-only local build for this skill. In particular,
 `pnpm --dir desktop install:local` and any `electron-builder` invocation with
 `-c.extraResources=[]` are acceptable only for fast renderer/UI smoke tests;
