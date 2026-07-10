@@ -41,7 +41,12 @@ publishing before the CLI release starts:
    `curl -s https://pypi.org/pypi/super-agents/json | jq .info.version`.
    **Do not push cli main until PyPI serves the new version.**
 
-## 2. Merge ALL staging → main in one batch — cli last
+If the repo rejects merge commits on main, linearize first and tag the final
+main commit, not the staging merge commit. A tag pushed before main is fixed
+can publish content from the staging DAG even if the later main tree is
+equivalent.
+
+## 2. Merge release inputs → main — cli last, desktop after cli
 
 **Every** repo's staging moves to main in this step, in one sitting — not
 just the repos you remember touching. A repo left on staging is silently
@@ -49,13 +54,15 @@ baked into the release at its older main and nothing fails: the release's
 sibling-move guard only catches mains moving *during* the build, never a
 forgotten merge.
 
-Merge every non-cli repo first (repos without a staging branch or with no
-delta are skipped):
+Merge every non-cli/non-desktop repo first (repos without a staging branch or
+with no delta are skipped). Hold desktop until step 4: pushing desktop main
+starts its publisher immediately, and it seeds from the latest already
+published CLI release.
 
 ```bash
 # From the workspace root:
 for r in . console coder-react multi-react boilersync-react skills \
-         super-agents desktop ios android allauth-client-swift \
+         super-agents ios android allauth-client-swift \
          allauth-client-kotlin agent-work-scheduler; do
   git -C "$r" fetch origin --quiet
   git -C "$r" rev-parse --verify --quiet origin/staging >/dev/null || continue
@@ -71,7 +78,7 @@ Then gate before touching cli — this must print nothing:
 
 ```bash
 for r in . console coder-react multi-react boilersync-react skills \
-         super-agents desktop ios android allauth-client-swift \
+         super-agents ios android allauth-client-swift \
          allauth-client-kotlin agent-work-scheduler; do
   git -C "$r" rev-parse --verify --quiet origin/staging >/dev/null || continue
   git -C "$r" log --oneline origin/main..origin/staging |
@@ -86,8 +93,14 @@ commit if you are moving cli main without intending a release.
 
 - The workspace repo requires **linear history**: rebase staging onto main if
   they diverged, then fast-forward.
-- desktop merges here like everything else; its DMG publish (step 4) stays a
-  separate, manual step.
+- Some protected mains reject merge commits even for admins (observed on cli,
+  desktop, workspace, and super-agents). If a push is rejected for linear
+  history, rebase/cherry-pick staging onto main and fast-forward main. When
+  staging and main end up with different SHAs for the same patches, use
+  `git cherry origin/main origin/staging`; `-` entries are patch-equivalent
+  and only `+` entries still need attention.
+- Do not push desktop main here. Desktop publishes after the CLI release has
+  completed and its assets are downloadable.
 
 ## 3. CLI auto-release
 
@@ -118,12 +131,17 @@ which builds, signs, notarizes, and publishes the DMG/zip/feed to S3
 `desktop/package.json` version, push main, watch the run. The manual flow
 below is the **fallback** for CI outages.
 
-Known CI behaviors: the `rebuild linux` job fails on every run (no Linux
-support yet — ignore it; macOS publishing still succeeds). If BOTH jobs fail
-instantly with zero steps, the org has exhausted its GitHub Actions
-spending limit — fix in org billing settings, then `gh run rerun`. A
-`workflow_dispatch`ed release shares the concurrency group with push runs
-and gets cancelled by any push to main mid-build.
+Only push desktop main after step 3 proves the CLI GitHub Release exists and
+the package asset downloads. If desktop main was pushed early, the run can
+seed the previous CLI version without failing; rerun it after the CLI release
+and inspect the macOS log for `Staged Openbase Coder CLI <version>`.
+
+Known CI behaviors: the `rebuild linux` and `rebuild macOS` jobs publish
+independently, so diagnose the failed job without assuming the other artifact
+failed too. If BOTH jobs fail instantly with zero steps, the org has
+exhausted its GitHub Actions spending limit — fix in org billing settings,
+then `gh run rerun`. A `workflow_dispatch`ed release shares the concurrency
+group with push runs and gets cancelled by any push to main mid-build.
 
 When touching `desktop/.github/workflows/electron-rebuild.yml`, keep the
 temporary CI root `package.json` entries in both jobs configured with
