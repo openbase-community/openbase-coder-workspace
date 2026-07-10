@@ -207,6 +207,13 @@ into `~/.openbase/bin`, claude via Anthropic's official installer. Neither CLI
 ships inside the standalone runtime package, and backend-specific services are
 only installed for backends that use them.
 
+**Session-ID hook**: The `inject-session-id.sh` SessionStart hook that
+`openbase-coder setup` installs into `~/.openbase/hooks` and registers in both
+Openbase agent homes (Claude `settings.json` hooks and a trusted codex
+`[[hooks.SessionStart]]` entry). It injects the session's thread/session ID
+into the conversation so agents stamp commits with the `Agent-Thread-Id`
+trailer.
+
 **Codex home**: The Openbase-specific Codex configuration directory, usually
 `~/.openbase/codex_home`, that stores Codex instructions, skills, and related
 runtime configuration.
