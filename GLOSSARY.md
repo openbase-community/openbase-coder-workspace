@@ -117,6 +117,25 @@ proceeds. Pending requests appear in the console/desktop Approval requests
 page and the iOS app; answering records an `accept`/`decline`/`cancel`
 decision that the requester consumes.
 
+**Permission guard**: The generic super-agents primitive behind locked-down
+mode: a supervisor-controlled JSON file (default
+`~/.super-agents/permission-guard.json`) whose `restricted: true` state makes
+every Super Agents launch downgrade permission bypasses (`approvalPolicy:
+never`, full-access sandboxes, Claude `bypassPermissions`) to gated
+equivalents. Agents cannot edit their way past it because the file is owned
+by the supervising process, not the calling agent.
+
+**Locked-down mode**: The off-by-default Openbase Coder setting (final
+onboarding-skill step; `openbase-coder lockdown`) that keeps the permission
+guard restricted so coding launches always run gated — unless the user's
+safe phrase is heard in the direct transcript of the live voice session,
+which unlocks bypasses for that session only. Every new voice session
+re-arms the guard.
+
+**Safe phrase**: The user-chosen spoken phrase that unlocks locked-down mode
+for one voice session. Matching is casing- and punctuation-insensitive and
+runs only on verbatim STT transcripts, never on agent-produced text.
+
 **Skill**: A local instruction bundle that teaches an agent a specialized
 workflow, tool integration, or domain convention. Skills are loaded when a task
 matches their trigger.
@@ -165,7 +184,8 @@ a live checklist. Step IDs and event shapes are defined in
 that walks a user through connecting recommended integrations — email,
 meeting notes, shared documents, calendar, optional personal messaging,
 computer control, and the GitHub CLI — preferring official CLIs and skills
-over MCP servers.
+over MCP servers. Its final step offers to enable locked-down mode with a
+safe phrase.
 
 **Onboarding-read marker**: `~/.openbase/onboarding-skill-read`, created by
 an agent as soon as it reads the onboarding skill (even if onboarding is not
@@ -213,6 +233,13 @@ with the CLI installed editable (`uv tool install -e ./cli`) or run via
 `uv run`. `openbase-coder setup` never clones a workspace; without
 `--workspace-dir` it discovers the checkout from `~/.openbase/installation.json`
 or the editable CLI install.
+
+**Coding backend**: Where Super Agents threads execute: `codex` (local Codex
+app-server), `openbase_cloud` (Codex-compatible sessions through Openbase
+Cloud), or `claude_code` (Claude Agent SDK). The configured backend
+(`OPENBASE_CODING_BACKEND`) is only the default — each `super_agents_start`
+launch may pick its own backend, and threads on different backends run side
+by side under one MCP server.
 
 **Backend binary on-demand install**: Setup behavior that installs the selected
 coding backend's CLI only if it is missing: codex from GitHub release binaries
