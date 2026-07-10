@@ -148,6 +148,17 @@ pairing or install-readiness truth.
 a live checklist. Step IDs and event shapes are defined in
 `specs/onboarding/README.md`.
 
+**Onboarding skill**: The bundled `openbase-onboarding` skill (in `skills`)
+that walks a user through connecting recommended integrations — email,
+meeting notes, shared documents, calendar, optional personal messaging,
+computer control, and the GitHub CLI — preferring official CLIs and skills
+over MCP servers.
+
+**Onboarding-read marker**: `~/.openbase/onboarding-skill-read`, created by
+an agent as soon as it reads the onboarding skill (even if onboarding is not
+completed). Until it exists, the CLI appends a note to dispatcher-bound user
+messages prompting the agent to offer the onboarding skill.
+
 ## Code Sync
 
 **Code sync**: Openbase Coder's managed Syncthing file sync between a user's
