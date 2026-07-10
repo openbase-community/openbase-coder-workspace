@@ -23,6 +23,10 @@ allauth-client-kotlin/
 allauth-client-kotlin
 cli/
 cli
+open-approvals/
+open-approvals
+open-approvals-react/
+open-approvals-react
 console/
 console
 coder-react/

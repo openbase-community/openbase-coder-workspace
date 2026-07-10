@@ -26,6 +26,11 @@ product (auth, remote workspaces, and the PaaS backend).
   WebSocket server, LiveKit voice services, launchd/systemd service
   management, plugins, self-update, and the product docs (`cli/docs/`)
 - `console`: React frontend console for Openbase Coder
+- `open-approvals`: standalone MIT Python package for human-in-the-loop AI
+  agent approvals (shared queue, agent-side client, protocol); used by cli
+  and super-agents
+- `open-approvals-react`: standalone React hooks/helpers for open-approvals
+  approver surfaces; used by coder-react
 - `coder-react`: shared React UI package used by the console and desktop
 - `desktop`: Electron desktop app for Openbase Coder
 - `ios`: main Openbase iOS application using Tuist
@@ -90,7 +95,8 @@ product (auth, remote workspaces, and the PaaS backend).
   intact. Do not add duplicate workspace rules under `.cursor/rules`.
 - Licensing: public AGPL-3.0-only — `cli`, `console`, `coder-react`,
   `skills`, `multi-react`, `boilersync-react`. Public MIT exceptions —
-  `allauth-client-swift`, `allauth-client-kotlin`, `super-agents`. Dev-only
+  `allauth-client-swift`, `allauth-client-kotlin`, `super-agents`,
+  `open-approvals`, `open-approvals-react`. Dev-only
   pending publication — `agent-work-scheduler`. Private/proprietary —
   `android`, `desktop`, `ios`. Never add MIT licensing to any other repo,
   and never add an open-source license to the private apps.

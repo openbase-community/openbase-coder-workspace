@@ -14,7 +14,7 @@ Each component owns its own update; nothing installs into another component.
 | Desktop app (macOS DMG) | S3 (`publish-s3.mjs`) with an electron-updater generic feed (`latest-mac.yml` + zip) | electron-updater in the app itself |
 | CLI runtime package (standalone) | GitHub Releases on `openbase-community/openbase-coder` | `openbase-coder self-update` |
 | Backend CLIs (`~/.openbase/bin/codex`) | GitHub release binaries | refreshed during `self-update` (`claude` self-updates on its own) |
-| PyPI (`openbase-coder`, `super-agents`) | PyPI via GitHub Actions trusted publishing on tags | `uv tool upgrade` — **dev channel only**, never an auto-update path |
+| PyPI (`openbase-coder`, `super-agents`, `open-approvals`) | PyPI via GitHub Actions trusted publishing on tags | `uv tool upgrade` — **dev channel only**, never an auto-update path |
 | iOS app | App Store/TestFlight (future) | out of scope here |
 
 Rules that must not regress:

@@ -104,6 +104,19 @@ tools and resources to agents, including Super Agents coordination tools.
 **MCP elicitation**: A structured request from an MCP tool or backend asking the
 agent to collect user input before continuing, such as a plan-mode question.
 
+**open-approvals**: The standalone MIT-licensed package (with an
+`open-approvals-react` companion for approver UIs) that provides Openbase
+Coder's human-in-the-loop approvals: a shared JSON-file approval queue, an
+agent-side client, and a documented protocol. The cli serves the approval REST
+endpoints and super-agents mirrors Codex permission requests into the same
+queue; approver surfaces (console, desktop, iOS) list and answer requests.
+
+**Approval request**: One entry in the open-approvals queue — an action an
+agent, skill, or Codex turn wants a human to accept or decline before it
+proceeds. Pending requests appear in the console/desktop Approval requests
+page and the iOS app; answering records an `accept`/`decline`/`cancel`
+decision that the requester consumes.
+
 **Skill**: A local instruction bundle that teaches an agent a specialized
 workflow, tool integration, or domain convention. Skills are loaded when a task
 matches their trigger.
@@ -238,6 +251,21 @@ DevSpaces only, installed by `openbase-coder provision`) that runs
 whether any agent runs were running or launched during the window; Openbase
 Cloud stops DevSpaces with no run activity. DCV connections and console
 browsing intentionally do not count.
+**Routines Marketplace**: The browse-and-install catalog of curated routine
+templates, hosted anonymously on Openbase Cloud
+(`/api/openbase/marketplace/routines/`) and surfaced in the console Routines page
+(and the marketing site for SEO). Installing a marketplace routine creates a
+local routine and co-installs any `required_skills` it declares. The local proxy
+lives at `/api/marketplace/routines/...`. (Replaces the removed third-party
+"Printing Press" skills catalog.)
+
+**Official Skills Catalog**: The companion catalog of official skills, MCPs, and
+CLIs (`/api/openbase/marketplace/skills/`), surfaced in the console Skills page.
+Only `skill` entries are one-click installable — cloned into `~/.agents/skills`
+and always co-installed for Claude Code and Codex together (symlinked into both
+Openbase agent homes). `mcp`/`cli` entries are documentation-only. `featured`
+entries drive the console's first-run recommended-skills prompt. Local proxy at
+`/api/marketplace/skills/...`.
 
 ## Releases & Updates
 

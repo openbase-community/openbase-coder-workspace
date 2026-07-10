@@ -80,6 +80,20 @@
       "description": "Shared React components and utilities for BoilerSync template workflows.",
       "allowSymlink": true,
       "installSets": ["default", "dev"]
+    },
+    {
+      "name": "open-approvals",
+      "url": "https://github.com/openbase-community/open-approvals",
+      "description": "Human-in-the-loop approvals for AI agents: shared approval queue, agent-side client, and approver-side protocol.",
+      "allowSymlink": true,
+      "installSets": ["default", "dev"]
+    },
+    {
+      "name": "open-approvals-react",
+      "url": "https://github.com/openbase-community/open-approvals-react",
+      "description": "React hooks and helpers for building open-approvals approver surfaces.",
+      "allowSymlink": true,
+      "installSets": ["default", "dev"]
     }
   ]
 }
