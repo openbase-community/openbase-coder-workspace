@@ -161,6 +161,17 @@ pairing or install-readiness truth.
 a live checklist. Step IDs and event shapes are defined in
 `specs/onboarding/README.md`.
 
+**Onboarding skill**: The bundled `openbase-onboarding` skill (in `skills`)
+that walks a user through connecting recommended integrations — email,
+meeting notes, shared documents, calendar, optional personal messaging,
+computer control, and the GitHub CLI — preferring official CLIs and skills
+over MCP servers.
+
+**Onboarding-read marker**: `~/.openbase/onboarding-skill-read`, created by
+an agent as soon as it reads the onboarding skill (even if onboarding is not
+completed). Until it exists, the CLI appends a note to dispatcher-bound user
+messages prompting the agent to offer the onboarding skill.
+
 ## Code Sync
 
 **Code sync**: Openbase Coder's managed Syncthing file sync between a user's
@@ -208,6 +219,13 @@ coding backend's CLI only if it is missing: codex from GitHub release binaries
 into `~/.openbase/bin`, claude via Anthropic's official installer. Neither CLI
 ships inside the standalone runtime package, and backend-specific services are
 only installed for backends that use them.
+
+**Session-ID hook**: The `inject-session-id.sh` SessionStart hook that
+`openbase-coder setup` installs into `~/.openbase/hooks` and registers in both
+Openbase agent homes (Claude `settings.json` hooks and a trusted codex
+`[[hooks.SessionStart]]` entry). It injects the session's thread/session ID
+into the conversation so agents stamp commits with the `Agent-Thread-Id`
+trailer.
 
 **Codex home**: The Openbase-specific Codex configuration directory, usually
 `~/.openbase/codex_home`, that stores Codex instructions, skills, and related
