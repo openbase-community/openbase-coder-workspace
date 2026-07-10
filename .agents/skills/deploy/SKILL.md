@@ -125,6 +125,15 @@ spending limit — fix in org billing settings, then `gh run rerun`. A
 `workflow_dispatch`ed release shares the concurrency group with push runs
 and gets cancelled by any push to main mid-build.
 
+When touching `desktop/.github/workflows/electron-rebuild.yml`, keep the
+temporary CI root `package.json` entries in both jobs configured with
+`pnpm.onlyBuiltDependencies: ["electron"]`. pnpm 10 otherwise skips
+Electron's postinstall binary setup; electron-builder may still package from
+its own cache, but the custom DMG background script calls `require("electron")`
+and macOS fails late with `Electron failed to install correctly`. If you see
+that error, fix the workflow approval first, then rerun after the CLI release
+asset exists so the desktop seed is the current CLI version.
+
 ### Manual fallback
 
 1. Bump `version` in `desktop/package.json` when you want installed apps to
