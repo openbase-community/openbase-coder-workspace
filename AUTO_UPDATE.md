@@ -201,9 +201,13 @@ The DMG itself is a styled drag-to-install image (branded Retina background,
 app + Applications layout) built by `desktop/scripts/build-dmg.mjs`; see the
 desktop `RELEASE.md`. On the first packaged launch from `/Applications`, the
 app offers to eject the mounted install DMG and move the downloaded `.dmg`
-to the Trash (`desktop/electron/installer-cleanup.cjs`); the response is
-remembered in the app's userData directory, so the prompt appears at most
-once per installation and never for `openbaseDevBuild` installs.
+to the Trash, listing the exact volumes and files in the dialog
+(`desktop/electron/installer-cleanup.cjs`). A packaged launch from anywhere
+else offers to move the app to `/Applications` (the only supported install
+location) and relaunch. Responses are remembered in the app's userData
+directory, so each prompt appears at most once per installation and never
+for `openbaseDevBuild` installs; automation can suppress both prompts with
+`OPENBASE_DESKTOP_DISABLE_INSTALLER_CLEANUP=1`.
 
 ## Channels
 
