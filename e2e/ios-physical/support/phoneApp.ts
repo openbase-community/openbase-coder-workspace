@@ -5,6 +5,15 @@ export async function activateOpenbaseApp(env: DeviceEnv): Promise<void> {
   await browser.activateApp(env.bundleId);
 }
 
+export async function relaunchOpenbaseApp(env: DeviceEnv): Promise<void> {
+  // A previous session can leave the app on a screen without the expected
+  // call controls; terminate and relaunch so tests start from the root UI.
+  await browser.terminateApp(env.bundleId);
+  await browser.pause(1_000);
+  await browser.activateApp(env.bundleId);
+  await browser.pause(2_000);
+}
+
 export async function expectOpenbaseForeground(env: DeviceEnv): Promise<void> {
   const activeApp = await browser.execute("mobile: activeAppInfo");
   const bundleId = readBundleId(activeApp);
@@ -78,6 +87,17 @@ export async function startCall(): Promise<void> {
     const source = await browser.getPageSource();
     throw new Error(`Unable to start call. Expected call.start or Start control. Page source excerpt: ${source.slice(0, 1000)}`);
   }
+}
+
+export async function enableSpeakerIfAvailable(): Promise<boolean> {
+  // Calls start in receiver mode; one tap of the speaker toggle routes call
+  // audio to the loudspeaker so a human observer can follow the test.
+  const speakerButton = await $("~call.speaker");
+  if (await speakerButton.isExisting()) {
+    await speakerButton.click();
+    return true;
+  }
+  return false;
 }
 
 export type CallMuteState = "muted" | "unmuted" | "unknown";

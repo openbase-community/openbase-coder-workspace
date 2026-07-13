@@ -8,11 +8,12 @@ import {
   readNormalDispatcherReasoning,
 } from "../support/dispatcherSettings.js";
 import {
-  activateOpenbaseApp,
+  enableSpeakerIfAvailable,
   endCall,
   expectOpenbaseForeground,
   openCallSurface,
   readCallMuteState,
+  relaunchOpenbaseApp,
   startCall,
   unmuteCallIfMuted,
   waitForCallMuteState,
@@ -39,8 +40,11 @@ const idlePauseMs = 75_000;
 
 const interruptionEvidencePattern =
   /stage=voice_turn_cancelled|speech not done in time after interruption/i;
+// All three delivery paths count: orphan delivery, joining a completed
+// turn, and a replacement dispatch rejoining the still-running turn (the
+// interrupting utterance itself usually triggers this last one).
 const deliveryEvidencePattern =
-  /stage=orphaned_result_spoken|stage=voice_request_joined_completed_active_turn/i;
+  /stage=orphaned_result_spoken|stage=voice_request_joined_completed_active_turn|stage=voice_request_joined_active_turn/i;
 const firstAudioPattern = /stage=tts_stream_first_audio role=direct/i;
 const thinkingHoldPattern = /stage=agent_state_held_thinking/i;
 const ttsFailurePattern =
@@ -72,12 +76,14 @@ describe("Openbase iOS orphaned answer recovery via LiveKit logs", () => {
     let testError: unknown;
 
     try {
-      await activateOpenbaseApp(env);
+      await relaunchOpenbaseApp(env);
       await expectOpenbaseForeground(env);
       await openCallSurface();
       await startCall();
       callStarted = true;
-      await browser.pause(5_000);
+      await browser.pause(2_000);
+      await enableSpeakerIfAvailable();
+      await browser.pause(3_000);
 
       // Pre-synthesize the interruption clip: with Auto-mute enabled, the
       // app re-mutes ~700ms after a manual unmute while the agent is still
@@ -182,12 +188,14 @@ describe("Openbase iOS orphaned answer recovery via LiveKit logs", () => {
     let testError: unknown;
 
     try {
-      await activateOpenbaseApp(env);
+      await relaunchOpenbaseApp(env);
       await expectOpenbaseForeground(env);
       await openCallSurface();
       await startCall();
       callStarted = true;
-      await browser.pause(5_000);
+      await browser.pause(2_000);
+      await enableSpeakerIfAvailable();
+      await browser.pause(3_000);
 
       const warmupCursor = readLiveKitLogCursor(env);
       await speakText(idleWarmupPrompt, env);
