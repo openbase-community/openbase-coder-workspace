@@ -239,7 +239,11 @@ app-server), `openbase_cloud` (Codex-compatible sessions through Openbase
 Cloud), or `claude_code` (Claude Agent SDK). The configured backend
 (`OPENBASE_CODING_BACKEND`) is only the default — each `super_agents_start`
 launch may pick its own backend, and threads on different backends run side
-by side under one MCP server.
+by side under one MCP server. In Openbase Coder each agent home's
+super-agents MCP registration pins `SUPER_AGENTS_DEFAULT_BACKEND` to that
+home's own backend type, so a spawning session defaults new Super Agents to
+its own kind (Claude Code sessions spawn Claude Code, Codex sessions spawn
+Codex) unless the launch passes an explicit `backend`.
 
 **Backend binary on-demand install**: Setup behavior that installs the selected
 coding backend's CLI only if it is missing: codex from GitHub release binaries
