@@ -80,6 +80,38 @@ export async function startCall(): Promise<void> {
   }
 }
 
+export type CallMuteState = "muted" | "unmuted" | "unknown";
+
+export async function readCallMuteState(): Promise<CallMuteState> {
+  // The call surface exposes the mute toggle as call.unmute while muted and
+  // call.mute while unmuted.
+  const unmuteButton = await $("~call.unmute");
+  if (await unmuteButton.isExisting()) {
+    return "muted";
+  }
+  const muteButton = await $("~call.mute");
+  if (await muteButton.isExisting()) {
+    return "unmuted";
+  }
+  return "unknown";
+}
+
+export async function waitForCallMuteState(
+  expected: CallMuteState,
+  timeoutMs: number,
+): Promise<CallMuteState> {
+  const startedAt = Date.now();
+  let lastState: CallMuteState = "unknown";
+  while (Date.now() - startedAt < timeoutMs) {
+    lastState = await readCallMuteState();
+    if (lastState === expected) {
+      return lastState;
+    }
+    await browser.pause(500);
+  }
+  return lastState;
+}
+
 export async function endCallIfAvailable(): Promise<boolean> {
   const selectors = ["~call.end", "~End", "~End call", "~Hang up", "~Hang Up", "~Disconnect"];
   for (const selector of selectors) {

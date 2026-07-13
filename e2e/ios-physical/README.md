@@ -7,6 +7,7 @@ This package contains physical iPhone E2E tests for Openbase Coder:
 - `specs/basic-call-response.real-codex.spec.ts`
 - `specs/superagent-own-name.real-codex.spec.ts`
 - `specs/parallel-agents-truth.real-codex.spec.ts`
+- `specs/orphaned-answer-recovery.real-codex.spec.ts`
 
 It intentionally uses the normal Codex/Openbase configuration from the current shell and installed launchctl services.
 Live no-mock runs should use production Openbase Cloud unless Gabe explicitly
@@ -98,6 +99,21 @@ start two Super Agents in separate folders, wait for Elon Musk and Bill Gates
 Markdown reports, verify the voice route moves to the Bill report agent, ask
 what happened, and verify exit back to dispatch. The spoken prompt intentionally
 does not carry exact paths, filenames, report topics, or names.
+
+The orphaned-answer recovery test reproduces the July 2026 voice-delivery
+incidents. Its first case asks a deliberately slow dispatcher question, speaks
+a short interruption while the dispatcher is still thinking (cancelling the
+voice generation that was waiting to speak the answer), then asserts from
+LiveKit logs that the finished answer is still delivered
+(`stage=orphaned_result_spoken` or a completed-turn rejoin) and audibly
+synthesized (`stage=tts_stream_first_audio`). If the interruption never lands
+(`stage=voice_turn_cancelled` missing), the test fails as a stimulus-tuning
+problem, not a product regression. With `OPENBASE_E2E_EXPECT_AUTO_MUTE=1` and
+Auto-mute/Auto-unmute enabled on the phone, it also asserts the mic stays
+muted while the answer is owed instead of auto-unmuting into silence. Its
+second case answers once, idles silently for 75 seconds, asks again, and
+requires a clean reply with no `Cartesia connection error` /
+`failed to synthesize` after the idle gap.
 
 ## Real Codex Guardrail
 
