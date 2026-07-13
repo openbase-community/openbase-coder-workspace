@@ -1,4 +1,6 @@
 import { browser, expect } from "@wdio/globals";
+import { synthesizeCartesiaSpeech } from "../support/audio/cartesiaSpeech.js";
+import { playAudioFile } from "../support/audio/playFixture.js";
 import { speakText } from "../support/audio/speakText.js";
 import { loadDeviceEnv } from "../support/deviceEnv.js";
 import {
@@ -12,6 +14,7 @@ import {
   openCallSurface,
   readCallMuteState,
   startCall,
+  unmuteCallIfMuted,
   waitForCallMuteState,
 } from "../support/phoneApp.js";
 import {
@@ -76,18 +79,44 @@ describe("Openbase iOS orphaned answer recovery via LiveKit logs", () => {
       callStarted = true;
       await browser.pause(5_000);
 
+      // Pre-synthesize the interruption clip: with Auto-mute enabled, the
+      // app re-mutes ~700ms after a manual unmute while the agent is still
+      // thinking, so the clip must start playing immediately after the tap.
+      const interruptionAudioPath = await synthesizeCartesiaSpeech(
+        env,
+        interruptionFragment,
+      );
+
       const cursor = readLiveKitLogCursor(env);
       await speakText(slowPrompt, env);
 
       // Interrupt while the dispatcher is still thinking so the framework
       // cancels the voice generation that was waiting to speak the answer.
-      await browser.pause(2_500);
-      await speakText(interruptionFragment, env);
+      // Auto-mute closes the mic during thinking, so unmute right before
+      // each attempt and retry until the interruption registers.
+      await browser.pause(2_000);
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        if ((await readCallMuteState()) === "muted") {
+          await unmuteCallIfMuted();
+        }
+        await playAudioFile(interruptionAudioPath);
+        if (
+          findLiveKitLogEvidence(env, interruptionEvidencePattern, {
+            after: cursor,
+          })
+        ) {
+          break;
+        }
+        console.log(
+          `Interruption attempt ${attempt} not yet registered; retrying.`,
+        );
+        await browser.pause(1_000);
+      }
 
       // Precondition: the stimulus must actually land as an interruption.
       // If this times out, the dispatcher answered before the interruption;
-      // retune slowPrompt or the pause instead of treating it as a product
-      // regression.
+      // retune slowPrompt or the attempt loop instead of treating it as a
+      // product regression.
       await waitForLiveKitLogEvidence(env, interruptionEvidencePattern, 30_000, {
         after: cursor,
       });

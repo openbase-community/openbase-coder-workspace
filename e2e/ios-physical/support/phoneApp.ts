@@ -96,6 +96,15 @@ export async function readCallMuteState(): Promise<CallMuteState> {
   return "unknown";
 }
 
+export async function unmuteCallIfMuted(): Promise<boolean> {
+  const unmuteButton = await $("~call.unmute");
+  if (await unmuteButton.isExisting()) {
+    await unmuteButton.click();
+    return true;
+  }
+  return false;
+}
+
 export async function waitForCallMuteState(
   expected: CallMuteState,
   timeoutMs: number,
