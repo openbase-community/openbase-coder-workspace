@@ -228,8 +228,10 @@ only installed for backends that use them.
 `openbase-coder setup` installs into `~/.openbase/hooks` and registers in both
 Openbase agent homes (Claude `settings.json` hooks and a trusted codex
 `[[hooks.SessionStart]]` entry). It injects the session's thread/session ID
-into the conversation so agents stamp commits with the `Agent-Thread-Id`
-trailer.
+into the conversation along with the instructions for using it, so agents
+stamp commits with the `Agent-Thread-Id` trailer without a standing
+`AGENTS.md` rule; the instructions ride in the hook so they ship, update, and
+uninstall with it.
 
 **Codex home**: The Openbase-specific Codex configuration directory, usually
 `~/.openbase/codex_home`, that stores Codex instructions, skills, and related
