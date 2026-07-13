@@ -107,6 +107,31 @@ of pushes release once, from the final state.
   (`SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENBASE_CODER`) so
   `openbase-coder --version` matches the package version.
 
+## Dormant Intel (x86_64) pathway
+
+Two manual-only (`workflow_dispatch`) workflows exist so Intel Macs *could*
+be supported someday; neither runs automatically and nothing serves their
+output to users yet:
+
+- `cli/.github/workflows/release-standalone-intel.yml` — given an existing
+  release tag, rebuilds the standalone package on the `macos-15-intel`
+  runner (GitHub's last Intel image, supported through August 2027) at the
+  exact `repo_shas` snapshot from that release's update manifest, then
+  attaches `openbase-coder-package-x86_64-apple-darwin.tar.gz` (+ its own
+  `_SHA256SUMS`) to the release. It never creates releases and never touches
+  `update-manifest.json`, `install.sh`, or the arm64 sums file — the update
+  feed gains no x86_64 target.
+- `desktop/.github/workflows/electron-intel-installer.yml` — builds a
+  signed, notarized x64 DMG (`pnpm run dist:mac:x64`;
+  `OPENBASE_CODER_MAC_ARCH=x64` steers `build-dmg.mjs`) seeded with the
+  release's Intel CLI package, and uploads it only as a workflow artifact —
+  no S3 publish, no update feed, no marketing-site wiring.
+
+Bringing Intel online later means: merging an `x86_64-apple-darwin` target
+into the update manifest (`build_update_manifest.py --merge-existing`),
+adding a desktop S3 publish step, and wiring downloads — all deliberate,
+separate work.
+
 ## Inspecting versions
 
 Every versioned piece is inspectable without MCP:
