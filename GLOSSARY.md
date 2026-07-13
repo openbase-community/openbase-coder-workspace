@@ -28,6 +28,23 @@ standalone CLI runtime, runs guided first-time setup, and hosts the dashboard
 UI plus Electron-only features (auto-update, LiveKit companion screen
 sharing, deep links).
 
+**Installation pathways**: The only sanctioned ways to install Openbase
+Coder, kept deliberately few and strict. (1) **Dev setup** — clone
+`openbase-coder-workspace` and run `./scripts/setup`; `installation.json`
+gets `workspace_path` set and `standalone: false`, and localhost:7999 serves
+the checkout. (2) **Production setup** — download the macOS Electron app and
+complete its onboarding; the app activates its bundled CLI package
+(`standalone: true`, empty `workspace_path`). (2.5) For fast debugging of
+the production flow it is permissible to build the Electron app **without
+notarization** (`pnpm dist:mac`, or `install:local` for the seedless dev-app
+variant) — see the `live-installation-test` skill. (3) **Openbase Cloud
+workspace AMI** — the dev-ami bake installs the CLI via `uv tool install
+openbase-coder` (PyPI) plus a pre-baked workspace clone, and instances
+finish with `openbase-coder provision`. Everything else — the standalone
+`install.sh` script, the release tarballs, PyPI — is an internal mechanism
+that supports these pathways (desktop seed, self-update, AMI bake, manual
+desktop setup), never a separately advertised way to install.
+
 **Console**: The shared dashboard UI (from `coder-react`, built in
 `console`). The desktop app embeds it, the local runtime serves it in a
 browser, and the iOS app opens it in its Console and Diff tabs.

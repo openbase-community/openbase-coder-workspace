@@ -59,6 +59,11 @@ product (auth, remote workspaces, and the PaaS backend).
   evidence in a stash and restore from HEAD; never commit resurrections.
 - Developer install/test flow: `DEV_RUNBOOK.md` — keep it accurate when
   setup, auth, or service behavior changes.
+- Installation pathways are strict and few (dev workspace setup, the macOS
+  Electron app, the Cloud DevSpace AMI — definitions in `GLOSSARY.md`).
+  Never document or build a new install entry point without updating that
+  glossary entry; `install.sh`, release tarballs, and PyPI are internal
+  mechanisms, not user-facing pathways.
 - Live physical-phone E2E testing: `LIVE_E2E_TESTING.md` — consult before
   running manual iOS full-system tests; those runs use real services and must
   not be mocked.

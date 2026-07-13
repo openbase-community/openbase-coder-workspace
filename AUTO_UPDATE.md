@@ -222,8 +222,11 @@ on its channel until reinstalled.
 **trusted publishing** (OIDC — no tokens or credentials stored anywhere).
 The PyPI projects must have the corresponding workflow registered as a
 trusted publisher (Manage → Publishing on pypi.org). These packages exist for
-`uv tool install` developer convenience; user-facing updates never flow
-through PyPI.
+`uv tool install` developer convenience and as the mechanism the Openbase
+Cloud DevSpace AMI uses to bake in the CLI (`dev-ami/setup.sh` runs
+`uv tool install openbase-coder`); user-facing updates never flow through
+PyPI, and PyPI is not an advertised installation pathway (see
+`GLOSSARY.md` → Installation pathways).
 
 Gotcha: tags created *by* the release workflow (via `GITHUB_TOKEN`) do not
 trigger `publish-pypi.yml` — GitHub suppresses token-initiated events. Push
