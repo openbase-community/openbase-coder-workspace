@@ -237,9 +237,11 @@ uninstall with it.
 `~/.openbase/codex_home`, that stores Codex instructions, skills, and related
 runtime configuration.
 
-**Thread sync conflict**: A local Codex thread sync state that needs human
-review because both synced homes changed the same thread or a remote device
-snapshot diverged from the local thread.
+**Thread sync conflict**: A local coding-thread sync state — for a Codex
+thread or a Claude Code session — that needs human review because both synced
+homes changed the same thread or a remote device snapshot diverged from the
+local copy. Both backends resolve device conflicts the same way: accept the
+local copy or accept the latest remote snapshot.
 
 **Claude config**: The Openbase-specific Claude Code configuration directory,
 usually `~/.openbase/claude_config`, that stores Claude instructions and related
