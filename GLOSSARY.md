@@ -241,7 +241,10 @@ runtime configuration.
 thread or a Claude Code session — that needs human review because both synced
 homes changed the same thread or a remote device snapshot diverged from the
 local copy. Both backends resolve device conflicts the same way: accept the
-local copy or accept the latest remote snapshot.
+local copy or accept the latest remote snapshot. Device conflicts only stand
+while transcripts genuinely diverge: snapshots whose content is identical to
+or an append-only extension of the local copy sync without conflict, and an
+existing conflict auto-clears once the two sides converge.
 
 **Claude config**: The Openbase-specific Claude Code configuration directory,
 usually `~/.openbase/claude_config`, that stores Claude instructions and related
