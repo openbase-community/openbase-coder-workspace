@@ -7,7 +7,9 @@ fresh machine; jump to [Iterating](#5-iterating) day to day.
 
 ## 1. One-time prerequisites
 
-- `uv`, Node + pnpm (via nvm), Homebrew `livekit-server`
+- `uv`, Node + pnpm (via nvm). (`livekit-server` is downloaded at the
+  release-pinned version by setup into `~/.openbase/bin`; a Homebrew
+  `livekit-server` is only a fallback and will warn if its version skews.)
 - `multi` (`uv tool install multi-workspace`)
 - Tailscale installed, signed in, connected (the iOS app reaches this Mac
   over the tailnet)
@@ -21,8 +23,13 @@ fresh machine; jump to [Iterating](#5-iterating) day to day.
 git clone https://github.com/openbase-community/openbase-coder-workspace
 cd openbase-coder-workspace
 ./scripts/setup            # prompts for a backend; or pass --backend codex
-uv tool install -e ./cli   # recommended: `openbase-coder` on PATH = your checkout
 ```
+
+Setup puts `openbase-coder` on PATH via a shim at `~/.local/bin` that runs
+the workspace venv — the same interpreter the services use, so the terminal
+CLI and the services can never disagree about dependencies. (If a
+`uv tool install openbase-coder` shim exists, setup replaces it and tells
+you; run `uv tool uninstall openbase-coder` to drop the orphaned venv.)
 
 `scripts/setup` syncs the sub-repos with `multi`, creates the cli venv,
 downloads LiveKit model files, builds the console, generates
@@ -70,8 +77,9 @@ Then pick the surface you're testing:
 
 ## 5. Iterating
 
-- **cli (Python):** the editable install picks changes up immediately for
-  new invocations; running services need `openbase-coder restart` (or
+- **cli (Python):** the workspace venv's editable install picks changes up
+  immediately for new invocations; running services need `openbase-coder
+  restart` (or
   `services restart <name>` — `livekit-agent` for voice-session code,
   `django-cli` for API/console-serving code).
 - **console / coder-react:** `cd console && pnpm run build` — django serves
