@@ -14,6 +14,7 @@ import {
   startCall,
 } from "../support/phoneApp.js";
 import {
+  findLiveKitLogEvidence,
   readLiveKitLogCursor,
   readRecentLiveKitLog,
   waitForLiveKitLogEvidence,
@@ -197,6 +198,20 @@ describe("Openbase iOS double turn-commit diagnosis via LiveKit logs", () => {
         console.log(
           "Diagnosis did NOT observe twin generations for this utterance. "
             + "Either the fix is already active or the twin behavior is intermittent; rerun to confirm.",
+        );
+      }
+
+      // Courtesy: let the spoken answer finish before hanging up, so a
+      // human listener never hears the call cut off mid-sentence.
+      const iterEnd = findLiveKitLogEvidence(
+        env,
+        /stage=tts_stream_iter_end role=direct.*audio_seconds=([\d.]+)/i,
+        { after: cursor },
+      );
+      const audioSecondsMatch = iterEnd?.matchedText.match(/audio_seconds=([\d.]+)/);
+      if (audioSecondsMatch) {
+        await browser.pause(
+          Math.min(Number(audioSecondsMatch[1]) * 1_000 + 1_000, 30_000),
         );
       }
     } catch (error) {
