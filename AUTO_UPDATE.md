@@ -30,6 +30,15 @@ Rules that must not regress:
   `openbase-coder self-update`; every update capability must work without the
   desktop app.
 
+## Local state schemas
+
+Openbase routine state uses schema version 1 in `~/.openbase/routines.json`.
+On first access, the CLI atomically copies the legacy top-level `routines`
+object from `~/.super-agents/state.json` into the new file, then removes that
+legacy field only after the new file is durable. Super Agents preserves unknown
+top-level state fields so mixed-version processes cannot discard migration
+data. A CLI must refuse routine state written with a newer schema version.
+
 ## Release artifacts and the update manifest
 
 `cli/.github/workflows/release-standalone.yml` produces, per tag:

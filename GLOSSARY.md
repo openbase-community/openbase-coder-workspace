@@ -290,8 +290,10 @@ management, LiveKit voice services, and Super Agents coordination.
 **Routine**: A persisted Openbase Coder schedule run through the local
 `openbase-coder routines` command surface. Agent routines start or queue a Super
 Agents turn; command routines run a normal local command without launching an AI
-agent. Routines are stored in local Super Agents state and run by the
-`openbase-routines` scheduler service.
+agent. Routines are stored in `~/.openbase/routines.json`, owned by the Openbase
+Coder CLI, and run by the `openbase-routines` scheduler service. Super Agents
+provides generic turn and queue primitives but does not own the routine model or
+scheduler.
 
 **Cloud idle heartbeat**: The `openbase-cloud-heartbeat` service (cloud
 DevSpaces only, installed by `openbase-coder provision`) that runs

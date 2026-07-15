@@ -108,6 +108,11 @@ product (auth, remote workspaces, and the PaaS backend).
   state, billing, onboarding, or app-specific UX flows directly to
   `super-agents`; put those in `cli`, `skills`, `console`, the apps, or a
   narrow adapter that calls generic Super Agents primitives.
+  Openbase routines are explicitly outside the Super Agents boundary: routine
+  definitions, schedules, polling, command execution, run history, health UX,
+  and persisted routine state belong in `cli`. Super Agents may expose generic
+  thread, turn, queue, and session primitives that the CLI scheduler calls, but
+  must not own routine models or a recurring-job scheduler.
 - Tests under `e2e/` must be true app end-to-end tests (Appium-driven iOS or
   Selenium-driven browser). Direct API, app-server, or service-client
   integration tests do not belong there.
