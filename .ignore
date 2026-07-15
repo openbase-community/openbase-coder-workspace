@@ -2,6 +2,8 @@
 # Allow us to search inside these gitignored directories
 !allauth-client-swift/
 !allauth-client-swift
+!allauth-client-kotlin/
+!allauth-client-kotlin
 !cli/
 !cli
 !console/
@@ -12,10 +14,14 @@
 !desktop
 !ios/
 !ios
+!android/
+!android
 !skills/
 !skills
 !super-agents/
 !super-agents
+!agent-work-scheduler/
+!agent-work-scheduler
 !multi-react/
 !multi-react
 !boilersync-react/

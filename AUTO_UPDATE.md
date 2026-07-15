@@ -177,9 +177,13 @@ Every versioned piece is inspectable without MCP:
    back to `previous`, reinstall services, and report the rollback.
 
 The user-facing shim (`~/.local/bin/openbase-coder`) and service wrappers
-point through `current`, so a flip atomically retargets everything — but
-service wrappers embed resolved paths, which is why step 8's regeneration is
-mandatory after every flip.
+point through `current`, so a flip atomically retargets everything. Service
+wrappers embed package paths routed through the `current` alias, derived from
+the runtime package at generation time — `installation.json` deliberately
+records no package paths (the `current` symlink is the single source of
+truth), so a stale config can never strand services on a pruned release.
+Step 8's regeneration is still mandatory after every flip (templates, backend
+binaries, and the bundled Python can change between releases).
 
 ## State-file schema versions
 
@@ -247,8 +251,11 @@ on its channel until reinstalled.
 **trusted publishing** (OIDC — no tokens or credentials stored anywhere).
 The PyPI projects must have the corresponding workflow registered as a
 trusted publisher (Manage → Publishing on pypi.org). These packages exist for
-`uv tool install` developer convenience; user-facing updates never flow
-through PyPI.
+`uv tool install` developer convenience and as the mechanism the Openbase
+Cloud DevSpace AMI uses to bake in the CLI (`dev-ami/setup.sh` runs
+`uv tool install openbase-coder`); user-facing updates never flow through
+PyPI, and PyPI is not an advertised installation pathway (see
+`GLOSSARY.md` → Installation pathways).
 
 Gotcha: tags created *by* the release workflow (via `GITHUB_TOKEN`) do not
 trigger `publish-pypi.yml` — GitHub suppresses token-initiated events. Push

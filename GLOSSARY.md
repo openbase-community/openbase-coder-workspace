@@ -28,6 +28,23 @@ standalone CLI runtime, runs guided first-time setup, and hosts the dashboard
 UI plus Electron-only features (auto-update, LiveKit companion screen
 sharing, deep links).
 
+**Installation pathways**: The only sanctioned ways to install Openbase
+Coder, kept deliberately few and strict. (1) **Dev setup** — clone
+`openbase-coder-workspace` and run `./scripts/setup`; `installation.json`
+gets `workspace_path` set and `standalone: false`, and localhost:7999 serves
+the checkout. (2) **Production setup** — download the macOS Electron app and
+complete its onboarding; the app activates its bundled CLI package
+(`standalone: true`, empty `workspace_path`). (2.5) For fast debugging of
+the production flow it is permissible to build the Electron app **without
+notarization** (`pnpm dist:mac`, or `install:local` for the seedless dev-app
+variant) — see the `live-installation-test` skill. (3) **Openbase Cloud
+workspace AMI** — the dev-ami bake installs the CLI via `uv tool install
+openbase-coder` (PyPI) plus a pre-baked workspace clone, and instances
+finish with `openbase-coder provision`. Everything else — the standalone
+`install.sh` script, the release tarballs, PyPI — is an internal mechanism
+that supports these pathways (desktop seed, self-update, AMI bake, manual
+desktop setup), never a separately advertised way to install.
+
 **Console**: The shared dashboard UI (from `coder-react`, built in
 `console`). The desktop app embeds it, the local runtime serves it in a
 browser, and the iOS app opens it in its Console and Diff tabs.
@@ -255,16 +272,23 @@ only installed for backends that use them.
 `openbase-coder setup` installs into `~/.openbase/hooks` and registers in both
 Openbase agent homes (Claude `settings.json` hooks and a trusted codex
 `[[hooks.SessionStart]]` entry). It injects the session's thread/session ID
-into the conversation so agents stamp commits with the `Agent-Thread-Id`
-trailer.
+into the conversation along with the instructions for using it, so agents
+stamp commits with the `Agent-Thread-Id` trailer without a standing
+`AGENTS.md` rule; the instructions ride in the hook so they ship, update, and
+uninstall with it.
 
 **Codex home**: The Openbase-specific Codex configuration directory, usually
 `~/.openbase/codex_home`, that stores Codex instructions, skills, and related
 runtime configuration.
 
-**Thread sync conflict**: A local Codex thread sync state that needs human
-review because both synced homes changed the same thread or a remote device
-snapshot diverged from the local thread.
+**Thread sync conflict**: A local coding-thread sync state — for a Codex
+thread or a Claude Code session — that needs human review because both synced
+homes changed the same thread or a remote device snapshot diverged from the
+local copy. Both backends resolve device conflicts the same way: accept the
+local copy or accept the latest remote snapshot. Device conflicts only stand
+while transcripts genuinely diverge: snapshots whose content is identical to
+or an append-only extension of the local copy sync without conflict, and an
+existing conflict auto-clears once the two sides converge.
 
 **Claude config**: The Openbase-specific Claude Code configuration directory,
 usually `~/.openbase/claude_config`, that stores Claude instructions and related
