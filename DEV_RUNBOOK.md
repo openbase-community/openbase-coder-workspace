@@ -1,6 +1,6 @@
 # Dev Runbook
 
-The direct path for developing and testing Openbase Coder from this
+The direct path for developing and testing Openbase from this
 workspace. This is the dev counterpart to the standalone/production install
 (see `AUTO_UPDATE.md` for how that side ships). Follow it top to bottom for a
 fresh machine; jump to [Iterating](#5-iterating) day to day.

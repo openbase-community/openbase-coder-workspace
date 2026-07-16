@@ -23,7 +23,7 @@ real_path() {
 
 existing_install_message() {
   cat <<EOF
-Existing Openbase Coder installation found.
+Existing Openbase installation found.
 
 This development setup script is for a clean source-workspace install. To switch
 from an existing standalone or different workspace install, uninstall Openbase

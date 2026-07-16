@@ -1,8 +1,8 @@
-# Openbase Coder iOS Physical E2E
+# Openbase iOS Physical E2E
 
-Manual-only: this test drives Gabe's physical iPhone and uses real Openbase Coder, Codex, LiveKit, and Cartesia services. Do not run it unless explicitly instructed.
+Manual-only: this test drives Gabe's physical iPhone and uses real Openbase, Codex, LiveKit, and Cartesia services. Do not run it unless explicitly instructed.
 
-This package contains physical iPhone E2E tests for Openbase Coder:
+This package contains physical iPhone E2E tests for Openbase:
 
 - `specs/basic-call-response.real-codex.spec.ts`
 - `specs/superagent-own-name.real-codex.spec.ts`
@@ -114,4 +114,4 @@ OPENBASE_E2E_ENABLE_AUDIO_STIMULUS=1 CARTESIA_API_KEY=... pnpm --dir e2e/ios-phy
 OPENBASE_E2E_ENABLE_AUDIO_STIMULUS=1 CARTESIA_API_KEY=... pnpm --dir e2e/ios-physical manual:e2e:ios:parallel-agents-truth
 ```
 
-It uses the normal Codex/Openbase home configuration from the current shell and installed services. Do not run it unless you intend to use Gabe's real Openbase Coder, Codex, LiveKit, and Cartesia setup.
+It uses the normal Codex/Openbase home configuration from the current shell and installed services. Do not run it unless you intend to use Gabe's real Openbase, Codex, LiveKit, and Cartesia setup.

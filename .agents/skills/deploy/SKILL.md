@@ -1,9 +1,9 @@
 ---
 name: deploy
-description: Run a full Openbase Coder deployment — super-agents to PyPI when changed, CLI auto-release from main, desktop DMG publish with the released CLI seed. Use when asked to deploy, release, or ship Openbase Coder.
+description: Run a full Openbase deployment — super-agents to PyPI when changed, CLI auto-release from main, desktop DMG publish with the released CLI seed. Use when asked to deploy, release, or ship Openbase.
 ---
 
-# Openbase Coder Deployment
+# Openbase Deployment
 
 Full production deploy, in dependency order. The contract behind each step is
 the workspace `AUTO_UPDATE.md`; this skill is the operational runbook.
@@ -134,7 +134,7 @@ below is the **fallback** for CI outages.
 Only push desktop main after step 3 proves the CLI GitHub Release exists and
 the package asset downloads. If desktop main was pushed early, the run can
 seed the previous CLI version without failing; rerun it after the CLI release
-and inspect the macOS log for `Staged Openbase Coder CLI <version>`.
+and inspect the macOS log for `Staged Openbase CLI <version>`.
 
 Known CI behaviors: the `rebuild linux` and `rebuild macOS` jobs publish
 independently, so diagnose the failed job without assuming the other artifact
@@ -217,7 +217,7 @@ pnpm run dist:mac:publish
   `SETUPTOOLS_SCM_PRETEND_VERSION`; the `_FOR_<dist>` variant is silently
   ignored (the release build has a guard that fails on a bad stamp).
 - Marketing pickup is automatic: openbase-landing's "Download for Mac"
-  points at the S3 `Openbase-Coder-latest-arm64.dmg` alias (refreshed by
+  points at the S3 `Openbase-latest-arm64.dmg` alias (refreshed by
   every publish), and `openbase.cloud/ios` is a forwarder page in
   openbase-voice-marketing `public/ios/index.html` — the single place the
   TestFlight/App Store destination is defined.

@@ -1,6 +1,6 @@
 # Live E2E Testing
 
-This is the durable workspace reference for live Openbase Coder E2E suites.
+This is the durable workspace reference for live Openbase E2E suites.
 It documents what the suites are, where they live, and which local
 configuration knobs they use.
 
@@ -23,7 +23,7 @@ live command and update this reference afterward if the suite shape changed.
 
 The physical iPhone suite lives in `e2e/ios-physical`. It drives the installed
 modern iOS app (`com.openbase.coder`) through Appium/XCUITest on a real iPhone.
-The suite talks to the normal local Openbase Coder runtime and real services:
+The suite talks to the normal local Openbase runtime and real services:
 Openbase Cloud, LiveKit voice services, Cartesia-generated Mac speaker audio,
 the phone microphone, Codex/Openbase agent homes, the dispatcher, and Super
 Agents.

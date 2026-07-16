@@ -1,8 +1,8 @@
-# Openbase Coder Workspace — Agent Guide
+# Openbase Workspace — Agent Guide
 
 ## What This Product Is
 
-Openbase Coder is a voice IDE — "write code from voice." The user speaks a
+Openbase is a voice IDE — "write code from voice." The user speaks a
 task and keeps a live coding call open: a dispatcher agent answers, starts
 and steers coding sessions (threads) on the user's Mac or cloud DevSpace,
 and hands the call to Super Agents; the user approves sensitive actions and
@@ -22,28 +22,28 @@ product (auth, remote workspaces, and the PaaS backend).
 
 ## Repositories
 
-- `cli`: the Openbase Coder runtime (`openbase-coder`): local Django API +
+- `cli`: the Openbase runtime (`openbase-coder`): local Django API +
   WebSocket server, LiveKit voice services, launchd/systemd service
   management, plugins, self-update, and the product docs (`cli/docs/`)
-- `console`: React frontend console for Openbase Coder
+- `console`: React frontend console for Openbase
 - `open-approvals`: standalone MIT Python package for human-in-the-loop AI
   agent approvals (shared queue, agent-side client, protocol); used by cli
   and super-agents
 - `open-approvals-react`: standalone React hooks/helpers for open-approvals
   approver surfaces; used by coder-react
 - `coder-react`: shared React UI package used by the console and desktop
-- `desktop`: Electron desktop app for Openbase Coder
+- `desktop`: Electron desktop app for Openbase
 - `ios`: main Openbase iOS application using Tuist
 - `android`: main Openbase Android application (Kotlin, Jetpack Compose)
-- `skills`: shared agent skills bundled with Openbase Coder
+- `skills`: shared agent skills bundled with Openbase
 - `super-agents`: standalone MIT Python MCP server/library for Codex
   app-server threads, turns, and Super Agents coordination. Keep it usable
-  outside Openbase Coder: generic coordination primitives may live there;
-  Openbase product-domain features belong in Openbase Coder repos or an
+  outside Openbase: generic coordination primitives may live there;
+  Openbase product-domain features belong in Openbase repos or an
   adapter layer.
 - `agent-work-scheduler`: deterministic Notion dependency scheduler for
   launching Super Agents work in isolated git worktrees
-- `multi-react`: shared React diff viewer used by Multi and Openbase Coder
+- `multi-react`: shared React diff viewer used by Multi and Openbase
 - `boilersync-react`: shared React components for BoilerSync workflows
 - `allauth-client-swift` / `allauth-client-kotlin`: SwiftUI / Kotlin clients
   for Django AllAuth headless authentication
@@ -103,7 +103,7 @@ product (auth, remote workspaces, and the PaaS backend).
 - Super Agents boundary: this root-level workspace rule applies whenever
   working on `super-agents`, because subrepo `AGENTS.md` files may not be
   loaded by default. `super-agents` must remain a standalone MCP product that
-  can be installed and used without Openbase Coder. Do not add product domain
+  can be installed and used without Openbase. Do not add product domain
   features such as Openbase teams, team activity feeds, reports, Cloud account
   state, billing, onboarding, or app-specific UX flows directly to
   `super-agents`; put those in `cli`, `skills`, `console`, the apps, or a
