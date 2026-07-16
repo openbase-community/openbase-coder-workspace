@@ -126,6 +126,23 @@ Every versioned piece is inspectable without MCP:
 
 ## The CLI self-update sequence
 
+Updates apply through three triggers, all funneling into the same locked
+sequence below:
+
+- **Automatic (default)**: the `openbase-routines` service checks the feed
+  every 6 hours on standalone installs and, when an update is available,
+  spawns `openbase-coder self-update` as a detached process (detached because
+  applying an update reinstalls services, including the routines service
+  itself). Required updates (below `min_supported_version` or the
+  cloud-reported minimum) are spawned with `--force`; merely-available
+  updates are attempted once per version per runner process so a release
+  that rolls back on health checks does not churn service restarts every
+  cycle. Opt out with `OPENBASE_CODER_AUTO_UPDATE=0` (environment or
+  `~/.openbase/.env`). Detached-run output lands in
+  `~/.openbase/logs/self-update.log`.
+- **Manual**: `openbase-coder self-update` (`--check`, `--force`, `--json`).
+- **UI-driven**: the console/desktop update button hits the update API.
+
 `openbase-coder self-update` (all steps in `openbase_coder_cli/self_update.py`):
 
 1. **Refuse in dev mode** (no runtime package detected).
