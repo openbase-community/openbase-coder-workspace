@@ -95,7 +95,7 @@ hook (`inject-session-id`) that reads the `session_id` from the hook's stdin
 JSON and injects it back into the conversation as context, so agents can
 stamp commits with an `Agent-Thread-Id` trailer tying each commit to the
 exact agent session that produced it. Install covers the coding-backend homes
-Openbase Coder manages (Codex hook manifest + `[hooks.state]` trust entry
+Openbase manages (Codex hook manifest + `[hooks.state]` trust entry
 with the reviewed `trusted_hash`; Claude Code settings hook), and the status
 check verifies the registered hooks still match the shipped script content.
 

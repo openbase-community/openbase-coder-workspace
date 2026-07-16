@@ -1,6 +1,6 @@
 # Auto-Update Guide
 
-How Openbase Coder components are released, distributed, and updated. This is
+How Openbase components are released, distributed, and updated. This is
 the durable contract: consult it before touching release workflows, the
 updater, state-file schemas, or version handshakes — and keep it current when
 they change.
