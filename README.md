@@ -1,9 +1,9 @@
 # openbase-coder-workspace
 
 This is the multi-repo development workspace for
-[Openbase](https://github.com/openbase-community/openbase-coder).
+[Openbase Coder](https://github.com/openbase-community/openbase-coder).
 
-Most readers should start with the main Openbase repo:
+Most readers should start with the main Openbase Coder repo:
 <https://github.com/openbase-community/openbase-coder>
 
 Product docs are published at <https://docs.openbase.cloud>.
@@ -13,7 +13,7 @@ Product docs are published at <https://docs.openbase.cloud>.
 - [openbase-coder](https://github.com/openbase-community/openbase-coder) -
   local runtime, CLI, service layer, installer, and product docs
 - [openbase-coder-console](https://github.com/openbase-community/openbase-coder-console) -
-  browser-hosted Openbase console
+  browser-hosted Openbase Coder console
 - [openbase-coder-react](https://github.com/openbase-community/openbase-coder-react) -
   shared React application shell and UI package
 - [openbase-coder-desktop](https://github.com/openbase-community/openbase-coder-desktop) -
@@ -23,7 +23,7 @@ Product docs are published at <https://docs.openbase.cloud>.
 - [openbase-android](https://github.com/openbase-community/openbase-android) -
   Android app
 - [openbase-coder-skills](https://github.com/openbase-community/openbase-coder-skills) -
-  shared Openbase agent skills
+  shared Openbase Coder agent skills
 - [super-agents](https://github.com/montaguegabe/super-agents) -
   standalone Python MCP server and library for agent-thread coordination
 - [agent-work-scheduler](https://github.com/montaguegabe/agent-work-scheduler) -
@@ -39,6 +39,6 @@ Product docs are published at <https://docs.openbase.cloud>.
 
 ## Development
 
-This repo is for contributors working across the Openbase subrepos. For
-setup instructions, use the developer setup in the main Openbase README:
+This repo is for contributors working across the Openbase Coder subrepos. For
+setup instructions, use the developer setup in the main Openbase Coder README:
 <https://github.com/openbase-community/openbase-coder#developer-setup>

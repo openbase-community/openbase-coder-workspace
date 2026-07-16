@@ -22,7 +22,7 @@ export type RuntimeTarget = {
   detail: string;
 };
 
-const defaultDesktopAppPath = "/Applications/Openbase.app";
+const defaultDesktopAppPath = "/Applications/Openbase Coder.app";
 
 export function detectRuntimeTarget(): RuntimeTarget {
   const expectation = readRuntimeExpectation();

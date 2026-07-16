@@ -19,7 +19,7 @@ export function readNormalDispatcherReasoning(): { path: string; reasoningEffort
   if (!existsSync(path)) {
     throw new Error(
       `Refusing to start physical E2E: dispatcher config is missing at ${path}. `
-        + `Set dispatcher_reasoning_effort to "${expectedDispatcherReasoning}" in the normal Openbase settings first.`,
+        + `Set dispatcher_reasoning_effort to "${expectedDispatcherReasoning}" in the normal Openbase Coder settings first.`,
     );
   }
 
@@ -42,7 +42,7 @@ export function readNormalSuperAgentsReasoning(): { path: string; reasoningEffor
   if (!existsSync(path)) {
     throw new Error(
       `Refusing to start physical E2E: dispatcher config is missing at ${path}. `
-        + `Set super_agents_reasoning_effort to "${expectedSuperAgentsReasoning}" in the normal Openbase settings first.`,
+        + `Set super_agents_reasoning_effort to "${expectedSuperAgentsReasoning}" in the normal Openbase Coder settings first.`,
     );
   }
 

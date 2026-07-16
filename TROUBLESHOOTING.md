@@ -1,6 +1,6 @@
 # Troubleshooting
 
-This guide is for **agents** debugging a running Openbase install from
+This guide is for **agents** debugging a running Openbase Coder install from
 this workspace: symptoms, log locations, bounded log checks, and fixes.
 User-facing troubleshooting lives in the product docs at
 `cli/docs/troubleshooting.md` (https://docs.openbase.cloud/troubleshooting/);

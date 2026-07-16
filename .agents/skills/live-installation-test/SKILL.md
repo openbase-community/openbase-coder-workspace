@@ -1,11 +1,11 @@
 ---
 name: live-installation-test
-description: Use when preparing, running, debugging, or reporting an Openbase installation test, especially an Electron app installed into /Applications with a bundled CLI before live no-mock iOS/Electron testing.
+description: Use when preparing, running, debugging, or reporting an Openbase Coder installation test, especially an Electron app installed into /Applications with a bundled CLI before live no-mock iOS/Electron testing.
 ---
 
 # Live Installation Test
 
-This workspace-local skill is the installation-test runbook for Openbase.
+This workspace-local skill is the installation-test runbook for Openbase Coder.
 It applies when Gabe asks for an installation test, local install test, bundled
 Electron install test, or to prepare the desktop app for a live no-mock E2E run.
 
@@ -19,7 +19,7 @@ After uninstall/reset, build the **full bundled** Electron app, install it to
 `/Applications`, and on macOS open the installed app for Gabe:
 
 ```bash
-open "/Applications/Openbase.app"
+open "/Applications/Openbase Coder.app"
 ```
 
 Always use `open` on the `.app` bundle. Do not launch the executable inside
@@ -144,14 +144,14 @@ process with in-memory onboarding state instead of starting the newly installed
 bundle, which invalidates the first-launch installation test.
 
 ```bash
-osascript -e 'tell application "Openbase" to quit' 2>/dev/null || true
+osascript -e 'tell application "Openbase Coder" to quit' 2>/dev/null || true
 for _ in 1 2 3 4 5; do
-  pgrep -x "Openbase" >/dev/null || break
+  pgrep -x "Openbase Coder" >/dev/null || break
   sleep 1
 done
-pkill -x "Openbase" 2>/dev/null || true
-pgrep -x "Openbase" && {
-  echo "Openbase is still running; stop it before continuing."
+pkill -x "Openbase Coder" 2>/dev/null || true
+pgrep -x "Openbase Coder" && {
+  echo "Openbase Coder is still running; stop it before continuing."
   exit 1
 }
 ```
@@ -171,7 +171,7 @@ Then remove the existing desktop app and Electron state so the reinstall does
 not silently reuse old app storage:
 
 ```bash
-rm -rf "/Applications/Openbase.app"
+rm -rf "/Applications/Openbase Coder.app"
 rm -rf "$HOME/Library/Application Support/@openbase/coder-desktop"
 rm -rf "$HOME/Library/Application Support/openbase-coder-desktop"
 rm -rf "$HOME/Library/Application Support/coder-desktop"
@@ -227,7 +227,7 @@ cat cli/dist/openbase-coder-package/openbase-coder-package.json
 
 ## Build And Install Electron
 
-Install a local app into `/Applications/Openbase.app`.
+Install a local app into `/Applications/Openbase Coder.app`.
 
 For Gabe-only local testing, notarization is not required. Prefer a local
 unsigned or ad-hoc app when Developer ID signing the bundled Python tree is too
@@ -278,11 +278,11 @@ the tracked metadata immediately and do not commit the mutation.
 After install, verify:
 
 ```bash
-defaults read /Applications/'Openbase.app'/Contents/Info CFBundleShortVersionString
-/Applications/'Openbase.app'/Contents/Resources/OpenbaseCoderCLI/bin/openbase-coder --version
-cat /Applications/'Openbase.app'/Contents/Resources/OpenbaseCoderCLI/openbase-coder-package.json
-test -d /Applications/'Openbase.app'/Contents/Resources/OpenbaseCoderCLI
-test -d /Applications/'Openbase.app'/Contents/Resources/OpenbaseScreenShareCompanion.app
+defaults read /Applications/'Openbase Coder.app'/Contents/Info CFBundleShortVersionString
+/Applications/'Openbase Coder.app'/Contents/Resources/OpenbaseCoderCLI/bin/openbase-coder --version
+cat /Applications/'Openbase Coder.app'/Contents/Resources/OpenbaseCoderCLI/openbase-coder-package.json
+test -d /Applications/'Openbase Coder.app'/Contents/Resources/OpenbaseCoderCLI
+test -d /Applications/'Openbase Coder.app'/Contents/Resources/OpenbaseScreenShareCompanion.app
 ```
 
 Also inspect the packaged `app.asar` package metadata and confirm
@@ -295,7 +295,7 @@ installation-test preparation, not as a successful install.
 After verification, open the installed app for Gabe on macOS:
 
 ```bash
-open "/Applications/Openbase.app"
+open "/Applications/Openbase Coder.app"
 ```
 
 Use the `.app` bundle path exactly as shown, not the executable inside the app
@@ -325,7 +325,7 @@ Report the installation result with:
 - where `~/.openbase` was archived, or that no existing state directory was
   present;
 - which uninstall cleanup steps were run and which were intentionally skipped;
-- whether `/Applications/Openbase.app` was opened for Gabe after install;
+- whether `/Applications/Openbase Coder.app` was opened for Gabe after install;
 - bundled CLI version and package target;
 - relevant repo SHAs from bundled package metadata;
 - installed app size and whether the expected bundled resources are present;

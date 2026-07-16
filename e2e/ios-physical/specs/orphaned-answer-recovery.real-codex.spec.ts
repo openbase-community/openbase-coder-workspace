@@ -30,7 +30,7 @@ import {
 // fail its first TTS write on a stale pooled Cartesia websocket.
 
 const slowPrompt =
-  "Please check whether the Openbase workspace git checkout is clean, and double check before you answer.";
+  "Please check whether the openbase coder workspace git checkout is clean, and double check before you answer.";
 const interruptionFragment = "hey, wait";
 const idleWarmupPrompt = "Hey are you there?";
 const idleFollowUpPrompt = "Are you still there?";

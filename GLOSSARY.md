@@ -1,19 +1,19 @@
 # Openbase Glossary
 
-This glossary defines Openbase workspace terms as they appear in docs,
+This glossary defines Openbase Coder workspace terms as they appear in docs,
 instructions, issues, reports, and agent handoffs. Add terms here when a new
 concept becomes part of the shared Openbase vocabulary.
 
 ## Product Surfaces
 
-**Product surface**: One of the user-facing faces of Openbase: the
+**Product surface**: One of the user-facing faces of Openbase Coder: the
 desktop app, the iOS app, the web console, and app.openbase.cloud, all backed
 by the local CLI runtime. The product docs (`cli/docs/`, published at
 docs.openbase.cloud) cover every surface and carry "In the apps" / "On
 iPhone" cross-references between them.
 
 **Live E2E test**: A manual full-system test that drives real product surfaces
-and real services rather than mocks or test doubles. In Openbase, the
+and real services rather than mocks or test doubles. In Openbase Coder, the
 most sensitive live E2E path is the physical iPhone voice suite because it uses
 the installed iOS app, Appium/WebDriverAgent, LiveKit, Cartesia audio, and real
 agent backends.
@@ -56,7 +56,7 @@ connected to a Mac or DevSpace over Tailscale.
 **Openbase Cloud**: The account service at app.openbase.cloud: OAuth
 sign-in, device onboarding for iPhone pairing, subscription, the
 Openbase Cloud coding backend, and Cloud DevSpace launch. (Its deployment
-tooling is separate from the Openbase product surfaces.)
+tooling is separate from the Openbase Coder product surfaces.)
 
 ## Agent Identity
 
@@ -86,7 +86,7 @@ implementation request, a plan-mode request, a follow-up, or steering input.
 is normally the dispatcher, but can be transferred to a Super Agent/thread and
 then returned to the dispatcher.
 
-**LiveKit room**: The private real-time voice room used by Openbase for
+**LiveKit room**: The private real-time voice room used by Openbase Coder for
 user speech, agent audio, route-control data messages, and related voice events.
 
 **Announcer message**: A short spoken message sent into the active voice session
@@ -110,12 +110,12 @@ reviews, and other durable summaries.
 filtering, showing metadata for, and reading reports through the same discovery
 and metadata layer used by the console Reports page.
 
-**Tags**: Local Openbase labels applied to threads or reports to organize
+**Tags**: Local Openbase Coder labels applied to threads or reports to organize
 work across the console and Super Agents tooling.
 
 ## Agent Capabilities
 
-**MCP**: Model Context Protocol, the mechanism Openbase uses to expose
+**MCP**: Model Context Protocol, the mechanism Openbase Coder uses to expose
 tools and resources to agents, including Super Agents coordination tools.
 
 **MCP elicitation**: A structured request from an MCP tool or backend asking the
@@ -142,7 +142,7 @@ never`, full-access sandboxes, Claude `bypassPermissions`) to gated
 equivalents. Agents cannot edit their way past it because the file is owned
 by the supervising process, not the calling agent.
 
-**Locked-down mode**: The off-by-default Openbase setting (final
+**Locked-down mode**: The off-by-default Openbase Coder setting (final
 onboarding-skill step; `openbase-coder lockdown`) that keeps the permission
 guard restricted so coding launches always run gated — unless the user's
 safe phrase is heard in the direct transcript of the live voice session,
@@ -165,7 +165,7 @@ the `openbase-routines` service re-syncs the links roughly every five minutes,
 so newly added personal skills appear without a restart.
 
 **Plugin**: A local Python package that can contribute bootstrappers, stacks,
-skills, Django URL modules, and iframe console pages to Openbase.
+skills, Django URL modules, and iframe console pages to Openbase Coder.
 
 **Plugin console page (iframe)**: The only supported form of plugin console UI:
 a plugin declares `console_pages` entries with an `asset_dir` of prebuilt
@@ -211,7 +211,7 @@ messages prompting the agent to offer the onboarding skill.
 
 ## Code Sync
 
-**Code sync**: Openbase's managed Syncthing file sync between a user's
+**Code sync**: Openbase Coder's managed Syncthing file sync between a user's
 non-phone devices (Macs, cloud workspaces) over their tailnet. Syncs selected
 home-relative directories continuously — including uncommitted changes and
 gitignored secrets — with VCS metadata (`.git`) categorically excluded.
@@ -256,7 +256,7 @@ app-server), `openbase_cloud` (Codex-compatible sessions through Openbase
 Cloud), or `claude_code` (Claude Agent SDK). The configured backend
 (`OPENBASE_CODING_BACKEND`) is only the default — each `super_agents_start`
 launch may pick its own backend, and threads on different backends run side
-by side under one MCP server. In Openbase each agent home's
+by side under one MCP server. In Openbase Coder each agent home's
 super-agents MCP registration pins `SUPER_AGENTS_DEFAULT_BACKEND` to that
 home's own backend type, so a spawning session defaults new Super Agents to
 its own kind (Claude Code sessions spawn Claude Code, Codex sessions spawn
@@ -303,15 +303,15 @@ the normal "Claude Code-credentials" keychain item to Openbase's
 config-dir-specific keychain service, avoiding a second browser OAuth. The
 fallback is `openbase-coder claude login`.
 
-**Multi-root workspace**: This checkout, which groups multiple Openbase
+**Multi-root workspace**: This checkout, which groups multiple Openbase Coder
 repositories under one `multi.json` so agents and developers can coordinate
 changes across related repos.
 
-**Openbase CLI**: The `openbase-coder` command and local runtime that
+**Openbase Coder CLI**: The `openbase-coder` command and local runtime that
 provide the Django API, WebSocket endpoints, service management, plugin
 management, LiveKit voice services, and Super Agents coordination.
 
-**Routine**: A persisted Openbase schedule run through the local
+**Routine**: A persisted Openbase Coder schedule run through the local
 `openbase-coder routines` command surface. Agent routines start or queue a Super
 Agents turn; command routines run a normal local command without launching an AI
 agent. Routines are stored in local Super Agents state and run by the

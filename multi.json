@@ -16,25 +16,25 @@
     {
       "name": "cli",
       "url": "https://github.com/openbase-community/openbase-coder",
-      "description": "CLI for Openbase.  This runs a Django server that provides git diffs for repos across the file system.",
+      "description": "CLI for Openbase Coder.  This runs a Django server that provides git diffs for repos across the file system.",
       "installSets": ["default", "dev"]
     },
     {
       "name": "console",
       "url": "https://github.com/openbase-community/openbase-coder-console",
-      "description": "React frontend console for Openbase",
+      "description": "React frontend console for Openbase Coder",
       "installSets": ["default", "dev"]
     },
     {
       "name": "coder-react",
       "url": "https://github.com/openbase-community/openbase-coder-react",
-      "description": "Shared React UI package for Openbase components used by the console and desktop clients",
+      "description": "Shared React UI package for Openbase Coder components used by the console and desktop clients",
       "installSets": ["default", "dev"]
     },
     {
       "name": "desktop",
       "url": "https://github.com/openbase-community/openbase-coder-desktop",
-      "description": "Electron desktop app for Openbase",
+      "description": "Electron desktop app for Openbase Coder",
       "installSets": ["dev"]
     },
     {
@@ -52,7 +52,7 @@
     {
       "name": "skills",
       "url": "https://github.com/openbase-community/openbase-coder-skills",
-      "description": "Shared agent skills for Openbase workflows.",
+      "description": "Shared agent skills for Openbase Coder workflows.",
       "installSets": ["default", "dev"]
     },
     {
@@ -70,7 +70,7 @@
     {
       "name": "multi-react",
       "url": "https://github.com/montaguegabe/multi-react",
-      "description": "Shared React diff viewer and related UI utilities used by Multi and Openbase.",
+      "description": "Shared React diff viewer and related UI utilities used by Multi and Openbase Coder.",
       "allowSymlink": true,
       "installSets": ["default", "dev"]
     },

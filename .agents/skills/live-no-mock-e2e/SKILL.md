@@ -1,11 +1,11 @@
 ---
 name: live-no-mock-e2e
-description: Use when asked to plan, run, debug, or report on live no-mock Openbase E2E testing, especially physical iPhone/Appium voice tests against real Openbase services.
+description: Use when asked to plan, run, debug, or report on live no-mock Openbase Coder E2E testing, especially physical iPhone/Appium voice tests against real Openbase services.
 ---
 
 # Live No-Mock E2E
 
-This workspace-local skill is the operational runbook for live Openbase
+This workspace-local skill is the operational runbook for live Openbase Coder
 E2E testing. It applies when Gabe asks for live, full-system, no-mock, human,
 physical-phone, Appium, voice, or production-cloud E2E runs.
 

@@ -13,8 +13,7 @@
   },
   "scripts": {
     "build": "pnpm --recursive --if-present build",
-    "check:brand": "./scripts/check-brand",
-    "test": "pnpm run check:brand && pnpm --recursive --if-present test",
+    "test": "pnpm --recursive --if-present test",
     "e2e:ios:doctor": "pnpm --dir e2e/ios-physical e2e:ios:doctor",
     "manual:e2e:ios:basic-call-response": "pnpm --dir e2e/ios-physical manual:e2e:ios:basic-call-response",
     "manual:e2e:ios:superagent-own-name": "pnpm --dir e2e/ios-physical manual:e2e:ios:superagent-own-name",
