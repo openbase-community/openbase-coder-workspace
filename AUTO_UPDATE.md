@@ -213,6 +213,16 @@ target (electron-updater on macOS updates from the zip), and `latest-mac.yml`.
 Signing identity must remain the same Developer ID across releases or the
 updater rejects the download.
 
+**Linux (Cloud DevSpace) does not self-update.** The DevSpace AMI installs
+the AppImage into root-owned `/opt/openbase-coder-desktop/`, where
+electron-updater's in-place replace fails with `EACCES` (it unlinks and
+rewrites the file next to itself, which needs directory write access). The
+AMI's `/usr/local/bin/openbase-coder-desktop` launcher therefore exports
+`OPENBASE_DESKTOP_DISABLE_AUTOUPDATE=1`; DevSpaces receive new desktop builds
+through AMI rebakes (see the deploy skill's "Cloud DevSpace AMI
+relationship"), which fetch the `Openbase-Coder-latest-x86_64.AppImage`
+object from the release bucket.
+
 For local packaged testing, `pnpm run install:local` in the desktop repo
 builds without the CLI seed/companion, stamps `openbaseDevBuild: true`
 (which disables auto-update for that build), and copies the app to
