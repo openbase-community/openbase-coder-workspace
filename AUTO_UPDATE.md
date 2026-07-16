@@ -53,7 +53,11 @@ Manifest schema (`manifest_schema` 1):
   "targets": {
     "aarch64-apple-darwin": {"url": "...", "sha256": "...", "size": 123}
   },
-  "repo_shas": {"cli": "...", "console": "...", "skills": "..."}
+  "repo_shas": {
+    "cli": "...", "console": "...", "coder-react": "...",
+    "multi-react": "...", "boilersync-react": "...", "skills": "...",
+    "workspace": "..."
+  }
 }
 ```
 

@@ -94,8 +94,8 @@ product (auth, remote workspaces, and the PaaS backend).
   symlinks to them. Edit the AGENTS/.agents side and keep the symlinks
   intact. Do not add duplicate workspace rules under `.cursor/rules`.
 - Licensing: public AGPL-3.0-only — `cli`, `console`, `coder-react`,
-  `skills`, `multi-react`, `boilersync-react`. Public MIT exceptions —
-  `allauth-client-swift`, `allauth-client-kotlin`, `super-agents`. Dev-only
+  `skills`, `multi-react`. Public MIT exceptions — `allauth-client-swift`,
+  `allauth-client-kotlin`, `super-agents`, `boilersync-react`. Dev-only
   pending publication — `agent-work-scheduler`. Private/proprietary —
   `android`, `desktop`, `ios`. Never add MIT licensing to any other repo,
   and never add an open-source license to the private apps.
