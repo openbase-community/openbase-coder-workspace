@@ -122,17 +122,6 @@ cd cli && uv run python -c "from openbase_coder_cli.self_update import _fetch_ma
 (That verifies the Ed25519 signature with the embedded key — it raises on any
 mismatch.)
 
-### Cloud DevSpace AMI relationship
-
-A normal CLI GitHub Release plus desktop publish does **not** rebuild the Cloud
-DevSpace AMI. Rebuild the AMI only when the change must be baked into newly
-created DevSpaces (for example AMI helper scripts, OS packages, GUI/Tailscale
-image setup, pre-baked workspace contents, or a baseline CLI version required
-before `openbase-coder provision` can self-heal). If you are rebuilding the AMI
-to pick up a new `openbase-coder` baseline, publish `openbase-coder` to PyPI via
-a directly pushed tag first; auto-release-created tags do not trigger PyPI, and
-`dev-ami/setup.sh` installs the CLI with `uv tool install openbase-coder`.
-
 ## 4. Desktop DMG publish
 
 **CI is the publisher.** Pushing desktop `main` runs `electron-rebuild.yml`,

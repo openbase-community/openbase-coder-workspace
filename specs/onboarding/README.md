@@ -141,47 +141,9 @@ Shared `setupCLI()` step — identical to B5, implement once.
   path for users without the app, and requires a published GitHub release)
   then runs `openbase-coder setup --json-progress`, rendering the NDJSON step
   events as a checklist (see [Setup progress protocol](#setup-progress-protocol)).
-- **Next:** coding agent sign-in (see
-  [Coding backend sign-in](#coding-backend-sign-in)), then the remaining
-  desktop steps.
 - **On success:** setup advertises current CLI/setup capabilities to the
   rendezvous registry; clients verify readiness live from the desktop.
 - **Terminal state reached.**
-
-## Coding backend sign-in
-
-Setup configures a coding backend (`codex`, `claude_code`, or
-`openbase_cloud`) but must not block on that backend's own interactive
-login: under `--json-progress` the CLI **never** launches a browser OAuth
-flow (interactive terminal setup still runs the Claude Code login when that
-backend is selected). Instead, the local onboarding status payload reports
-auth readiness for the selected backend:
-
-```jsonc
-// GET /api/onboarding/status/ (or `openbase-coder onboarding status --json`)
-{
-  "backend_auth": { "backend": "claude_code", "ready": false },
-  // ... cli_configured, checks, versions, authenticated, tailscale_*, cloud
-}
-```
-
-`ready` means the backend can start coding sessions without an interactive
-login: Claude Code via `claude auth status` against Openbase's managed
-`CLAUDE_CONFIG_DIR`, Codex via the service home's `auth.json` (setup links
-it to `~/.codex/auth.json` — even before that file exists — so a later
-`codex login` is picked up without re-running setup), and Openbase Cloud
-rides on the CLI's own cloud login (`ready` equals `authenticated`).
-
-The desktop renders a **backendAuth** onboarding step right after setup
-(`desktop/src/onboarding/deriveStep.ts`), derived from `backend_auth` and
-polled while the step is visible:
-
-- **claude_code:** a sign-in button runs `openbase-coder claude login`
-  through the installer bridge; manual fallback is the same command.
-- **codex:** instruct the user to run `codex login` in a terminal; the step
-  advances automatically once the CLI reports `ready`.
-- **openbase_cloud:** skipped — the later Openbase sign-in step covers it.
-- Older CLIs that do not report `backend_auth` never block the step.
 
 ## Path B: entry via App Store (mobile first)
 
@@ -261,9 +223,7 @@ Step IDs (in execution order):
 
 The Mac app can also read local state at any time via
 `openbase-coder onboarding status --json` (works before the local server is
-running) or `GET http://127.0.0.1:7999/api/onboarding/status/` (after). The
-payload includes the `backend_auth` block described in
-[Coding backend sign-in](#coding-backend-sign-in).
+running) or `GET http://127.0.0.1:7999/api/onboarding/status/` (after).
 
 ## Open questions
 
