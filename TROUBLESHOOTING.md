@@ -167,7 +167,77 @@ dig +short your-mac.tailnet-name.ts.net
 nc -vz -w 2 100.64.0.10 7881
 ```
 
-## iOS Call Stuck On "Waiting For Agent"
+## iOS Call Stuck On "Waiting For Agent" (Dead Process Pool After Mac Sleep)
+
+In this failure mode networking is completely healthy — Tailscale, LiveKit
+server bindings, dispatch, and the iPhone's WebRTC connection all succeed —
+but the agent worker's pool of pre-warmed job processes is full of dead
+children left over from the Mac sleeping.
+
+### Symptoms Seen
+
+The agent log shows the sleep/wake kill burst (often overnight), one line
+per pooled process, all within the same second:
+
+```text
+process is unresponsive, killing process
+```
+
+Then every subsequent call fails instantly. Each `received job request` is
+followed within ~1ms by:
+
+```text
+failed to launch job on process, retrying with a new process (attempt 1)
+failed to launch job on process, retrying with a new process (attempt 2)
+failed to launch job on process after 3 attempts
+job_request_fnc failed ... BrokenPipeError ... DuplexClosed
+```
+
+The three launch attempts land inside the same millisecond, so every retry
+draws the *next* dead process from the pool — replacement processes take
+~1 second to warm up and are never candidates in time. Each failed call
+consumes 3 dead pool entries and triggers 3 fresh spawns
+(`initializing process` / `process initialized` lines right after the
+failure), so after enough failed calls the dead backlog drains and a call
+"randomly" succeeds. Do not interpret an eventual success as recovery —
+bounce the agent instead.
+
+The LiveKit server log stays clean for the agent side: the iPhone reaches
+`participant active` on every attempt, the job is `assigned job to worker`,
+and no agent participant ever joins. (The iPhone's later
+`dtls timeout` / `error reading data channel` warnings are just the phone
+abandoning the call.)
+
+### Checks
+
+```sh
+tail -n 400 ~/.openbase/logs/livekit-agent.log | rg -i 'unresponsive|failed to launch job|received job request|Connected to LiveKit room|BrokenPipe|DuplexClosed'
+```
+
+Diagnosis is confirmed by the `unresponsive, killing process` burst followed
+by `failed to launch job ... after 3 attempts` with `BrokenPipeError`. If
+you instead see the agent connect and then time out with
+`wait_pc_connection`, see the next section.
+
+### Fix
+
+Restart the agent to reset the process pool:
+
+```sh
+./.venv/bin/openbase-coder services stop livekit-agent
+./.venv/bin/openbase-coder services start livekit-agent
+./.venv/bin/openbase-coder services status
+```
+
+The next call should show `received job request` →
+`Connected to LiveKit room` → `dispatch_timing stage=agent_session_start_complete`.
+
+Root cause note: after the sleep watchdog kills unresponsive children, the
+livekit-agents proc pool still hands the dead executors to `launch_job`, and
+the 3-attempt retry loop is instantaneous so it cannot outlast the corpses.
+Observed on the 0.26.0 standalone runtime (livekit-agents Python SDK).
+
+## iOS Call Stuck On "Waiting For Agent" (Agent WebRTC Timeout)
 
 This is different from being stuck on "connecting...". In this state, the iPhone may have reached the LiveKit room and dispatched the agent job, but the Python LiveKit agent cannot complete its own WebRTC connection back into the room.
 
