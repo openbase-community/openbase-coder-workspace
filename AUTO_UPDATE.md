@@ -227,6 +227,19 @@ through AMI rebakes (see the deploy skill's "Cloud DevSpace AMI
 relationship"), which fetch the `Openbase-Coder-latest-x86_64.AppImage`
 object from the release bucket.
 
+The visible desktop product and artifacts are named **Openbase**
+(`Openbase.app`, `Openbase-<version>-<arch>.*`). Compatibility identifiers do
+not change: the bundle ID remains `tech.openbase.coder.desktop`, the update
+feed remains at the existing S3 prefix, and the deep-link scheme remains
+`openbase-coder://`. The first renamed build keeps the legacy Electron
+user-data directory and migrates `/Applications/Openbase Coder.app` to
+`/Applications/Openbase.app` before opening the main window.
+
+During the naming transition, desktop publishing also refreshes the legacy
+`Openbase-Coder-latest-*` S3 aliases used by existing landing and Cloud
+download links. Those aliases point at the new Openbase artifacts and can be
+removed only after every consumer has moved to `Openbase-latest-*`.
+
 For local packaged testing, `pnpm run install:local` in the desktop repo
 builds without the CLI seed/companion, stamps `openbaseDevBuild: true`
 (which disables auto-update for that build), and copies the app to
