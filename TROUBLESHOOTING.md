@@ -322,3 +322,43 @@ received job request
 Connected to LiveKit room
 dispatch_timing stage=agent_session_start_complete
 ```
+
+## Dispatcher Amnesia ("I didn't start that agent") On The Claude Backend
+
+### Symptom
+
+Mid-day, in a new call, the dispatcher denies knowledge of work it did in an
+earlier call — e.g. it claims it never started a Super Agent that it
+demonstrably launched, or answers "I don't have any context about X" for a
+topic it handled an hour before. It can still see the agent in the live
+`super_agents_recent` list, so it describes the thread accurately while
+denying having started it.
+
+### Root cause
+
+The dispatcher's Claude conversation is one shared native session
+(`~/.openbase/claude_config/projects/-Users-<user>/<session>.jsonl`), but
+several LiveKit worker processes (and any long-lived MCP server holding a
+`ClaudeAgentSdkClient`) each keep their own Claude CLI subprocess attached to
+it. Concurrent writers interleave the transcript's parent chains, and a CLI
+left connected past its worker's lifetime flushes buffered entries (e.g. a
+stop-hook summary) after another worker's turns. Claude Code resumes from the
+chain of the *last line* in the file, so the next call forks the conversation
+from a stale leaf and every turn recorded on the other branch becomes
+invisible to the model.
+
+### Diagnosis
+
+In the session jsonl, look for an entry whose timestamp is older than the
+entries physically before it (a late flush), and trace `parentUuid` from the
+first post-gap user message — it will point at the stale leaf, skipping the
+"forgotten" turns.
+
+### Fix
+
+Fixed on staging (super-agents `e8cced8`, cli `2ecff2d`): the store tracks
+which client instance ran each session's last turn so stale cached CLIs
+disconnect and re-resume, `ClaudeAgentSdkClient.close()` flushes CLIs at room
+end via `LiveKitVoiceRouter.close()`, and a per-session flock serializes
+turns across processes. If this recurs on an install predating those
+commits, update it; the forked (orphaned) turns cannot be re-attached.
