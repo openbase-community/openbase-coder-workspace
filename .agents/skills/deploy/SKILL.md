@@ -1,30 +1,73 @@
 ---
 name: deploy
-description: Run a full Openbase Coder deployment — super-agents to PyPI when changed, CLI auto-release from main, desktop DMG publish with the released CLI seed. Use when asked to deploy, release, or ship Openbase Coder.
+description: Run a full Openbase deployment — promote both openbase-cloud and openbase-coder staging to main, then run the dependent CLI/desktop release and Cloud deploy checks. Use when asked to deploy, release, or ship Openbase.
 ---
 
-# Openbase Coder Deployment
+# Openbase Deployment
 
-Full production deploy, in dependency order. The contract behind each step is
-the workspace `AUTO_UPDATE.md`; this skill is the operational runbook.
+Full production deploy, in dependency order. This workflow covers both sibling
+multi workspaces:
 
-Dependency graph: super-agents (PyPI) → CLI standalone package (GitHub
-Releases, via auto-release) → desktop DMG (S3, bundles the released CLI as
-its first-install seed). Sibling JS repos (console, coder-react, multi-react,
-boilersync-react, skills) are baked into the CLI package from their main
-branches. The cloud backbone (openbase-cloud) deploys independently via
-`openbase-deploy` and must already serve any API contract the release needs.
+- `../openbase-cloud-workspace`: Cloud API/web/PaaS/dev-ami inputs.
+- `openbase-coder-workspace`: local Coder CLI/console/apps/desktop release
+  inputs.
+
+The contract behind the Coder release side is the workspace `AUTO_UPDATE.md`;
+this skill is the operational runbook.
+
+Dependency graph: openbase-cloud API contract → super-agents (PyPI, only when
+changed) → CLI standalone package (GitHub Releases, via auto-release) →
+desktop DMG (S3, bundles the released CLI as its first-install seed). Sibling
+JS repos (console, coder-react, multi-react, boilersync-react, skills) are
+baked into the CLI package from their main branches.
 
 ## 0. Preconditions
 
-- All repos committed and pushed on `staging`; cli suite green
-  (`cd cli && uv run pytest`), console/desktop typechecks clean.
+- All repos in both workspaces committed and pushed on `staging`; cli suite
+  green (`cd cli && uv run pytest`), console/desktop typechecks clean, and
+  Cloud API tests green for any API changes.
 - No parallel agent mid-commit in these repos.
 - This Mac has: the `openbase-coder-desktop` notarytool keychain profile, a
   Developer ID identity in the keychain, default AWS credentials for the
   releases bucket.
 
-## 1. super-agents first (only when it changed)
+## 1. Promote openbase-cloud-workspace → main first
+
+Promote every Cloud workspace repo's `staging` to `main` before Coder's CLI
+release. This ensures production Cloud serves any API contract that the Coder
+release expects.
+
+Use remote fast-forwards when possible so local unrelated dirty files do not
+block the deploy. If `origin/main` is not an ancestor of `origin/staging`, stop
+and linearize that repo intentionally.
+
+```bash
+cd ../openbase-cloud-workspace
+for r in . api auth-client api-core dev-ami web; do
+  git -C "$r" fetch origin --quiet
+  git -C "$r" rev-parse --verify --quiet origin/staging >/dev/null || continue
+  [ -z "$(git -C "$r" log --oneline origin/main..origin/staging)" ] && continue
+  git -C "$r" merge-base --is-ancestor origin/main origin/staging
+  git -C "$r" push origin origin/staging:main
+done
+```
+
+Gate before moving on — this must print nothing:
+
+```bash
+for r in . api auth-client api-core dev-ami web; do
+  git -C "$r" fetch origin --quiet
+  git -C "$r" rev-parse --verify --quiet origin/staging >/dev/null || continue
+  git -C "$r" log --oneline origin/main..origin/staging |
+    sed "s|^|UNMERGED cloud $r: |"
+done
+```
+
+If Cloud API or web changed, run the appropriate PaaS deploy/release monitor
+from the `openbase-deploy` skill after `main` moves. Do not assume GitHub ref
+promotion alone means ECS/static deployment finished.
+
+## 2. super-agents first (only when it changed)
 
 The release build resolves super-agents **from PyPI** via the cli pin —
 workspace path sources are dev-only. Shipping new super-agents code requires
@@ -46,13 +89,13 @@ main commit, not the staging merge commit. A tag pushed before main is fixed
 can publish content from the staging DAG even if the later main tree is
 equivalent.
 
-## 2. Merge release inputs → main — cli last, desktop after cli
+## 3. Promote openbase-coder-workspace → main — cli last, desktop after cli
 
-**Every** repo's staging moves to main in this step, in one sitting — not
-just the repos you remember touching. A repo left on staging is silently
-baked into the release at its older main and nothing fails: the release's
-sibling-move guard only catches mains moving *during* the build, never a
-forgotten merge.
+**Every** Coder workspace repo's staging moves to main in this step, in one
+sitting — not just the repos you remember touching. A repo left on staging is
+silently baked into the release at its older main and nothing fails: the
+release's sibling-move guard only catches mains moving *during* the build,
+never a forgotten merge.
 
 Merge every non-cli/non-desktop repo first (repos without a staging branch or
 with no delta are skipped). Hold desktop until step 4: pushing desktop main
@@ -102,7 +145,7 @@ commit if you are moving cli main without intending a release.
 - Do not push desktop main here. Desktop publishes after the CLI release has
   completed and its assets are downloadable.
 
-## 3. CLI auto-release
+## 4. CLI auto-release
 
 Pushing cli main runs `auto-release.yml` (minor bump by default;
 `[release patch]`/`[release major]`/`[skip release]` head-commit overrides).
@@ -133,7 +176,7 @@ to pick up a new `openbase-coder` baseline, publish `openbase-coder` to PyPI via
 a directly pushed tag first; auto-release-created tags do not trigger PyPI, and
 `dev-ami/setup.sh` installs the CLI with `uv tool install openbase-coder`.
 
-## 4. Desktop DMG publish
+## 5. Desktop DMG publish
 
 **CI is the publisher.** Pushing desktop `main` runs `electron-rebuild.yml`,
 which builds, signs, notarizes, and publishes the DMG/zip/feed to S3
@@ -203,11 +246,13 @@ pnpm run dist:mac:publish
 | openbase-cloud API (`openbase-deploy`, warm cache) | ~7 min (build ~4, rollout ~3.5) |
 | Static sites (web/marketing) | ~20 s after local build |
 
-## 5. Post-deploy checks
+## 6. Post-deploy checks
 
 - `openbase-coder self-update --check` on a standalone install reports the
   new version.
 - An installed desktop app (lower version) offers "Restart to update".
+- Cloud health endpoint responds, and any Cloud deploy run that was triggered
+  from `openbase-cloud-workspace` finished successfully.
 - Device registration still green:
   `uv run python -c "from openbase_coder_cli.services.cloud_registration import register_and_report; print(register_and_report().ok)"`.
 
