@@ -323,6 +323,53 @@ Connected to LiveKit room
 dispatch_timing stage=agent_session_start_complete
 ```
 
+## livekit-server Crash-Loops With No Log Output (Code Signature Invalid)
+
+### Symptoms Seen
+
+`openbase-coder services status` flaps between `running` and
+`loaded (not running)`; `launchctl list com.openbase.coder.livekit-server`
+shows `"LastExitStatus" = 9`; `~/.openbase/logs/livekit-server.log` gains no
+new lines on start attempts (the process dies before LiveKit logs anything);
+running `~/.openbase/bin/livekit-server --version` by hand prints nothing and
+exits 137.
+
+### Diagnosis
+
+Check the newest `livekit-server-*.ips` crash report in
+`~/Library/Logs/DiagnosticReports`. The tell is:
+
+```text
+"signal": "SIGKILL (Code Signature Invalid)", "termination": {"namespace": "CODESIGNING", "indicator": "Invalid Page"}
+```
+
+macOS kills the binary at page-in because its content no longer matches its
+code signature. Root cause: the pinned-livekit installer used to
+`shutil.copy2` the new binary over the old signed file in place, leaving the
+kernel's per-vnode signature cache poisoned (the running server can even keep
+executing the *old* version's cached pages until a restart exposes the
+corruption). Fixed in cli `6dd3386` (stage + rename into place), but any
+binary corrupted before that fix stays broken. Note `codesign -v` may still
+report the file as valid on disk — trust the crash report, not codesign.
+
+### Fix
+
+Delete and reinstall the binary, then bounce server and agent together (see
+the WebRTC-timeout section above):
+
+```sh
+rm ~/.openbase/bin/livekit-server
+./.venv/bin/python -c 'from openbase_coder_cli.livekit_install import ensure_pinned_livekit_server; print(ensure_pinned_livekit_server())'
+~/.openbase/bin/livekit-server --version   # must print the pinned version
+```
+
+Also check the livekit-agent: while the server was down it may have exhausted
+its reconnect attempts ("failed to connect to livekit, retrying" then
+"Error in _connection_task" in `livekit-agent.log`) and, on installs
+predating cli `6dd3386`, it then lingers forever without re-registering —
+restart it. Newer installs exit and relaunch via the worker watchdog
+automatically.
+
 ## Dispatcher Amnesia ("I didn't start that agent") On The Claude Backend
 
 ### Symptom
