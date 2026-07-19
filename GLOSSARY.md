@@ -26,7 +26,8 @@ spend API credits and produce audible speech.
 **Desktop app**: The macOS Electron app. It bundles and activates the
 standalone CLI runtime, runs guided first-time setup, and hosts the dashboard
 UI plus Electron-only features (auto-update, LiveKit companion screen
-sharing, deep links).
+sharing, deep links). Its visible app name is **Openbase**; compatibility
+identifiers and the underlying `openbase-coder` CLI keep their technical names.
 
 **Installation pathways**: The only sanctioned ways to install Openbase
 Coder, kept deliberately few and strict. (1) **Dev setup** — clone
