@@ -1,6 +1,7 @@
 {
   "name": "openbase-coder-workspace",
   "private": true,
+  "license": "MIT",
   "packageManager": "pnpm@10.18.0",
   "pnpm": {
     "onlyBuiltDependencies": [
