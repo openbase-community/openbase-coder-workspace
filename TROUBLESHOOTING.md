@@ -409,3 +409,39 @@ disconnect and re-resume, `ClaudeAgentSdkClient.close()` flushes CLIs at room
 end via `LiveKitVoiceRouter.close()`, and a per-session flock serializes
 turns across processes. If this recurs on an install predating those
 commits, update it; the forked (orphaned) turns cannot be re-attached.
+
+## Onboarding Says "Logged In With Openbase Cloud" But Other Surfaces Disagree
+
+### Symptom
+
+The desktop onboarding login step (or `GET /api/onboarding/status/`) reports
+the user is signed in to Openbase Cloud, while the dispatcher voice agent,
+console, or cloud heartbeat report "not logged in" / "sign in to Openbase
+Cloud again".
+
+### Root cause (historical)
+
+Before cli/desktop staging 2026-07-20, onboarding surfaces only checked that
+`~/.openbase/auth.json` contained a token string (presence), while every
+runtime surface actually refreshed the token against
+`app.openbase.cloud` (validity). A refresh token the server had
+expired/rotated/revoked stayed on disk forever, so presence checks said
+"logged in" indefinitely.
+
+### Source of truth (current)
+
+`TokenManager.login_status()` (cli `config/token_manager.py`) is the single
+answer: `logged_in` / `logged_out` / `login_expired`, validated against the
+cloud with a short cache. A definitive refresh rejection is persisted as
+`refresh_rejected_at` in `auth.json`, so every process — including the
+desktop Electron app, which shells out to `openbase-coder auth status
+--json` and falls back to reading the file — reports the same state.
+`/api/auth/session/`, `/api/onboarding/status/` (`authenticated` +
+`auth_status`), `openbase-coder doctor`, and desktop onboarding all consume
+it.
+
+### Diagnosis
+
+Run `openbase-coder auth status --json`. If `login_expired`, the stored
+refresh token was rejected — run `openbase-coder login` again. If surfaces
+still disagree, the install predates the consolidation; update it.
