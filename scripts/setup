@@ -80,6 +80,7 @@ popd
 SETUP_ARGS=("$@")
 SETUP_ARGS_COUNT=$#
 HAS_WORKSPACE_DIR=false
+HAS_AUDIO_PROVIDER=false
 
 prepend_setup_args() {
   if [ "$SETUP_ARGS_COUNT" -eq 0 ]; then
@@ -95,6 +96,9 @@ for arg in "$@"; do
     --workspace-dir|--workspace-dir=*)
       HAS_WORKSPACE_DIR=true
       ;;
+    --audio-provider|--audio-provider=*)
+      HAS_AUDIO_PROVIDER=true
+      ;;
   esac
 done
 
@@ -102,8 +106,23 @@ if [ "$HAS_WORKSPACE_DIR" = false ]; then
   prepend_setup_args --workspace-dir "$ROOT_DIR"
 fi
 
+if [ "$HAS_AUDIO_PROVIDER" = false ]; then
+  echo "Development setup defaults to free local audio (Kokoro + MLX Whisper)."
+  prepend_setup_args --audio-provider local
+fi
+
 pushd "${ROOT_DIR}"/cli
 uv run openbase-coder setup "${SETUP_ARGS[@]}"
 popd
 
-echo "Setup complete! Please restart your IDE, then you can run your project with the VS Code run button."
+cat <<'EOF'
+
+Development setup complete.
+
+Next:
+  1. Run: openbase-coder login
+  2. Run: openbase-coder doctor
+  3. Start a voice call from the web console or your paired phone.
+
+The local voice models were downloaded and verified before services started.
+EOF
