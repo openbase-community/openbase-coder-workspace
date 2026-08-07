@@ -12,6 +12,7 @@
     "manual:e2e:ios:parallel-agents-truth": "OPENBASE_E2E_ALLOW_REAL_CODEX=1 OPENBASE_E2E_CONFIRM_REAL_CODEX=1 wdio run appium.config.ts --suite parallelAgentsTruth",
     "manual:e2e:ios:orphaned-answer-recovery": "OPENBASE_E2E_ALLOW_REAL_CODEX=1 OPENBASE_E2E_CONFIRM_REAL_CODEX=1 wdio run appium.config.ts --suite orphanedAnswerRecovery",
     "manual:e2e:ios:double-turn-commit-diagnosis": "OPENBASE_E2E_ALLOW_REAL_CODEX=1 OPENBASE_E2E_CONFIRM_REAL_CODEX=1 wdio run appium.config.ts --suite doubleTurnCommitDiagnosis",
+    "manual:e2e:ios:account-creation": "OPENBASE_E2E_ALLOW_REAL_CODEX=1 OPENBASE_E2E_CONFIRM_REAL_CODEX=1 wdio run appium.config.ts --suite accountCreation",
     "e2e:ios:audio:check": "tsx support/audio/checkAudio.ts",
     "e2e:voice:check": "tsx support/voice/checkVoiceTools.ts",
     "e2e:ios:install-driver": "appium driver install xcuitest"

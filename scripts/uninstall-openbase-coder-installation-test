@@ -1,0 +1,329 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+ROOT_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
+
+CONFIRM=false
+DRY_RUN=false
+SKIP_CLOUD_DEREGISTER=false
+SKIP_PACKAGE_UNINSTALL=false
+RUN_PIP_UNINSTALL=false
+DELETE_STATE=false
+TAILSCALE_SERVE_RESET=false
+
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/uninstall-openbase-coder-installation-test --yes [options]
+
+Reset local Openbase Coder installation state before a bundled Electron
+installation test. The script deregisters the signed-in account's cloud devices,
+stops services, archives ~/.openbase, removes the desktop app and Electron
+state, and removes common persistent CLI installs.
+
+Options:
+  --yes                         Required unless --dry-run is used.
+  --dry-run                     Print the reset plan without changing state.
+  --skip-cloud-device-deregister
+                                Skip cloud device registry cleanup. Use only
+                                after handling the registry another way.
+  --skip-package-uninstall      Do not run uv/pipx package uninstall cleanup.
+  --pip-uninstall               Also run python3 -m pip uninstall -y
+                                openbase-coder. Off by default to avoid
+                                mutating the active Python environment.
+  --tailscale-serve-reset       Run tailscale serve reset. Use only when this
+                                machine uses Tailscale Serve only for Openbase.
+  -h, --help                    Show this help.
+EOF
+}
+
+log() {
+  printf '%s\n' "$*"
+}
+
+die() {
+  printf 'error: %s\n' "$*" >&2
+  exit 1
+}
+
+run() {
+  printf '+'
+  printf ' %q' "$@"
+  printf '\n'
+  if [ "$DRY_RUN" = false ]; then
+    "$@"
+  fi
+}
+
+try_run() {
+  printf '+'
+  printf ' %q' "$@"
+  printf ' || true\n'
+  if [ "$DRY_RUN" = false ]; then
+    "$@" || true
+  fi
+}
+
+require_command() {
+  local command_name="$1"
+  command -v "$command_name" >/dev/null 2>&1 || die "$command_name is required"
+}
+
+json_pretty_print() {
+  local path="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -m json.tool "$path" || cat "$path"
+  else
+    cat "$path"
+  fi
+}
+
+for arg in "$@"; do
+  case "$arg" in
+    --yes)
+      CONFIRM=true
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      ;;
+    --skip-cloud-device-deregister)
+      SKIP_CLOUD_DEREGISTER=true
+      ;;
+    --skip-package-uninstall)
+      SKIP_PACKAGE_UNINSTALL=true
+      ;;
+    --pip-uninstall)
+      RUN_PIP_UNINSTALL=true
+      ;;
+    --tailscale-serve-reset)
+      TAILSCALE_SERVE_RESET=true
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      die "unknown argument: $arg"
+      ;;
+  esac
+done
+
+if [ "$CONFIRM" = false ] && [ "$DRY_RUN" = false ]; then
+  usage >&2
+  die "refusing to reset installation state without --yes"
+fi
+
+deregister_cloud_devices() {
+  if [ "$SKIP_CLOUD_DEREGISTER" = true ]; then
+    log "Skipping cloud device registry cleanup by request."
+    return
+  fi
+
+  local backend
+  backend="$(
+    awk -F= '/^OPENBASE_CODER_CLI_WEB_BACKEND_URL=/{print $2}' "$HOME/.openbase/.env" 2>/dev/null \
+      | tail -n 1 \
+      || true
+  )"
+  backend="${backend:-https://app.openbase.cloud}"
+
+  if [ "$DRY_RUN" = true ]; then
+    log "Would deregister all Openbase Cloud devices for the signed-in account at $backend."
+    return
+  fi
+
+  require_command curl
+  require_command openbase-coder
+
+  local token
+  token="$(openbase-coder auth print-access-token 2>/dev/null | tail -n 1 || true)"
+  if [ -z "$token" ]; then
+    die "no Openbase access token available; cloud device registry was not wiped"
+  fi
+
+  local deregister_response
+  local onboarding_state
+  deregister_response="$(mktemp)"
+  onboarding_state="$(mktemp)"
+
+  curl -fsS \
+    -X POST \
+    -H "Authorization: Bearer $token" \
+    -H "Content-Type: application/json" \
+    -d '{"all":true}' \
+    "$backend/api/openbase/devices/deregister/" \
+    > "$deregister_response"
+
+  log "Cloud device deregister response:"
+  json_pretty_print "$deregister_response"
+
+  curl -fsS \
+    -H "Authorization: Bearer $token" \
+    "$backend/api/openbase/onboarding/state/" \
+    > "$onboarding_state"
+
+  log "Cloud onboarding state after deregister:"
+  json_pretty_print "$onboarding_state"
+
+  require_command python3
+  python3 - "$onboarding_state" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    state = json.load(handle)
+
+desktop_count = int(state.get("desktop_count", -1))
+mobile_count = int(state.get("mobile_count", -1))
+if desktop_count != 0 or mobile_count != 0:
+    raise SystemExit(
+        "cloud device registry still has "
+        f"{desktop_count} desktop(s) and {mobile_count} mobile(s)"
+    )
+PY
+  rm -f "$deregister_response" "$onboarding_state"
+}
+
+cleanup_services() {
+  log "Stopping Openbase services."
+  local used_cli=false
+  if command -v openbase-coder >/dev/null 2>&1; then
+    printf '+ openbase-coder services uninstall\n'
+    if [ "$DRY_RUN" = false ] && openbase-coder services uninstall; then
+      used_cli=true
+    elif [ "$DRY_RUN" = true ]; then
+      used_cli=true
+    fi
+  fi
+
+  if [ "$used_cli" = false ]; then
+    log "Falling back to manual service cleanup."
+  fi
+
+  if [ "$(uname -s)" = "Darwin" ]; then
+    for plist in "$HOME"/Library/LaunchAgents/com.openbase.coder.*.plist; do
+      [ -e "$plist" ] || continue
+      try_run launchctl bootout "gui/$(id -u)" "$plist"
+    done
+    try_run rm -f "$HOME"/Library/LaunchAgents/com.openbase.coder.*.plist
+  fi
+
+  if command -v systemctl >/dev/null 2>&1; then
+    try_run systemctl --user stop 'com.openbase.coder.*.service'
+    try_run rm -f "$HOME"/.config/systemd/user/com.openbase.coder.*.service
+    try_run systemctl --user daemon-reload
+  fi
+}
+
+quit_desktop_app() {
+  if [ "$(uname -s)" != "Darwin" ]; then
+    return
+  fi
+
+  log "Quitting Openbase Coder desktop app."
+  try_run osascript -e 'tell application "Openbase Coder" to quit'
+  if [ "$DRY_RUN" = false ]; then
+    for _ in 1 2 3 4 5; do
+      pgrep -x "Openbase Coder" >/dev/null || break
+      sleep 1
+    done
+  fi
+  try_run pkill -x "Openbase Coder"
+  if [ "$DRY_RUN" = false ] && pgrep -x "Openbase Coder" >/dev/null; then
+    die "Openbase Coder is still running; stop it before continuing"
+  fi
+}
+
+cleanup_cli_packages() {
+  if [ "$SKIP_PACKAGE_UNINSTALL" = true ]; then
+    log "Skipping persistent CLI package uninstall by request."
+    return
+  fi
+
+  log "Removing common persistent CLI package installs."
+  if command -v uv >/dev/null 2>&1; then
+    try_run uv tool uninstall openbase-coder
+  fi
+  if command -v pipx >/dev/null 2>&1; then
+    try_run pipx uninstall openbase-coder
+  fi
+  if [ "$RUN_PIP_UNINSTALL" = true ]; then
+    require_command python3
+    try_run python3 -m pip uninstall -y openbase-coder
+  else
+    log "Skipping pip uninstall; pass --pip-uninstall if this install used pip."
+  fi
+  try_run rm -f "$HOME"/.local/bin/openbase-coder
+}
+
+archive_state() {
+  if [ ! -d "$HOME/.openbase" ]; then
+    log "No ~/.openbase directory found."
+    return
+  fi
+
+  local backup
+  backup="$HOME/.openbase.backup.$(date +%Y%m%d-%H%M%S)"
+  run mv "$HOME/.openbase" "$backup"
+  log "Archived Openbase state at $backup"
+}
+
+remove_desktop_state() {
+  if [ "$(uname -s)" != "Darwin" ]; then
+    return
+  fi
+
+  log "Removing desktop app and Electron state."
+  run rm -rf "/Applications/Openbase Coder.app"
+  run rm -rf "$HOME/Library/Application Support/@openbase/coder-desktop"
+  run rm -rf "$HOME/Library/Application Support/openbase-coder-desktop"
+  run rm -rf "$HOME/Library/Application Support/coder-desktop"
+
+  run rm -rf "$HOME/Library/Caches/@openbasecoder-desktop-updater"
+  run rm -rf "$HOME/Library/Caches/tech.openbase.coder.desktop" \
+    "$HOME/Library/Caches/tech.openbase.coder.desktop.ShipIt" \
+    "$HOME/Library/Caches/tech.openbase.coder.LiveKitCompanion"
+  try_run defaults delete tech.openbase.coder.desktop
+  try_run defaults delete tech.openbase.coder.LiveKitCompanion
+  run rm -rf "$HOME/Library/HTTPStorages/tech.openbase.coder.desktop" \
+    "$HOME/Library/HTTPStorages/tech.openbase.coder.LiveKitCompanion" \
+    "$HOME/Library/HTTPStorages/tech.openbase.coder.LiveKitCompanion.binarycookies"
+  run rm -rf "$HOME/Library/Saved Application State/tech.openbase.coder.desktop.savedState"
+}
+
+remove_managed_claude_keychain() {
+  if [ "$(uname -s)" != "Darwin" ]; then
+    return
+  fi
+  if ! command -v security >/dev/null 2>&1; then
+    return
+  fi
+  require_command python3
+
+  local suffix
+  suffix="$(python3 -c 'import hashlib,os;print(hashlib.sha256(os.path.expanduser("~/.openbase/claude_config").encode()).hexdigest()[:8])')"
+  log "Removing Openbase-managed Claude Code credential if present."
+  try_run security delete-generic-password -s "Claude Code-credentials-$suffix"
+}
+
+maybe_reset_tailscale_serve() {
+  if [ "$TAILSCALE_SERVE_RESET" = false ]; then
+    log "Skipping Tailscale Serve reset; pass --tailscale-serve-reset only when Openbase is the sole Serve user."
+    return
+  fi
+  require_command tailscale
+  run tailscale serve reset
+}
+
+log "Resetting Openbase Coder installation-test state from $ROOT_DIR."
+deregister_cloud_devices
+cleanup_services
+quit_desktop_app
+cleanup_cli_packages
+archive_state
+remove_desktop_state
+remove_managed_claude_keychain
+maybe_reset_tailscale_serve
+log "Openbase Coder installation-test uninstall/reset complete."

@@ -77,138 +77,38 @@ test, such as `desktop`, `cli`, `console`, `ios`, and cloud `api`.
 
 ## Reset Existing Installation State
 
-This is the first active step of every installation test. Before installing a
-fresh app, archive the existing CLI runtime state and run the uninstall cleanup
-steps from the published uninstall docs:
-
-https://docs.openbase.cloud/uninstall/
-
-Before archiving `~/.openbase`, wipe the signed-in test account's Openbase Cloud
-device registry so phone-link and pairing steps cannot auto-pass because of a
-previous run. This must happen before local auth is removed. If there is no
-usable existing Openbase login, pause and have Gabe sign in or clear the cloud
-registry through an authenticated backend/admin path; do not call the test a
-clean installation test while stale cloud devices may remain.
+This is the first active step of every installation test. Always start by
+uninstalling/resetting existing local installation state with the workspace
+script:
 
 ```bash
-backend="$(
-  awk -F= '/^OPENBASE_CODER_CLI_WEB_BACKEND_URL=/{print $2}' "$HOME/.openbase/.env" 2>/dev/null \
-    | tail -n 1
-)"
-backend="${backend:-https://app.openbase.cloud}"
-token="$(openbase-coder auth print-access-token 2>/dev/null | tail -n 1)"
-
-if [ -z "$token" ]; then
-  echo "No Openbase access token available; cloud device registry was not wiped."
-  exit 1
-fi
-
-curl -fsS \
-  -X POST \
-  -H "Authorization: Bearer $token" \
-  -H "Content-Type: application/json" \
-  -d '{"all":true}' \
-  "$backend/api/openbase/devices/deregister/"
-
-curl -fsS \
-  -H "Authorization: Bearer $token" \
-  "$backend/api/openbase/onboarding/state/"
+./scripts/uninstall-openbase-coder-installation-test --yes
 ```
 
-Verify the final onboarding state shows zero desktops and zero mobiles before
-continuing. If the backend does not support `devices/deregister/` yet, report
-that limitation explicitly and use a backend-side admin cleanup for the same
-signed-in account instead of silently continuing.
+The script archives `~/.openbase` by default, removes desktop/Electron state,
+uninstalls managed services, removes common persistent CLI installs, removes
+only Openbase's managed Claude Code keychain credential, and leaves the normal
+Claude Code login alone. It also wipes the signed-in test account's Openbase
+Cloud device registry before local auth is removed and verifies that the
+onboarding state returns zero desktops and zero mobiles.
 
-Do service cleanup first. If the CLI still runs, prefer:
+If the script does not work, debug and fix `scripts/uninstall-openbase-coder-installation-test`
+directly, then rerun it. Do not replace it with copied manual uninstall steps
+in this skill; the script is the maintained source of the installation-test
+reset behavior.
 
-```bash
-openbase-coder services uninstall
-```
+If there is no usable existing Openbase login, the script exits before removing
+local auth. Pause and have Gabe sign in or clear the cloud registry through an
+authenticated backend/admin path; do not call the test a clean installation
+test while stale cloud devices may remain.
 
-If the CLI is broken or unavailable, manually stop and remove macOS launchd
-jobs:
-
-```bash
-for plist in "$HOME"/Library/LaunchAgents/com.openbase.coder.*.plist; do
-  [ -e "$plist" ] || continue
-  launchctl bootout "gui/$(id -u)" "$plist" 2>/dev/null || true
-done
-
-rm -f "$HOME"/Library/LaunchAgents/com.openbase.coder.*.plist
-```
-
-Before deleting the app bundle or Electron storage, quit any running desktop
-app instance and verify it exited. Otherwise macOS `open` may focus an existing
-process with in-memory onboarding state instead of starting the newly installed
-bundle, which invalidates the first-launch installation test.
-
-```bash
-osascript -e 'tell application "Openbase Coder" to quit' 2>/dev/null || true
-for _ in 1 2 3 4 5; do
-  pgrep -x "Openbase Coder" >/dev/null || break
-  sleep 1
-done
-pkill -x "Openbase Coder" 2>/dev/null || true
-pgrep -x "Openbase Coder" && {
-  echo "Openbase Coder is still running; stop it before continuing."
-  exit 1
-}
-```
-
-Only after service jobs are stopped and deleted, archive `~/.openbase` instead
-of deleting it:
-
-```bash
-if [ -d "$HOME/.openbase" ]; then
-  backup="$HOME/.openbase.backup.$(date +%Y%m%d-%H%M%S)"
-  mv "$HOME/.openbase" "$backup"
-  echo "Archived Openbase state at $backup"
-fi
-```
-
-Then remove the existing desktop app and Electron state so the reinstall does
-not silently reuse old app storage:
-
-```bash
-rm -rf "/Applications/Openbase Coder.app"
-rm -rf "$HOME/Library/Application Support/@openbase/coder-desktop"
-rm -rf "$HOME/Library/Application Support/openbase-coder-desktop"
-rm -rf "$HOME/Library/Application Support/coder-desktop"
-
-rm -rf "$HOME/Library/Caches/@openbasecoder-desktop-updater"
-rm -rf "$HOME/Library/Caches/tech.openbase.coder.desktop" \
-       "$HOME/Library/Caches/tech.openbase.coder.desktop.ShipIt" \
-       "$HOME/Library/Caches/tech.openbase.coder.LiveKitCompanion"
-defaults delete tech.openbase.coder.desktop 2>/dev/null || true
-defaults delete tech.openbase.coder.LiveKitCompanion 2>/dev/null || true
-rm -rf "$HOME/Library/HTTPStorages/tech.openbase.coder.desktop" \
-       "$HOME/Library/HTTPStorages/tech.openbase.coder.LiveKitCompanion" \
-       "$HOME/Library/HTTPStorages/tech.openbase.coder.LiveKitCompanion.binarycookies"
-rm -rf "$HOME/Library/Saved Application State/tech.openbase.coder.desktop.savedState"
-```
-
-For a full uninstall-style reset, remove the persistent CLI package with the
-same tool that installed it when appropriate:
-
-```bash
-# Choose the command that matches how the persistent CLI was installed.
-uv tool uninstall openbase-coder
-pipx uninstall openbase-coder
-pip uninstall openbase-coder
-```
-
-Do not remove the normal Claude Code login. If the Claude Code backend was used,
-the Openbase-managed Claude credential may be removed with the scoped service
-name from the uninstall docs:
-
-```bash
-suffix=$(python3 -c 'import hashlib,os;print(hashlib.sha256(os.path.expanduser("~/.openbase/claude_config").encode()).hexdigest()[:8])')
-security delete-generic-password -s "Claude Code-credentials-$suffix" 2>/dev/null || true
-```
-
-Only run `tailscale serve reset` when Gabe confirms this machine only used
-Tailscale Serve for Openbase.
+The script does not run `pip uninstall` by default, because that can mutate the
+active Python environment. Pass `--pip-uninstall` only when the persistent CLI
+was installed with pip. Pass `--tailscale-serve-reset` only when Gabe confirms
+this machine used Tailscale Serve only for Openbase. If the backend does not
+support `devices/deregister/` yet, report that limitation explicitly and use a
+backend-side admin cleanup for the same signed-in account before rerunning the
+script with `--skip-cloud-device-deregister`.
 
 ## Build The Bundled CLI
 

@@ -59,6 +59,16 @@ sign-in, device onboarding for iPhone pairing, subscription, the
 Openbase Cloud coding backend, and Cloud DevSpace launch. (Its deployment
 tooling is separate from the Openbase Coder product surfaces.)
 
+**Openbase Cloud coding backend**: The user-facing Coder backend option
+`openbase_cloud`. It runs Claude Code through Openbase Cloud's Anthropic proxy,
+authenticated with the user's Openbase login and a local Openbase machine token,
+so users do not need a personal Anthropic account for this backend.
+
+**Openbase Cloud Codex compatibility backend**: The hidden internal backend
+value `openbase_cloud_codex`. It preserves the older Codex app-server path
+through Openbase Cloud's OpenAI/Responses-compatible proxy, but is not listed as
+a normal setup or settings choice.
+
 ## Agent Identity
 
 **Dispatcher**: The LiveKit voice-session agent that receives normal user speech
@@ -100,6 +110,17 @@ cannot operate (for example `subscription_required`, `login_required`,
 `cloud_unavailable`, or `agent_start_failed`). Payload: JSON with `type`
 (`agent_error`), `code`, `detail`, and `message_id`; clients show `detail` to
 the user instead of leaving a silent call.
+
+**Voice lifecycle packet**: A reliable LiveKit data packet on topic
+`openbase.voice.lifecycle` that the voice agent publishes from the voice
+delivery ledger for explicit conversation milestones such as
+`utterance_accepted`, `agent_audio_started`, `agent_audio_finished`, and
+`safe_to_unmute`. Each event is also mirrored onto the agent's LiveKit
+participant attribute of the same name, because data packets can be silently
+lost in transit while attributes are state-synced; clients process whichever
+transport arrives first and deduplicate by packet id. Clients use these
+events for voice diagnostics and, when available, for microphone timing
+instead of inferring every transition from broad remote agent states.
 
 ## Work Products
 

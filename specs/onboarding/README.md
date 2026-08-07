@@ -139,8 +139,11 @@ Shared `setupCLI()` step — identical to B5, implement once.
   implemented in `desktop/electron/main.cjs`; the
   `curl -fsSL .../cli/scripts/install.sh | sh` script is the standalone
   path for users without the app, and requires a published GitHub release)
-  then runs `openbase-coder setup --json-progress`, rendering the NDJSON step
-  events as a checklist (see [Setup progress protocol](#setup-progress-protocol)).
+  then runs `openbase-coder setup --backend openbase-cloud --audio-provider
+  openbase-cloud --json-progress`, rendering the NDJSON step events as a
+  checklist (see [Setup progress protocol](#setup-progress-protocol)). Direct
+  Codex, direct Claude Code, provider-key audio, and local-audio setup remain
+  CLI/settings paths, not normal Electron onboarding choices.
 - **Next:** coding agent sign-in (see
   [Coding backend sign-in](#coding-backend-sign-in)), then the remaining
   desktop steps.
@@ -166,11 +169,13 @@ auth readiness for the selected backend:
 ```
 
 `ready` means the backend can start coding sessions without an interactive
-login: Claude Code via `claude auth status` against Openbase's managed
+login: direct Claude Code via `claude auth status` against Openbase's managed
 `CLAUDE_CONFIG_DIR`, Codex via the service home's `auth.json` (setup links
 it to `~/.codex/auth.json` — even before that file exists — so a later
 `codex login` is picked up without re-running setup), and Openbase Cloud
-rides on the CLI's own cloud login (`ready` equals `authenticated`).
+rides on the CLI's own cloud login (`ready` equals `authenticated`) because
+its Claude Code sessions authenticate to the Cloud proxy with an Openbase
+machine token.
 
 The desktop renders a **backendAuth** onboarding step right after setup
 (`desktop/src/onboarding/deriveStep.ts`), derived from `backend_auth` and
@@ -250,7 +255,7 @@ Step IDs (in execution order):
 | --- | --- |
 | `workspace` | Detect the bundled runtime package, or locate the development workspace checkout (never clones) |
 | `installation_config` | Write `~/.openbase/installation.json` |
-| `env` | Generate `~/.openbase/.env` (voice provider keys) |
+| `env` | Generate `~/.openbase/.env` (Openbase Cloud backend/audio defaults) |
 | `agent_config` | Symlink Codex/Claude config and instructions |
 | `services` | Install background services (launchd/systemd) |
 | `tailscale_serve` | Configure Tailscale Serve routes |

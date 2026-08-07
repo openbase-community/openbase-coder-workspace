@@ -40,8 +40,10 @@ export const config = {
     "./specs/parallel-agents-truth.real-codex.spec.ts",
     "./specs/orphaned-answer-recovery.real-codex.spec.ts",
     "./specs/double-turn-commit-diagnosis.real-codex.spec.ts",
+    "./specs/account-creation.real-cloud.spec.ts",
   ],
   suites: {
+    accountCreation: ["./specs/account-creation.real-cloud.spec.ts"],
     basicCallResponse: ["./specs/basic-call-response.real-codex.spec.ts"],
     superagentOwnName: ["./specs/superagent-own-name.real-codex.spec.ts"],
     parallelAgentsTruth: ["./specs/parallel-agents-truth.real-codex.spec.ts"],
