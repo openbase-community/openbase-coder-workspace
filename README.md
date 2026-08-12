@@ -1,16 +1,16 @@
 # openbase-coder-workspace
 
 This is the multi-repo development workspace for
-[Openbase Coder](https://github.com/openbase-community/openbase-coder).
+[Openbase Coder](https://github.com/openbase-community/openbase).
 
 Most readers should start with the main Openbase Coder repo:
-<https://github.com/openbase-community/openbase-coder>
+<https://github.com/openbase-community/openbase>
 
 Product docs are published at <https://docs.openbase.cloud>.
 
 ## Repositories
 
-- [openbase-coder](https://github.com/openbase-community/openbase-coder) -
+- [openbase](https://github.com/openbase-community/openbase) -
   local runtime, CLI, service layer, installer, and product docs
 - [openbase-coder-console](https://github.com/openbase-community/openbase-coder-console) -
   browser-hosted Openbase Coder console
@@ -41,4 +41,4 @@ Product docs are published at <https://docs.openbase.cloud>.
 
 This repo is for contributors working across the Openbase Coder subrepos. For
 setup instructions, use the developer setup in the main Openbase Coder README:
-<https://github.com/openbase-community/openbase-coder#developer-setup>
+<https://github.com/openbase-community/openbase#developer-setup>

@@ -151,8 +151,8 @@ Pushing cli main runs `auto-release.yml` (minor bump by default;
 `[release patch]`/`[release major]`/`[skip release]` head-commit overrides).
 
 ```bash
-gh run list --repo openbase-community/openbase-coder --workflow auto-release.yml --limit 1
-gh run watch <id> --repo openbase-community/openbase-coder --exit-status
+gh run list --repo openbase-community/openbase --workflow auto-release.yml --limit 1
+gh run watch <id> --repo openbase-community/openbase --exit-status
 ```
 
 Verify the published release: assets include the tarball, SHA256SUMS,
@@ -218,7 +218,7 @@ asset exists so the desktop seed is the current CLI version.
 
 ```bash
 rm -rf /tmp/cli-seed && mkdir /tmp/cli-seed && cd /tmp/cli-seed
-gh release download v<CLI_VERSION> --repo openbase-community/openbase-coder \
+gh release download v<CLI_VERSION> --repo openbase-community/openbase \
   --pattern "openbase-coder-package-aarch64-apple-darwin.tar.gz"
 tar xzf openbase-coder-package-*.tar.gz && rm openbase-coder-package-*.tar.gz
 ```

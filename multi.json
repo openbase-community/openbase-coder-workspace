@@ -15,7 +15,7 @@
     },
     {
       "name": "cli",
-      "url": "https://github.com/openbase-community/openbase-coder",
+      "url": "https://github.com/openbase-community/openbase",
       "description": "CLI for Openbase Coder.  This runs a Django server that provides git diffs for repos across the file system.",
       "installSets": ["default", "dev"]
     },
