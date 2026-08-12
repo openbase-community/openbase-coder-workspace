@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+
+# Promote branches across the workspace repos, in dependency order, as a
+# fast-forward-only burst.
+#
+# Providers are pushed before consumers so anything that rebuilds on a branch
+# push always sees its dependencies already advanced, and pushes land close
+# together. Repos whose branches are already even are skipped entirely so
+# they trigger no rebuild/release.
+#
+# Order rationale: super-agents is the Python lib cli and agent-work-scheduler
+# build against; coder-react is the JS lib console/desktop consume; the cli
+# standalone release embeds console/coder-react/skills/super-agents at build
+# time, so all of those land before cli. Pushing main auto-cuts the cli
+# standalone release (auto-release.yml), the desktop AppImage to S3
+# (electron-rebuild.yml), and the ios App Store upload. multi-react and
+# boilersync-react are external symlinks — promote them in their own
+# workspaces (~/Projects/multi, ~/Projects/boilersync) first if they changed.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+
+# Dependency order: providers before consumers; workspace root last.
+REPOS=(super-agents skills coder-react console cli agent-work-scheduler desktop allauth-client-swift ios allauth-client-kotlin android .)
+
+EXTERNAL_NOTE="multi-react and boilersync-react are external symlinks — promote them in their own workspaces first if they changed"
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") FROM TO [options]
+
+Fast-forward FROM into TO across every workspace repo, provider-first
+(${REPOS[*]}). FROM and TO are any branch names — feature branches work too;
+repos that do not have FROM are skipped, as are repos already even (no
+rebuild/release triggered). Aborts before pushing anything if any repo cannot
+fast-forward, or if promoted content pins a sibling repo to a less-stable
+branch ref (e.g. git+...@staging landing on main — main must point to main).
+
+Examples:
+  $(basename "$0") staging main
+  $(basename "$0") dev staging
+  $(basename "$0") feature/my-feature staging
+
+Options:
+  --dry-run   Show the plan and exit without pushing.
+  -y, --yes   Push without the confirmation prompt.
+  -h, --help  Show this help text.
+EOF
+}
+
+DRY_RUN=0
+ASSUME_YES=0
+FROM=""
+TO=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run) DRY_RUN=1 ;;
+        -y|--yes) ASSUME_YES=1 ;;
+        -h|--help) usage; exit 0 ;;
+        -*) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+        *)
+            if [[ -z "$FROM" ]]; then FROM="$1"
+            elif [[ -z "$TO" ]]; then TO="$1"
+            else echo "Unexpected argument: $1" >&2; usage >&2; exit 2
+            fi
+            ;;
+    esac
+    shift
+done
+
+if [[ -z "$FROM" || -z "$TO" ]]; then
+    usage >&2
+    exit 2
+fi
+if [[ "$FROM" == "$TO" ]]; then
+    echo "FROM and TO must differ." >&2
+    exit 2
+fi
+
+repo_label() {
+    if [[ "$1" == "." ]]; then echo "workspace-root"; else echo "$1"; fi
+}
+
+# "Main points to main": content promoted into a stabler branch must not pin
+# sibling repos to a less-stable branch ref. Branch-agnostic dep forms
+# (file:../, workspace:*, PyPI pins) pass by construction; only branch-pinned
+# git URLs are flagged. Prints offending lines; returns 0 when clean.
+check_branch_refs() {
+    local dir="$1" rev="$2" guarded=""
+    case "$TO" in
+        main|master) guarded='staging|dev' ;;
+        staging) guarded='dev' ;;
+        *) return 0 ;;
+    esac
+    local pattern="(git\\+http|github:|git@github)[^\"'[:space:]]*[@#](${guarded})([^A-Za-z0-9_-]|\$)"
+    ! git -C "$dir" grep -nIE "$pattern" "$rev" -- 2>/dev/null
+}
+
+declare -a PLAN_REPO PLAN_ACTION PLAN_DETAIL
+FAILED=0
+
+echo "Planning promotion ${FROM} -> ${TO} ..."
+if [[ -n "${EXTERNAL_NOTE:-}" ]]; then
+    echo "note: ${EXTERNAL_NOTE}"
+fi
+for repo in "${REPOS[@]}"; do
+    dir="${ROOT_DIR}/${repo}"
+    label="$(repo_label "$repo")"
+    git -C "$dir" fetch origin --quiet
+    if ! from_sha="$(git -C "$dir" rev-parse --verify --quiet "origin/${FROM}")"; then
+        PLAN_REPO+=("$label"); PLAN_ACTION+=(skip); PLAN_DETAIL+=("no origin/${FROM} branch")
+        continue
+    fi
+    if ! to_sha="$(git -C "$dir" rev-parse --verify --quiet "origin/${TO}")"; then
+        PLAN_REPO+=("$label"); PLAN_ACTION+=(FAIL); PLAN_DETAIL+=("no origin/${TO} branch (refusing to create it)")
+        FAILED=1
+        continue
+    fi
+    if [[ "$from_sha" == "$to_sha" ]]; then
+        PLAN_REPO+=("$label"); PLAN_ACTION+=(skip); PLAN_DETAIL+=("even — no rebuild")
+        continue
+    fi
+    if git -C "$dir" merge-base --is-ancestor "$from_sha" "$to_sha"; then
+        PLAN_REPO+=("$label"); PLAN_ACTION+=(skip); PLAN_DETAIL+=("origin/${TO} already contains origin/${FROM}")
+        continue
+    fi
+    if ! git -C "$dir" merge-base --is-ancestor "$to_sha" "$from_sha"; then
+        PLAN_REPO+=("$label"); PLAN_ACTION+=(FAIL); PLAN_DETAIL+=("diverged — cannot fast-forward")
+        FAILED=1
+        continue
+    fi
+    if ! check_branch_refs "$dir" "$from_sha"; then
+        PLAN_REPO+=("$label"); PLAN_ACTION+=(FAIL); PLAN_DETAIL+=("pins a sibling repo to a less-stable branch ref (lines above) — fix the pin before promoting to ${TO}")
+        FAILED=1
+        continue
+    fi
+    count="$(git -C "$dir" rev-list --count "${to_sha}..${from_sha}")"
+    PLAN_REPO+=("$label"); PLAN_ACTION+=(push); PLAN_DETAIL+=("${count} commit(s): $(git -C "$dir" log --oneline -1 "$from_sha")")
+done
+
+PUSH_COUNT=0
+for i in "${!PLAN_REPO[@]}"; do
+    printf '  %-22s %-5s %s\n' "${PLAN_REPO[$i]}" "${PLAN_ACTION[$i]}" "${PLAN_DETAIL[$i]}"
+    [[ "${PLAN_ACTION[$i]}" == "push" ]] && PUSH_COUNT=$((PUSH_COUNT + 1))
+done
+
+if [[ "$FAILED" == "1" ]]; then
+    echo "Aborting: promotion must be all-or-nothing and at least one repo failed the checks." >&2
+    exit 1
+fi
+if [[ "$PUSH_COUNT" == "0" ]]; then
+    echo "Nothing to promote — all repos even."
+    exit 0
+fi
+if [[ "$DRY_RUN" == "1" ]]; then
+    echo "Dry run: would push ${PUSH_COUNT} repo(s)."
+    exit 0
+fi
+
+if [[ "$ASSUME_YES" != "1" ]]; then
+    printf 'Push %s repo(s) %s -> %s? Releases/rebuilds may be triggered. [y/N] ' "$PUSH_COUNT" "$FROM" "$TO"
+    read -r answer
+    if [[ "$answer" != "y" && "$answer" != "Y" ]]; then
+        echo "Aborted."
+        exit 1
+    fi
+fi
+
+for i in "${!PLAN_REPO[@]}"; do
+    [[ "${PLAN_ACTION[$i]}" != "push" ]] && continue
+    label="${PLAN_REPO[$i]}"
+    repo="${REPOS[$i]}"
+    dir="${ROOT_DIR}/${repo}"
+    echo "Pushing ${label}: origin/${FROM} -> ${TO}"
+    git -C "$dir" push origin "origin/${FROM}:refs/heads/${TO}"
+    # Keep the local TO ref current; best-effort (a checked-out TO in another
+    # worktree, or a dirty tree, just leaves the local ref behind).
+    if [[ "$(git -C "$dir" symbolic-ref --short --quiet HEAD || true)" == "$TO" ]]; then
+        git -C "$dir" merge --ff-only --quiet "origin/${TO}" || true
+    else
+        git -C "$dir" fetch origin --quiet "${TO}:${TO}" || true
+    fi
+done
+
+echo "Promoted ${PUSH_COUNT} repo(s) ${FROM} -> ${TO}."
