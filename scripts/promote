@@ -27,6 +27,18 @@ REPOS=(super-agents skills coder-react console cli agent-work-scheduler desktop 
 
 EXTERNAL_NOTE="multi-react and boilersync-react are external trunk-based projects pinned to main (multi.json fixedBranch; CI checks them out at main)"
 
+# Pre-release checks run before a production promotion (TO is main/master),
+# unless --skip-checks. Format: "label|repo dir|command|severity" where
+# severity is `fatal` (failure aborts the whole promotion) or `warn` (failure
+# only prints a warning). These mirror the deploy skill's Section 0
+# preconditions; edit this list to change what a production promotion gates on.
+PRECHECKS=(
+    "cli test suite|cli|uv run pytest -q|fatal"
+    "console typecheck|console|pnpm exec tsc --noEmit -p tsconfig.app.json|fatal"
+    "desktop typecheck|desktop|pnpm exec tsc --noEmit -p tsconfig.app.json|fatal"
+    "desktop mac-release prereqs|desktop|pnpm run release:preflight:mac|warn"
+)
+
 usage() {
     cat <<EOF
 Usage: $(basename "$0") FROM TO [options]
@@ -43,21 +55,29 @@ Examples:
   $(basename "$0") dev staging
   $(basename "$0") feature/my-feature staging
 
+Before promoting into main/master, the deploy skill's pre-release checks run
+automatically (cli test suite, console/desktop typecheck; desktop mac-release
+prereqs as a non-blocking warning). A failing fatal check aborts before any
+push. Other targets skip the checks.
+
 Options:
-  --dry-run   Show the plan and exit without pushing.
-  -y, --yes   Push without the confirmation prompt.
-  -h, --help  Show this help text.
+  --dry-run       Show the plan and exit without pushing (no checks run).
+  --skip-checks   Skip the pre-release checks (still gated on fast-forward).
+  -y, --yes       Push without the confirmation prompt.
+  -h, --help      Show this help text.
 EOF
 }
 
 DRY_RUN=0
 ASSUME_YES=0
+SKIP_CHECKS=0
 FROM=""
 TO=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --dry-run) DRY_RUN=1 ;;
+        --skip-checks) SKIP_CHECKS=1 ;;
         -y|--yes) ASSUME_YES=1 ;;
         -h|--help) usage; exit 0 ;;
         -*) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
@@ -97,6 +117,52 @@ check_branch_refs() {
     esac
     local pattern="(git\\+http|github:|git@github)[^\"'[:space:]]*[@#](${guarded})([^A-Za-z0-9_-]|\$)"
     ! git -C "$dir" grep -nIE "$pattern" "$rev" -- 2>/dev/null
+}
+
+# Run the deploy skill's pre-release checks before a production promotion.
+# Only gates when promoting into main/master; other targets (dev->staging,
+# feature->staging) skip the heavy suite. --skip-checks bypasses entirely. A
+# fatal check that fails aborts before anything is pushed.
+run_prechecks() {
+    case "$TO" in
+        main|master) : ;;
+        *) return 0 ;;
+    esac
+    if [[ "$SKIP_CHECKS" == "1" ]]; then
+        echo "Skipping pre-release checks (--skip-checks)."
+        return 0
+    fi
+    echo "Running pre-release checks before promoting to ${TO} ..."
+    local failed=0 entry label reldir cmd sev dir out
+    for entry in "${PRECHECKS[@]}"; do
+        IFS='|' read -r label reldir cmd sev <<<"$entry"
+        dir="${ROOT_DIR}/${reldir}"
+        if [[ ! -d "$dir" ]]; then
+            printf '  %-30s SKIP (no %s)\n' "$label" "$reldir"
+            continue
+        fi
+        if [[ "$cmd" == *tsc* && ! -d "$dir/node_modules" ]]; then
+            printf '  %-30s SKIP (node_modules not installed)\n' "$label"
+            continue
+        fi
+        printf '  %-30s ... ' "$label"
+        out="$(mktemp)"
+        if ( cd "$dir" && eval "$cmd" ) >"$out" 2>&1; then
+            echo "ok"
+        elif [[ "$sev" == "warn" ]]; then
+            echo "WARN (non-blocking)"
+            sed 's/^/      /' "$out" | tail -n 12
+        else
+            echo "FAIL"
+            sed 's/^/      /' "$out" | tail -n 30
+            failed=1
+        fi
+        rm -f "$out"
+    done
+    if [[ "$failed" == "1" ]]; then
+        echo "Aborting: pre-release checks failed. Fix them, or re-run with --skip-checks to override." >&2
+        exit 1
+    fi
 }
 
 declare -a PLAN_REPO PLAN_ACTION PLAN_DETAIL
@@ -159,6 +225,8 @@ if [[ "$DRY_RUN" == "1" ]]; then
     echo "Dry run: would push ${PUSH_COUNT} repo(s)."
     exit 0
 fi
+
+run_prechecks
 
 if [[ "$ASSUME_YES" != "1" ]]; then
     printf 'Push %s repo(s) %s -> %s? Releases/rebuilds may be triggered. [y/N] ' "$PUSH_COUNT" "$FROM" "$TO"

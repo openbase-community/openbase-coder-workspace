@@ -23,45 +23,34 @@ baked into the CLI package from their main branches.
 
 ## 0. Preconditions
 
-- All repos in both workspaces committed and pushed on `staging`; cli suite
-  green (`cd cli && uv run pytest`), console/desktop typechecks clean, and
-  Cloud API tests green for any API changes.
-- No parallel agent mid-commit in these repos.
-- This Mac has: the `openbase-coder-desktop` notarytool keychain profile, a
-  Developer ID identity in the keychain, default AWS credentials for the
-  releases bucket.
+- Both workspaces committed and pushed on `staging`; no parallel agent
+  mid-commit in these repos.
+- **`scripts/promote` enforces the code-quality preconditions automatically**
+  when promoting into `main`: it runs the cli test suite and the
+  console/desktop typechecks as **fatal** gates (a failure aborts before any
+  push) and the desktop mac-release prereqs as a **non-blocking warning**.
+  `--skip-checks` overrides. Cloud API tests are not covered — run them before
+  promoting the Cloud workspace if its API changed.
+- For the manual desktop fallback only (step 5), this Mac needs the
+  `openbase-coder-desktop` notarytool keychain profile, a Developer ID
+  identity in the keychain, and default AWS credentials for the releases
+  bucket.
 
 ## 1. Promote openbase-cloud-workspace → main first
 
-Promote every Cloud workspace repo's `staging` to `main` before Coder's CLI
-release. This ensures production Cloud serves any API contract that the Coder
-release expects.
-
-Use remote fast-forwards when possible so local unrelated dirty files do not
-block the deploy. If `origin/main` is not an ancestor of `origin/staging`, stop
-and linearize that repo intentionally.
+Promote the Cloud workspace before Coder's CLI release so production Cloud
+serves any API contract the release expects. Use that workspace's own
+`scripts/promote` — it fast-forwards every Cloud repo provider-first, skips
+repos with no delta, and aborts all-or-nothing if any repo cannot
+fast-forward:
 
 ```bash
 cd ../openbase-cloud-workspace
-for r in . api auth-client api-core dev-ami web; do
-  git -C "$r" fetch origin --quiet
-  git -C "$r" rev-parse --verify --quiet origin/staging >/dev/null || continue
-  [ -z "$(git -C "$r" log --oneline origin/main..origin/staging)" ] && continue
-  git -C "$r" merge-base --is-ancestor origin/main origin/staging
-  git -C "$r" push origin origin/staging:main
-done
+./scripts/promote staging main
 ```
 
-Gate before moving on — this must print nothing:
-
-```bash
-for r in . api auth-client api-core dev-ami web; do
-  git -C "$r" fetch origin --quiet
-  git -C "$r" rev-parse --verify --quiet origin/staging >/dev/null || continue
-  git -C "$r" log --oneline origin/main..origin/staging |
-    sed "s|^|UNMERGED cloud $r: |"
-done
-```
+If a repo reports `diverged — cannot fast-forward`, linearize it (rebase its
+staging onto main) and re-run; promote never creates merge commits.
 
 If Cloud API or web changed, run the appropriate PaaS deploy/release monitor
 from the `openbase-deploy` skill after `main` moves. Do not assume GitHub ref
@@ -84,66 +73,47 @@ publishing before the CLI release starts:
    `curl -s https://pypi.org/pypi/super-agents/json | jq .info.version`.
    **Do not push cli main until PyPI serves the new version.**
 
+Because step 3's `promote` pushes cli in the same burst as super-agents,
+finish this step fully — PyPI serving the new version **and** super-agents
+main advanced — before running the step-3 promotion. promote then skips
+super-agents (already even).
+
 If the repo rejects merge commits on main, linearize first and tag the final
 main commit, not the staging merge commit. A tag pushed before main is fixed
 can publish content from the staging DAG even if the later main tree is
 equivalent.
 
-## 3. Promote openbase-coder-workspace → main — cli last, desktop after cli
+## 3. Promote openbase-coder-workspace → main
 
-**Every** Coder workspace repo's staging moves to main in this step, in one
-sitting — not just the repos you remember touching. A repo left on staging is
-silently baked into the release at its older main and nothing fails: the
-release's sibling-move guard only catches mains moving *during* the build,
-never a forgotten merge.
-
-Merge every non-cli/non-desktop repo first (repos without a staging branch or
-with no delta are skipped). Hold desktop until step 4: pushing desktop main
-starts its publisher immediately, and it seeds from the latest already
-published CLI release.
+Promote every Coder workspace repo's staging to main in one burst with
+`scripts/promote`. It pushes provider-first (cli ahead of desktop), skips
+repos with no staging delta so they trigger no rebuild/release, and **aborts
+before pushing anything** if any repo cannot fast-forward or if promoted
+content would pin a sibling to a less-stable branch ref ("main must point to
+main"). The step-0 pre-release checks run automatically first.
 
 ```bash
 # From the workspace root:
-for r in . console coder-react multi-react boilersync-react skills \
-         super-agents ios android allauth-client-swift \
-         allauth-client-kotlin agent-work-scheduler; do
-  git -C "$r" fetch origin --quiet
-  git -C "$r" rev-parse --verify --quiet origin/staging >/dev/null || continue
-  [ -z "$(git -C "$r" log --oneline origin/main..origin/staging)" ] && continue
-  echo "== $r"
-  git -C "$r" checkout main && git -C "$r" pull --ff-only &&
-    git -C "$r" merge --no-edit staging && git -C "$r" push origin main &&
-    git -C "$r" checkout staging
-done
+./scripts/promote staging main
 ```
 
-Then gate before touching cli — this must print nothing:
+Pushing cli main auto-cuts the CLI release (step 4); pushing desktop main
+starts its publisher (step 5). Preview first with `--dry-run` if you want to
+see the plan without running the checks or pushing.
 
-```bash
-for r in . console coder-react multi-react boilersync-react skills \
-         super-agents ios android allauth-client-swift \
-         allauth-client-kotlin agent-work-scheduler; do
-  git -C "$r" rev-parse --verify --quiet origin/staging >/dev/null || continue
-  git -C "$r" log --oneline origin/main..origin/staging |
-    sed "s|^|UNMERGED $r: |"
-done
-```
-
-Only when the gate is clean, merge cli the same way. cli goes **last**
-because its main push triggers auto-release, and the release's sibling-move
-guard fails if sibling mains move mid-build. Use a `[skip release]` head
-commit if you are moving cli main without intending a release.
-
-- The workspace repo requires **linear history**: rebase staging onto main if
-  they diverged, then fast-forward.
-- Some protected mains reject merge commits even for admins (observed on cli,
-  desktop, workspace, and super-agents). If a push is rejected for linear
-  history, rebase/cherry-pick staging onto main and fast-forward main. When
-  staging and main end up with different SHAs for the same patches, use
-  `git cherry origin/main origin/staging`; `-` entries are patch-equivalent
-  and only `+` entries still need attention.
-- Do not push desktop main here. Desktop publishes after the CLI release has
-  completed and its assets are downloadable.
+- **Every** repo moves in this step, not just the ones you remember touching:
+  a repo left on staging is silently baked into the release at its older main
+  and nothing fails (the release's sibling-move guard only catches mains
+  moving *during* the build, never a forgotten merge). promote handles this by
+  promoting the whole set at once.
+- If promote reports `diverged — cannot fast-forward` (protected mains reject
+  merge commits — observed on cli, desktop, workspace, and super-agents),
+  linearize that repo: rebase/cherry-pick its staging onto main and
+  fast-forward, then re-run. `git cherry origin/main origin/staging` shows
+  what still differs — `-` entries are patch-equivalent, only `+` entries need
+  attention.
+- Use a `[skip release]` head commit on cli if you are moving cli main without
+  intending a release.
 
 ## 4. CLI auto-release
 
@@ -181,14 +151,23 @@ a directly pushed tag first; auto-release-created tags do not trigger PyPI, and
 **CI is the publisher.** Pushing desktop `main` runs `electron-rebuild.yml`,
 which builds, signs, notarizes, and publishes the DMG/zip/feed to S3
 (~30 min), seeding the app with the **latest released** CLI package
-(downloaded, never rebuilt). Normally the whole step is: bump
-`desktop/package.json` version, push main, watch the run. The manual flow
-below is the **fallback** for CI outages.
+(downloaded, never rebuilt). The manual flow below is the **fallback** for CI
+outages.
 
-Only push desktop main after step 3 proves the CLI GitHub Release exists and
-the package asset downloads. If desktop main was pushed early, the run can
-seed the previous CLI version without failing; rerun it after the CLI release
-and inspect the macOS log for `Staged Openbase Coder CLI <version>`.
+Step 3's `promote` already pushed desktop main in the burst, so this run
+starts before the step-4 CLI release finishes and can seed the *previous* CLI
+version without failing. Once the CLI auto-release (step 4) is published and
+its asset downloads, **rerun** the desktop run so it seeds the new CLI, and
+confirm the macOS log shows `Staged Openbase Coder CLI <version>` at the
+released version:
+
+```bash
+gh run list --repo openbase-community/openbase-coder-desktop --workflow electron-rebuild.yml --limit 1
+gh run rerun <id> --repo openbase-community/openbase-coder-desktop
+```
+
+(Bump `desktop/package.json` on staging before step 3 when you want installed
+apps to auto-update — electron-updater only moves to *higher* versions.)
 
 Known CI behaviors: the `rebuild linux` and `rebuild macOS` jobs publish
 independently, so diagnose the failed job without assuming the other artifact
