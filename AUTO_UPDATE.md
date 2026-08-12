@@ -288,12 +288,17 @@ The staging channel is the CLI half of the full staging chain: staging
 desktop builds (see below) seed and update from staging CLI releases, which
 embed every sibling repo's staging HEAD — staging Electron depends on
 staging cli depends on staging super-agents, exactly as main does with
-main. `.dev` releases publish as GitHub prereleases, so they are invisible
-to `releases/latest`, and `_prerelease_manifest_urls` filters them out of
-beta resolution (`cli/openbase_coder_cli/self_update.py`).
+main. Exception: multi-react and boilersync-react are external trunk-based
+projects and are always built from **main** on both channels (`multi.json`
+pins them via `fixedBranch`, and the release/rebuild workflows and the
+moved-HEAD guard hardcode `main` for them). `.dev` releases publish as
+GitHub prereleases, so they are invisible to `releases/latest`, and
+`_prerelease_manifest_urls` filters them out of beta resolution
+(`cli/openbase_coder_cli/self_update.py`).
 
 **Staging desktop builds** (`desktop/.github/workflows/electron-rebuild.yml`
-on staging pushes): siblings check out at staging HEADs, the app version is
+on staging pushes): internal siblings check out at staging HEADs (the two
+external repos stay on main, as above), the app version is
 stamped `X.Y.Z-staging.<timestamp>` (each staging push is an update; the
 next stable sorts above all of them), the electron-updater feed URL is
 rewritten to the `mac-staging`/`linux-staging` S3 prefixes, the CLI seed is
