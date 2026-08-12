@@ -97,24 +97,31 @@ sibling repos out at their branch HEADs, so two protections apply:
 
 Release ordering discipline: push all subrepos first, then push the tag.
 
-## Auto-release from main
+## Auto-release from main and staging
 
 Every push to `main` in the cli repo cuts a stable release automatically
 (`auto-release.yml`): the next version is computed from the highest stable
 tag (**minor bump by default**) and the release build runs in the same
 workflow run (tags pushed with `GITHUB_TOKEN` cannot trigger workflows, so
-tag-triggering is not used). `concurrency: cancel-in-progress` makes a burst
-of pushes release once, from the final state.
+tag-triggering is not used). Per-branch `concurrency` groups make a burst of
+pushes release once, from the final state, without staging and main builds
+cancelling each other.
+
+Every push to `staging` cuts a **staging-channel release** the same way:
+the version is the next stable version with a `.dev<UTC timestamp>` suffix
+(PEP 440 — sorts below the stable it precedes), published as a GitHub
+prerelease, with every sibling repo checked out at its **staging** HEAD
+(`sibling_ref` input). The `.dev` marker in the tag is what routes the
+release to the staging channel; `releases/latest` and beta resolution both
+exclude it.
 
 - Commit-message overrides on the pushed head commit: `[skip release]`,
   `[release patch]`, `[release major]`.
 - Manual releases: `workflow_dispatch` on auto-release (bump choice) or on
-  release-standalone directly (exact version, draft option).
-- Pushes to `main` are production. Today no other branch releases; a
-  `staging` channel is planned (see Channels below), after which staging
-  pushes will cut staging-channel releases built from staging sibling HEADs.
-  Sibling-only changes (console, skills, …) need a manual dispatch since
-  only cli pushes trigger auto-release.
+  release-standalone directly (exact version, draft option, sibling branch).
+- Pushes to `main` are production; pushes to `staging` serve only
+  staging-channel installs. Sibling-only changes (console, skills, …) need
+  a manual dispatch since only cli pushes trigger auto-release.
 - The release build stamps the release version into the packaged CLI
   (`SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENBASE_CODER`) so
   `openbase-coder --version` matches the package version.
@@ -268,21 +275,33 @@ for `openbaseDevBuild` installs; automation can suppress both prompts with
 ## Channels
 
 `channel` is stamped into `openbase-coder-package.json` at build time
-(default `stable`). Tags containing a prerelease suffix (e.g. `v0.2.0b1`)
-publish as GitHub prereleases and serve the `beta` channel. An install stays
-on its channel until reinstalled.
+(default `stable`). An install stays on its channel until reinstalled. The
+version suffix partitions the channels:
 
-**Planned: a `staging` channel.** The goal is a full staging chain mirroring
-production: pushes to cli `staging` cut staging-channel releases with every
-sibling repo (console, coder-react, multi-react, boilersync-react,
-super-agents, skills, workspace) checked out at its **staging** HEAD, and a
-staging desktop build publishes to a separate update feed seeding the latest
-staging CLI release — so staging Electron depends on staging cli depends on
-staging super-agents, exactly as main does with main. Until that lands,
-staging branches do not release. When implementing, extend the existing
-channel machinery (manifest `channel`, `self_update.py` channel resolution,
-per-URL electron-updater feeds) rather than inventing a parallel path, and
-keep staging artifacts out of `releases/latest` and the stable feeds.
+| Channel | Version shape | Resolution |
+|---|---|---|
+| `stable` | `X.Y.Z` | `releases/latest` (GitHub excludes prereleases) |
+| `beta` | `X.Y.Zb1` / `a`/`rc` suffix | newest non-`.dev` release with a manifest |
+| `staging` | `X.Y.Z.dev<timestamp>` | newest `.dev` release with a manifest |
+
+The staging channel is the CLI half of the full staging chain: staging
+desktop builds (see below) seed and update from staging CLI releases, which
+embed every sibling repo's staging HEAD — staging Electron depends on
+staging cli depends on staging super-agents, exactly as main does with
+main. `.dev` releases publish as GitHub prereleases, so they are invisible
+to `releases/latest`, and `_prerelease_manifest_urls` filters them out of
+beta resolution (`cli/openbase_coder_cli/self_update.py`).
+
+**Staging desktop builds** (`desktop/.github/workflows/electron-rebuild.yml`
+on staging pushes): siblings check out at staging HEADs, the app version is
+stamped `X.Y.Z-staging.<timestamp>` (each staging push is an update; the
+next stable sorts above all of them), the electron-updater feed URL is
+rewritten to the `mac-staging`/`linux-staging` S3 prefixes, the CLI seed is
+the newest staging-channel CLI release, and the app icon is generated with
+an amber tile (`OPENBASE_DESKTOP_ICON_VARIANT=staging`) so staging installs
+are visually unmistakable. The app identity (bundle ID, product name, deep
+link scheme) is unchanged: a machine installs either the production or the
+staging desktop app, and each updates only from its own feed.
 
 ## PyPI (dev channel)
 
