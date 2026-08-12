@@ -55,8 +55,8 @@ Manifest schema (`manifest_schema` 1):
   },
   "repo_shas": {
     "cli": "...", "console": "...", "coder-react": "...",
-    "multi-react": "...", "boilersync-react": "...", "skills": "...",
-    "workspace": "..."
+    "multi-react": "...", "boilersync-react": "...", "super-agents": "...",
+    "skills": "...", "workspace": "..."
   }
 }
 ```
@@ -67,6 +67,12 @@ Manifest schema (`manifest_schema` 1):
 - `repo_shas` pins the exact sibling-repo commits baked into the package
   (also stamped into `openbase-coder-package.json`) so releases are
   reproducible and diagnosable.
+- **super-agents is built from its sibling checkout, not PyPI.** The package
+  build installs the `super-agents` checkout from source (and fails if the
+  checkout is missing or if the cli's version floor would pull a PyPI wheel
+  over it), so the runtime package rides branch HEADs exactly like the JS
+  siblings. The `super-agents[claude]>=x.y.z` floor in `cli/pyproject.toml`
+  only governs dev-channel installs that resolve from PyPI.
 - The manifest is signed with an Ed25519 key (`OPENBASE_UPDATE_SIGNING_KEY`
   repo secret); the client embeds the public key in
   `openbase_coder_cli/self_update.py`, and signature verification is
@@ -104,9 +110,11 @@ of pushes release once, from the final state.
   `[release patch]`, `[release major]`.
 - Manual releases: `workflow_dispatch` on auto-release (bump choice) or on
   release-standalone directly (exact version, draft option).
-- `staging` and all other branches never release — pushes to `main` are
-  production. Sibling-only changes (console, skills, …) need a manual
-  dispatch since only cli pushes trigger auto-release.
+- Pushes to `main` are production. Today no other branch releases; a
+  `staging` channel is planned (see Channels below), after which staging
+  pushes will cut staging-channel releases built from staging sibling HEADs.
+  Sibling-only changes (console, skills, …) need a manual dispatch since
+  only cli pushes trigger auto-release.
 - The release build stamps the release version into the packaged CLI
   (`SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENBASE_CODER`) so
   `openbase-coder --version` matches the package version.
@@ -264,17 +272,33 @@ for `openbaseDevBuild` installs; automation can suppress both prompts with
 publish as GitHub prereleases and serve the `beta` channel. An install stays
 on its channel until reinstalled.
 
+**Planned: a `staging` channel.** The goal is a full staging chain mirroring
+production: pushes to cli `staging` cut staging-channel releases with every
+sibling repo (console, coder-react, multi-react, boilersync-react,
+super-agents, skills, workspace) checked out at its **staging** HEAD, and a
+staging desktop build publishes to a separate update feed seeding the latest
+staging CLI release — so staging Electron depends on staging cli depends on
+staging super-agents, exactly as main does with main. Until that lands,
+staging branches do not release. When implementing, extend the existing
+channel machinery (manifest `channel`, `self_update.py` channel resolution,
+per-URL electron-updater feeds) rather than inventing a parallel path, and
+keep staging artifacts out of `releases/latest` and the stable feeds.
+
 ## PyPI (dev channel)
 
 `cli` and `super-agents` publish to PyPI on tag pushes via GitHub Actions
 **trusted publishing** (OIDC — no tokens or credentials stored anywhere).
 The PyPI projects must have the corresponding workflow registered as a
 trusted publisher (Manage → Publishing on pypi.org). These packages exist for
-`uv tool install` developer convenience and as the mechanism the Openbase
-Cloud DevSpace AMI uses to bake in the CLI (`dev-ami/setup.sh` runs
-`uv tool install openbase-coder`); user-facing updates never flow through
-PyPI, and PyPI is not an advertised installation pathway (see
-`GLOSSARY.md` → Installation pathways).
+`uv tool install` developer convenience and as the default-channel mechanism
+the Openbase Cloud DevSpace AMI uses to bake in the CLI (`dev-ami/setup.sh`
+runs `uv tool install openbase-coder`; staging AMIs instead install the coder
+repo's staging branch from git with `--no-sources`, which still resolves
+super-agents from PyPI). User-facing updates never flow through PyPI, and
+PyPI is not an advertised installation pathway (see `GLOSSARY.md` →
+Installation pathways). Note the released runtime package does **not** take
+super-agents from PyPI (see the manifest section); PyPI-resolved super-agents
+is a dev/AMI-channel behavior only.
 
 Gotcha: tags created *by* the release workflow (via `GITHUB_TOKEN`) do not
 trigger `publish-pypi.yml` — GitHub suppresses token-initiated events. Push
