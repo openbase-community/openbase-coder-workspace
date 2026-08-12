@@ -69,6 +69,7 @@
     },
     {
       "name": "multi-react",
+      "fixedBranch": "main",
       "url": "https://github.com/montaguegabe/multi-react",
       "description": "Shared React diff viewer and related UI utilities used by Multi and Openbase Coder.",
       "allowSymlink": true,
@@ -76,6 +77,7 @@
     },
     {
       "name": "boilersync-react",
+      "fixedBranch": "main",
       "url": "https://github.com/montaguegabe/boilersync-react",
       "description": "Shared React components and utilities for BoilerSync template workflows.",
       "allowSymlink": true,

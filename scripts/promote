@@ -25,7 +25,7 @@ ROOT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 # Dependency order: providers before consumers; workspace root last.
 REPOS=(super-agents skills coder-react console cli agent-work-scheduler desktop allauth-client-swift ios allauth-client-kotlin android .)
 
-EXTERNAL_NOTE="multi-react and boilersync-react are external symlinks — promote them in their own workspaces first if they changed"
+EXTERNAL_NOTE="multi-react and boilersync-react are external trunk-based projects pinned to main (multi.json fixedBranch; CI checks them out at main)"
 
 usage() {
     cat <<EOF
