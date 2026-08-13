@@ -86,8 +86,10 @@ equivalent.
 ## 3. Promote openbase-coder-workspace → main
 
 Promote every Coder workspace repo's staging to main with `scripts/promote`,
-**holding desktop back** — its electron build (~30 min) must seed the CLI
+**holding desktop back** — its electron build (~30 min) should seed the CLI
 release this step produces, so it is promoted alone in step 5 to build once.
+(The hold-back is a freshness optimization, not a safety requirement — see
+"Not waiting is also fine" in step 5.)
 promote pushes provider-first (cli ahead of the rest), skips repos with no
 staging delta so they trigger no rebuild/release, and **aborts before pushing
 anything** if any repo cannot fast-forward or if promoted content would pin a
@@ -170,6 +172,22 @@ Watch the run and confirm the macOS log shows `Staged Openbase Coder CLI
 <version>` at the released version. (Bump `desktop/package.json` on staging
 before step 3 when you want installed apps to auto-update — electron-updater
 only moves to *higher* versions.)
+
+**Not waiting is also fine.** `scripts/promote` never waits for the CI it
+triggers; a one-shot `./scripts/promote staging main` (no `--exclude`) is
+safe. The electron rebuild then starts before the CLI release finishes and
+seeds the **previous** CLI release — installed apps still converge to the new
+CLI through the update feed on next launch. Use the two-step hold-back when
+you want the DMG pre-seeded with the just-released CLI (and one electron
+build instead of two); use the one-shot when eventual freshness is enough.
+
+The same principle applies across workspaces: cloud, coder, multi, and
+boilersync each run their **own deploy lifecycle** from their own
+`scripts/promote`, and nothing synchronizes them. A Cloud DevSpace AMI bake
+snapshots this workspace's branches whenever it happens to run;
+multi-react/boilersync-react enter builds at whatever their trunk `main`
+holds. Cross-workspace freshness is eventually consistent by design — do not
+add cross-workspace waits.
 
 Known CI behaviors: the `rebuild linux` and `rebuild macOS` jobs publish
 independently, so diagnose the failed job without assuming the other artifact
