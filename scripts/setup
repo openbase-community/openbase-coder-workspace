@@ -88,6 +88,29 @@ require_command() {
 require_command uv "curl -LsSf https://astral.sh/uv/install.sh | sh"
 require_command multi "uv tool install multi-workspace"
 
+# The dev-workspace console build hard-requires pnpm (pnpm workspace with
+# workspace:* deps — npm is not a fallback). Check the same locations the CLI
+# checks (PATH plus known pnpm homes) so setup fails here, not mid-install.
+require_pnpm() {
+  if command -v pnpm >/dev/null 2>&1; then
+    return
+  fi
+  local candidate
+  for candidate in \
+    "${PNPM_HOME:-}/pnpm" \
+    "${HOME}/Library/pnpm/pnpm" \
+    "${HOME}/.local/share/pnpm/pnpm"; do
+    if [ -x "$candidate" ]; then
+      return
+    fi
+  done
+  echo "Error: 'pnpm' is required but was not found on PATH. Install it with:" >&2
+  echo "  curl -fsSL https://get.pnpm.io/install.sh | sh -" >&2
+  MISSING_PREREQ=true
+}
+
+require_pnpm
+
 if [ "$MISSING_PREREQ" = true ]; then
   echo "Install the missing prerequisites above, then re-run ./scripts/setup." >&2
   exit 1
