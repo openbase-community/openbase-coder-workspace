@@ -52,7 +52,7 @@ branch ref (e.g. git+...@staging landing on main — main must point to main).
 
 Examples:
   $(basename "$0") staging main
-  $(basename "$0") dev staging
+  $(basename "$0") develop staging
   $(basename "$0") feature/my-feature staging
 
 Before promoting into main/master, the deploy skill's pre-release checks run
@@ -131,8 +131,8 @@ is_excluded() {
 check_branch_refs() {
     local dir="$1" rev="$2" guarded=""
     case "$TO" in
-        main|master) guarded='staging|dev' ;;
-        staging) guarded='dev' ;;
+        main|master) guarded='staging|develop' ;;
+        staging) guarded='develop' ;;
         *) return 0 ;;
     esac
     local pattern="(git\\+http|github:|git@github)[^\"'[:space:]]*[@#](${guarded})([^A-Za-z0-9_-]|\$)"
@@ -140,7 +140,7 @@ check_branch_refs() {
 }
 
 # Run the deploy skill's pre-release checks before a production promotion.
-# Only gates when promoting into main/master; other targets (dev->staging,
+# Only gates when promoting into main/master; other targets (develop->staging,
 # feature->staging) skip the heavy suite. --skip-checks bypasses entirely. A
 # fatal check that fails aborts before anything is pushed.
 run_prechecks() {
