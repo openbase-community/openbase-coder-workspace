@@ -71,6 +71,28 @@ check_existing_installation() {
 
 check_existing_installation
 
+# Fail fast on missing prerequisites instead of dying mid-setup on a raw
+# "command not found".
+MISSING_PREREQ=false
+
+require_command() {
+  local cmd="$1"
+  local fix="$2"
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "Error: '$cmd' is required but was not found on PATH. Install it with:" >&2
+    echo "  $fix" >&2
+    MISSING_PREREQ=true
+  fi
+}
+
+require_command uv "curl -LsSf https://astral.sh/uv/install.sh | sh"
+require_command multi "uv tool install multi-workspace"
+
+if [ "$MISSING_PREREQ" = true ]; then
+  echo "Install the missing prerequisites above, then re-run ./scripts/setup." >&2
+  exit 1
+fi
+
 # Clone the public/runtime install repos.
 pushd "$ROOT_DIR"
 multi sync --install-set default

@@ -17,6 +17,10 @@ fresh machine; jump to [Iterating](#5-iterating) day to day.
   normal Claude Code login (setup bridges it into Openbase's managed config
   automatically on macOS)
 
+Setup fails fast with the fix command if `uv`, `multi`, pnpm, or Tailscale is
+missing; a missing `codex login` only warns (threads fail later until you log
+in).
+
 ## 2. Install
 
 ```bash
