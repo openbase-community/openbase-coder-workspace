@@ -41,6 +41,17 @@ All four codebases are implemented and **deployed** per this spec (see
   (`desktop/src/onboarding/deriveStep.ts`) rather than scripted page jumps;
   acknowledgments persist in `~/.openbase/desktop-onboarding.json` so wiping
   the Openbase home resets onboarding.
+- **Single source of truth (2026-08-13)**: every onboarding fact is
+  implemented once, in the CLI, and the desktop reaches it through chained
+  access — `GET /api/onboarding/status/` (now including an `audio` block
+  with the install's audio provider and voice readiness) once the backend
+  is healthy, the CLI binary (`onboarding status --json`) for the same
+  facts before services run, and live cloud pairing state through the CLI
+  proxy `GET /api/onboarding/cloud-state/` (never the cached `cloud` block,
+  which stays a last-report hint). Voice keys are written through the CLI's
+  `PUT /api/settings/env/`. The Electron main process no longer implements
+  its own login, voice-key, cloud-state, or Tailscale-status checks; it
+  only probes bootstrap facts (CLI binary present, Tailscale installed).
 
 Remaining v1 trade-off: **Tailscale friction** — no terminal, but the user
 installs two apps and creates a third-party Tailscale account. A v2 could
