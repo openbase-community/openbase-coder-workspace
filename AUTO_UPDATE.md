@@ -14,7 +14,7 @@ Each component owns its own update; nothing installs into another component.
 | Desktop app (macOS DMG) | S3 (`publish-s3.mjs`) with an electron-updater generic feed (`latest-mac.yml` + zip) | electron-updater in the app itself |
 | CLI runtime package (standalone) | GitHub Releases on `openbase-community/openbase` | `openbase-coder self-update` |
 | Backend CLIs (`~/.openbase/bin/codex`) | GitHub release binaries | refreshed during `self-update` (`claude` self-updates on its own) |
-| PyPI (`openbase-coder`, `super-agents`) | PyPI via GitHub Actions trusted publishing on tags | `uv tool upgrade` — **dev channel only**, never an auto-update path |
+| PyPI (`super-agents` only) | PyPI via GitHub Actions trusted publishing on tags | `uv tool upgrade` — standalone-product channel, never an auto-update path |
 | iOS app | App Store/TestFlight (future) | out of scope here |
 
 Rules that must not regress:
@@ -108,9 +108,11 @@ pushes release once, from the final state, without staging and main builds
 cancelling each other.
 
 Every push to `staging` cuts a **staging-channel release** the same way:
-the version is the next stable version with a `.dev<UTC timestamp>` suffix
-(PEP 440 — sorts below the stable it precedes), published as a GitHub
-prerelease, with every sibling repo checked out at its **staging** HEAD
+the version patch-bumps past the highest existing tag of any kind and ends
+in exactly `.dev0` (e.g. `0.31.1.dev0` — setuptools-scm refuses to version
+commits past any other `.devN` tag, which would break every from-source
+build), published as a GitHub prerelease, with every sibling repo checked
+out at its **staging** HEAD
 (`sibling_ref` input). The `.dev` marker in the tag is what routes the
 release to the staging channel; `releases/latest` and beta resolution both
 exclude it.
@@ -282,7 +284,7 @@ version suffix partitions the channels:
 |---|---|---|
 | `stable` | `X.Y.Z` | `releases/latest` (GitHub excludes prereleases) |
 | `beta` | `X.Y.Zb1` / `a`/`rc` suffix | newest non-`.dev` release with a manifest |
-| `staging` | `X.Y.Z.dev<timestamp>` | newest `.dev` release with a manifest |
+| `staging` | `X.Y.Z.dev0` (patch-bumped) | newest `.dev` release with a manifest |
 
 The staging channel is the CLI half of the full staging chain: staging
 desktop builds (see below) seed and update from staging CLI releases, which
@@ -308,25 +310,36 @@ are visually unmistakable. The app identity (bundle ID, product name, deep
 link scheme) is unchanged: a machine installs either the production or the
 staging desktop app, and each updates only from its own feed.
 
-## PyPI (dev channel)
+## PyPI
 
-`cli` and `super-agents` publish to PyPI on tag pushes via GitHub Actions
-**trusted publishing** (OIDC — no tokens or credentials stored anywhere).
-The PyPI projects must have the corresponding workflow registered as a
-trusted publisher (Manage → Publishing on pypi.org). These packages exist for
-`uv tool install` developer convenience and as the default-channel mechanism
-the Openbase Cloud DevSpace AMI uses to bake in the CLI (`dev-ami/setup.sh`
-runs `uv tool install openbase-coder`; staging AMIs instead install the coder
-repo's staging branch from git with `--no-sources`, which still resolves
-super-agents from PyPI). User-facing updates never flow through PyPI, and
-PyPI is not an advertised installation pathway (see `GLOSSARY.md` →
-Installation pathways). Note the released runtime package does **not** take
-super-agents from PyPI (see the manifest section); PyPI-resolved super-agents
-is a dev/AMI-channel behavior only.
+Only `super-agents` publishes to PyPI (on tag pushes via GitHub Actions
+**trusted publishing** — OIDC, no stored credentials; the PyPI project must
+have the workflow registered as a trusted publisher under Manage →
+Publishing on pypi.org). It ships there because it is a standalone MIT
+product, and the cli's `super-agents[claude]>=x.y.z` floor resolves from
+PyPI for plain-pip installs — but the released runtime package builds
+super-agents from its sibling checkout, never PyPI (see the manifest
+section).
 
-Gotcha: tags created *by* the release workflow (via `GITHUB_TOKEN`) do not
-trigger `publish-pypi.yml` — GitHub suppresses token-initiated events. Push
-tags directly to publish to PyPI.
+`openbase-coder` is **no longer published to PyPI**. Its only consumer was
+the default DevSpace AMI bake; every AMI channel now installs the CLI from
+git (`dev-ami/setup.sh`: main for default AMIs, the workspace branch for
+staging AMIs), so distribution channels are git-and-releases only. Old PyPI
+versions remain but are unmaintained; do not point anything at them. PyPI is
+not an advertised installation pathway (see `GLOSSARY.md` → Installation
+pathways).
+
+Gotcha (super-agents): tags created *by* a workflow (via `GITHUB_TOKEN`) do
+not trigger `publish-pypi.yml` — GitHub suppresses token-initiated events.
+Push tags directly to publish to PyPI.
+
+From-source version integrity: staging tags end in `.dev0` because
+setuptools-scm/hatch-vcs hard-fails computing a version for any commit past
+a `.devN` (N != 0) tag. If a from-source cli build fails with "choosing
+custom numbers for the `.devX` distance is not supported", a retired
+timestamp-style dev tag (e.g. `v0.31.0.dev20260812215118`) is still in that
+clone — delete it locally (`git tag -d <tag>`) or refetch with
+`git fetch --prune-tags`.
 
 ## Invariants checklist for changes in this area
 

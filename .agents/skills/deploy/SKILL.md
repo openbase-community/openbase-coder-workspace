@@ -144,10 +144,10 @@ A normal CLI GitHub Release plus desktop publish does **not** rebuild the Cloud
 DevSpace AMI. Rebuild the AMI only when the change must be baked into newly
 created DevSpaces (for example AMI helper scripts, OS packages, GUI/Tailscale
 image setup, pre-baked workspace contents, or a baseline CLI version required
-before `openbase-coder provision` can self-heal). If you are rebuilding the AMI
-to pick up a new `openbase-coder` baseline, publish `openbase-coder` to PyPI via
-a directly pushed tag first; auto-release-created tags do not trigger PyPI, and
-`dev-ami/setup.sh` installs the CLI with `uv tool install openbase-coder`.
+before `openbase-coder provision` can self-heal). `dev-ami/setup.sh` installs
+the CLI from git — `main` for default AMIs, the workspace branch for staging
+AMIs — so a rebake picks up the branch HEAD directly; `openbase-coder` is no
+longer published to PyPI.
 
 ## 5. Desktop DMG publish
 
