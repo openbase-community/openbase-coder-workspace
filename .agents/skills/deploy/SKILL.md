@@ -85,27 +85,28 @@ equivalent.
 
 ## 3. Promote openbase-coder-workspace → main
 
-Promote every Coder workspace repo's staging to main in one burst with
-`scripts/promote`. It pushes provider-first (cli ahead of desktop), skips
-repos with no staging delta so they trigger no rebuild/release, and **aborts
-before pushing anything** if any repo cannot fast-forward or if promoted
-content would pin a sibling to a less-stable branch ref ("main must point to
-main"). The step-0 pre-release checks run automatically first.
+Promote every Coder workspace repo's staging to main with `scripts/promote`,
+**holding desktop back** — its electron build (~30 min) must seed the CLI
+release this step produces, so it is promoted alone in step 5 to build once.
+promote pushes provider-first (cli ahead of the rest), skips repos with no
+staging delta so they trigger no rebuild/release, and **aborts before pushing
+anything** if any repo cannot fast-forward or if promoted content would pin a
+sibling to a less-stable branch ref ("main must point to main"). The step-0
+pre-release checks run automatically first.
 
 ```bash
 # From the workspace root:
-./scripts/promote staging main
+./scripts/promote staging main --exclude desktop
 ```
 
-Pushing cli main auto-cuts the CLI release (step 4); pushing desktop main
-starts its publisher (step 5). Preview first with `--dry-run` if you want to
-see the plan without running the checks or pushing.
+Pushing cli main auto-cuts the CLI release (step 4). Preview first with
+`--dry-run` if you want to see the plan without running the checks or pushing.
 
-- **Every** repo moves in this step, not just the ones you remember touching:
-  a repo left on staging is silently baked into the release at its older main
-  and nothing fails (the release's sibling-move guard only catches mains
-  moving *during* the build, never a forgotten merge). promote handles this by
-  promoting the whole set at once.
+- **Every** repo except desktop moves in this step, not just the ones you
+  remember touching: a repo left on staging is silently baked into the release
+  at its older main and nothing fails (the release's sibling-move guard only
+  catches mains moving *during* the build, never a forgotten merge). promote
+  handles this by promoting the whole set at once.
 - If promote reports `diverged — cannot fast-forward` (protected mains reject
   merge commits — observed on cli, desktop, workspace, and super-agents),
   linearize that repo: rebase/cherry-pick its staging onto main and
@@ -154,20 +155,21 @@ which builds, signs, notarizes, and publishes the DMG/zip/feed to S3
 (downloaded, never rebuilt). The manual flow below is the **fallback** for CI
 outages.
 
-Step 3's `promote` already pushed desktop main in the burst, so this run
-starts before the step-4 CLI release finishes and can seed the *previous* CLI
-version without failing. Once the CLI auto-release (step 4) is published and
-its asset downloads, **rerun** the desktop run so it seeds the new CLI, and
-confirm the macOS log shows `Staged Openbase Coder CLI <version>` at the
-released version:
+Desktop was held back in step 3, so promote it **now** — only after step 4
+proves the CLI GitHub Release exists and its package asset downloads — so the
+single electron build seeds the just-released CLI. Everything else is already
+even, so this promotes desktop alone:
 
 ```bash
-gh run list --repo openbase-community/openbase-coder-desktop --workflow electron-rebuild.yml --limit 1
-gh run rerun <id> --repo openbase-community/openbase-coder-desktop
+# From the workspace root. --skip-checks is safe: the suite already passed in
+# step 3 and cli is unchanged here (only desktop is pushed).
+./scripts/promote staging main --skip-checks
 ```
 
-(Bump `desktop/package.json` on staging before step 3 when you want installed
-apps to auto-update — electron-updater only moves to *higher* versions.)
+Watch the run and confirm the macOS log shows `Staged Openbase Coder CLI
+<version>` at the released version. (Bump `desktop/package.json` on staging
+before step 3 when you want installed apps to auto-update — electron-updater
+only moves to *higher* versions.)
 
 Known CI behaviors: the `rebuild linux` and `rebuild macOS` jobs publish
 independently, so diagnose the failed job without assuming the other artifact
