@@ -40,5 +40,7 @@ Product docs are published at <https://docs.openbase.cloud>.
 ## Development
 
 This repo is for contributors working across the Openbase Coder subrepos. For
-setup instructions, use the developer setup in the main Openbase Coder README:
-<https://github.com/openbase-community/openbase#developer-setup>
+setup instructions, use the "Developer Setup" section of the main Openbase
+Coder README: <https://github.com/openbase-community/openbase#%EF%B8%8F-developer-setup>
+(the fragment encodes the emoji heading's variation selector; if the heading
+changes, re-derive it from the rendered `user-content-*` anchor id).
