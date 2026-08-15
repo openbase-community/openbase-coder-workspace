@@ -220,7 +220,7 @@ polled while the step is visible:
 - **Render:** instruction screen
 - **Copy:** "Go to `https://app.openbase.cloud` on your Mac to install Openbase"
 - **Secondary link:** "Installation Guide" → CLI docs
-  (`cli/docs/getting-started.md`, the main open-source entrypoint)
+  (`cli/docs/getting-started/index.md`, the main open-source entrypoint)
 - **Wait:** poll onboarding state until a desktop device is registered
 - **On detected:** B4
 
