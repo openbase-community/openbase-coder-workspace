@@ -116,9 +116,12 @@ if [ "$MISSING_PREREQ" = true ]; then
   exit 1
 fi
 
-# With no flags, setup runs interactively: after the repo sync it prompts
-# with pickers for the coding backend and the voice audio provider.
-if [ $# -eq 0 ] && [ -t 0 ]; then
+# With no flags on a terminal, setup runs interactively: after the repo sync
+# it prompts with pickers for the coding backend and the voice audio
+# provider. Any flag means non-interactive — no prompts, safe for scripts
+# and AI agents (a fresh install then requires --backend).
+USER_ARG_COUNT=$#
+if [ "$USER_ARG_COUNT" -eq 0 ] && [ -t 0 ]; then
   echo "No flags passed — setup will prompt you to pick a coding backend and voice audio provider."
 fi
 
@@ -151,6 +154,12 @@ done
 
 if [ "$HAS_WORKSPACE_DIR" = false ]; then
   prepend_setup_args --workspace-dir "$ROOT_DIR"
+fi
+
+# The injected --workspace-dir would otherwise flip the CLI to
+# non-interactive; keep the flagless-terminal run interactive explicitly.
+if [ "$USER_ARG_COUNT" -eq 0 ] && [ -t 0 ]; then
+  prepend_setup_args --interactive
 fi
 
 pushd "${ROOT_DIR}"/cli

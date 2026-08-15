@@ -39,8 +39,10 @@ With no flags, setup runs interactively on a fresh install: numbered pickers
 choose the coding backend (codex, claude-code, or openbase-cloud) and the
 voice audio provider — Cloud TTS/STT (default), bring-your-own-keys
 (AssemblyAI + Cartesia, prompts for the keys), or local models (not
-recommended). Non-interactive runs still require `--backend` and default the
-audio provider to openbase-cloud.
+recommended). Passing any flag makes the run fully non-interactive (safe for
+scripts and AI agents): a fresh install then requires `--backend` and
+defaults the audio provider to openbase-cloud. `openbase-coder setup
+--interactive` combines flags with the pickers.
 
 `scripts/setup` syncs the sub-repos with `multi`, creates the cli venv,
 downloads LiveKit model files, builds the console, generates
