@@ -44,7 +44,10 @@ openbase-coder` (PyPI) plus a pre-baked workspace clone, and instances
 finish with `openbase-coder provision`. Everything else — the standalone
 `install.sh` script, the release tarballs, PyPI — is an internal mechanism
 that supports these pathways (desktop seed, self-update, AMI bake, manual
-desktop setup), never a separately advertised way to install.
+desktop setup), never a separately advertised way to install. The Docker
+image (`cli/Dockerfile` + `cli/docker/`) is likewise an internal/dev
+mechanism for headless runtime testing, not a user-facing pathway; it gets
+no user docs in `cli/docs/`.
 
 **Console**: The shared dashboard UI (from `coder-react`, built in
 `console`). The desktop app embeds it, the local runtime serves it in a
