@@ -26,7 +26,7 @@ in).
 ```bash
 git clone https://github.com/openbase-community/openbase-coder-workspace
 cd openbase-coder-workspace
-./scripts/setup            # prompts for a backend; or pass --backend codex
+./scripts/setup            # no flags = interactive pickers; or pass --backend codex
 ```
 
 Setup puts `openbase-coder` on PATH via a shim at `~/.local/bin` that runs
@@ -34,6 +34,13 @@ the workspace venv — the same interpreter the services use, so the terminal
 CLI and the services can never disagree about dependencies. (If a
 `uv tool install openbase-coder` shim exists, setup replaces it and tells
 you; run `uv tool uninstall openbase-coder` to drop the orphaned venv.)
+
+With no flags, setup runs interactively on a fresh install: numbered pickers
+choose the coding backend (codex, claude-code, or openbase-cloud) and the
+voice audio provider — Cloud TTS/STT (default), bring-your-own-keys
+(AssemblyAI + Cartesia, prompts for the keys), or local models (not
+recommended). Non-interactive runs still require `--backend` and default the
+audio provider to openbase-cloud.
 
 `scripts/setup` syncs the sub-repos with `multi`, creates the cli venv,
 downloads LiveKit model files, builds the console, generates

@@ -116,6 +116,12 @@ if [ "$MISSING_PREREQ" = true ]; then
   exit 1
 fi
 
+# With no flags, setup runs interactively: after the repo sync it prompts
+# with pickers for the coding backend and the voice audio provider.
+if [ $# -eq 0 ] && [ -t 0 ]; then
+  echo "No flags passed — setup will prompt you to pick a coding backend and voice audio provider."
+fi
+
 # Clone the public/runtime install repos.
 pushd "$ROOT_DIR"
 multi sync --install-set default
