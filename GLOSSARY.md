@@ -7,8 +7,8 @@ concept becomes part of the shared Openbase vocabulary.
 ## Product Surfaces
 
 **Product surface**: One of the user-facing faces of Openbase Coder: the
-desktop app, the iOS app, the web console, and app.openbase.cloud, all backed
-by the local CLI runtime. The product docs (`cli/docs/`, published at
+desktop app, the iOS app, the Android app, the web console, and
+app.openbase.cloud, all backed by the local CLI runtime. The product docs (`cli/docs/`, published at
 docs.openbase.cloud) cover every surface and carry "In the apps" / "On
 iPhone" cross-references between them.
 
@@ -58,6 +58,11 @@ browser, and the iOS app opens it in its Console and Diff tabs.
 **iOS app**: The phone client: voice calls with the dispatcher and Super
 Agents, threads, approvals, reports, diffs, and phone-side settings,
 connected to a Mac or DevSpace over Tailscale.
+
+**Android app**: The Android phone client (Kotlin/Jetpack Compose), mirroring
+the iOS app: voice calls, threads, approvals, reports, diffs, sync-conflict
+resolution, and screen-share viewing, connected to a Mac or DevSpace over
+Tailscale. Distributed as an APK from the Openbase downloads bucket.
 
 **Openbase Cloud**: The account service at app.openbase.cloud: OAuth
 sign-in, device onboarding for iPhone pairing, subscription, the

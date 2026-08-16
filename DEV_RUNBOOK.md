@@ -85,6 +85,9 @@ Then pick the surface you're testing:
   cloud device registration that setup/login reported; start a voice
   session. If it sticks at "waiting for agent", see the LiveKit note in
   `AGENTS.md` (stale ICE state — restarting Mac + phone resolves it).
+- **Android app.** The Kotlin/Compose peer of the iOS app. Phone signed into
+  the same Openbase Cloud account and on the same tailnet; add the Mac's
+  MagicDNS host under Settings → Backend Host (see `android/README.md`).
 - **Web console.** `http://localhost:7999` — served by the django-cli
   service from `console/dist`. Threads, skills, settings, versions footer.
 - **Desktop app (optional — NOT needed for CLI/voice dev).** In `desktop/`:

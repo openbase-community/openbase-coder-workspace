@@ -16,6 +16,8 @@ Each component owns its own update; nothing installs into another component.
 | Backend CLIs (`~/.openbase/bin/codex`) | GitHub release binaries | refreshed during `self-update` (`claude` self-updates on its own) |
 | PyPI (`super-agents` only) | PyPI via GitHub Actions trusted publishing on tags | `uv tool upgrade` — standalone-product channel, never an auto-update path |
 | iOS app | App Store/TestFlight (future) | out of scope here |
+| Android app | APK on the Openbase downloads bucket | out of scope here |
+| Docker image | `openbaseai/openbase` multi-arch image on Docker Hub | rebuild / re-pull the image — no self-update (like Linux/DevSpace installs) |
 
 Rules that must not regress:
 

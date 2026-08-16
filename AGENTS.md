@@ -7,8 +7,9 @@ task and keeps a live coding call open: a dispatcher agent answers, starts
 and steers coding sessions (threads) on the user's Mac or cloud DevSpace,
 and hands the call to Super Agents; the user approves sensitive actions and
 reviews diffs from the same control surface. Product surfaces: the iOS app,
-the macOS Electron desktop app, the shared web console, and Openbase Cloud
-(app.openbase.cloud) — all backed by the local `openbase-coder` CLI runtime.
+the Android app, the macOS Electron desktop app, the shared web console, and
+Openbase Cloud (app.openbase.cloud) — all backed by the local
+`openbase-coder` CLI runtime.
 Openbase Cloud is also a PaaS.
 
 Product behavior and user-facing docs are in `cli/docs/`, published at
@@ -60,7 +61,9 @@ product (auth, remote workspaces, and the PaaS backend).
 - Developer install/test flow: `DEV_RUNBOOK.md` — keep it accurate when
   setup, auth, or service behavior changes.
 - Installation pathways are strict and few (dev workspace setup, the macOS
-  Electron app, the Cloud DevSpace AMI — definitions in `GLOSSARY.md`).
+  Electron app, the Cloud DevSpace AMI, and the Docker image —
+  `openbaseai/openbase`, which is also how Windows hosts run Openbase;
+  definitions in `GLOSSARY.md`).
   Never document or build a new install entry point without updating that
   glossary entry; `install.sh`, release tarballs, and PyPI are internal
   mechanisms, not user-facing pathways.
