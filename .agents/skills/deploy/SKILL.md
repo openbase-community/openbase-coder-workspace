@@ -116,7 +116,11 @@ Pushing cli main auto-cuts the CLI release (step 4). Preview first with
   what still differs — `-` entries are patch-equivalent, only `+` entries need
   attention.
 - Use a `[skip release]` head commit on cli if you are moving cli main without
-  intending a release.
+  intending a release. Safe even while a release builds: since cli `e832c23`,
+  `cancel-in-progress` is conditional on the head commit message, so a
+  `[skip release]` push never cancels an in-flight release run (its own run
+  skips itself, so cancelling would silently drop the predecessor's release —
+  see AUTO_UPDATE.md's concurrency contract).
 
 ## 4. CLI auto-release
 
@@ -194,7 +198,9 @@ independently, so diagnose the failed job without assuming the other artifact
 failed too. If BOTH jobs fail instantly with zero steps, the org has
 exhausted its GitHub Actions spending limit — fix in org billing settings,
 then `gh run rerun`. A `workflow_dispatch`ed release shares the concurrency
-group with push runs and gets cancelled by any push to main mid-build.
+group with push runs and gets cancelled by any release-worthy push to main
+mid-build; `[skip release]` pushes are the exception — they never cancel
+(conditional `cancel-in-progress`, see AUTO_UPDATE.md).
 
 When touching `desktop/.github/workflows/electron-rebuild.yml`, keep the
 temporary CI root `package.json` entries in both jobs configured with

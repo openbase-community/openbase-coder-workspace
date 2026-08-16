@@ -13,9 +13,12 @@
 # standalone release embeds console/coder-react/skills/super-agents at build
 # time, so all of those land before cli. Pushing main auto-cuts the cli
 # standalone release (auto-release.yml), the desktop AppImage to S3
-# (electron-rebuild.yml), and the ios App Store upload. multi-react and
-# boilersync-react are external symlinks — promote them in their own
-# workspaces (~/Projects/multi, ~/Projects/boilersync) first if they changed.
+# (electron-rebuild.yml), and the ios App Store upload. A cli push whose
+# head commit says [skip release] cuts no release and never cancels an
+# in-flight release build (conditional cancel-in-progress; AUTO_UPDATE.md).
+# multi-react and boilersync-react are external symlinks — promote them in
+# their own workspaces (~/Projects/multi, ~/Projects/boilersync) first if
+# they changed.
 
 set -euo pipefail
 
