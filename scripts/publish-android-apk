@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+
+# Build + publish the Openbase Coder Android APK, then bump the marketing
+# downloads-card version label. This is the automated form of the manual
+# release flow and is invoked by scripts/promote at the end of a production
+# promotion (staging/develop -> main), after the android repo has been
+# promoted. It can also be run standalone.
+#
+# Steps:
+#   1. Detect JAVA_HOME (prefer Homebrew openjdk@17, fall back to
+#      /usr/libexec/java_home).
+#   2. Run android/scripts/build-and-upload-apk.sh — builds the debug APK and
+#      uploads versioned + latest keys to S3 (that script owns aws/metadata).
+#   3. Read versionName from android/app/build.gradle.kts.
+#   4. Update the "Test build · vX.Y.Z" Android mini-card label in the
+#      marketing repo's site-content/install.html, then commit ONLY that file
+#      and push origin main (the push triggers the site deploy).
+#
+# Guards / failure model:
+#   - Hard failures (missing JDK, build/upload failure, unreadable version,
+#     the marketing label not matching the expected pattern, git commit/push
+#     failure) exit non-zero so the promote wrapper can report loudly.
+#   - Soft skips (marketing checkout missing, or install.html has uncommitted
+#     local changes) print a loud WARNING and exit 0 — the APK is already
+#     uploaded and we must not clobber someone else's in-progress edit.
+#     Unrelated untracked files in the marketing repo are ignored.
+#
+# Options:
+#   --dry-run   Print exactly what would happen (JDK, version, the label
+#               before/after, the commit/push) without building, uploading,
+#               writing, committing, or pushing anything.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+
+ANDROID_DIR="${ROOT_DIR}/android"
+APP_GRADLE="${ANDROID_DIR}/app/build.gradle.kts"
+BUILD_SCRIPT="${ANDROID_DIR}/scripts/build-and-upload-apk.sh"
+
+# The marketing repo lives outside this workspace. Overridable for testing.
+MARKETING_REPO="${MARKETING_REPO:-${HOME}/Projects/openbase/code/marketing/openbase-voice-marketing}"
+INSTALL_HTML_REL="site-content/install.html"
+INSTALL_HTML="${MARKETING_REPO}/${INSTALL_HTML_REL}"
+
+DRY_RUN=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run) DRY_RUN=1 ;;
+        -h|--help)
+            sed -n '3,42p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *) echo "Unknown option: $1" >&2; exit 2 ;;
+    esac
+    shift
+done
+
+warn() { echo "WARNING: $*" >&2; }
+die()  { echo "ERROR: $*" >&2; exit 1; }
+
+# --- JAVA_HOME detection --------------------------------------------------
+detect_java_home() {
+    local jh
+    if [[ -x /opt/homebrew/opt/openjdk@17/bin/javac ]]; then
+        echo /opt/homebrew/opt/openjdk@17
+        return 0
+    fi
+    if [[ -x /usr/libexec/java_home ]]; then
+        if jh="$(/usr/libexec/java_home -v 17 2>/dev/null)" && [[ -n "$jh" ]]; then
+            echo "$jh"; return 0
+        fi
+        if jh="$(/usr/libexec/java_home 2>/dev/null)" && [[ -n "$jh" ]]; then
+            echo "$jh"; return 0
+        fi
+    fi
+    return 1
+}
+
+if ! JAVA_HOME_DETECTED="$(detect_java_home)"; then
+    die "No JDK found (looked for /opt/homebrew/opt/openjdk@17 and /usr/libexec/java_home). Install openjdk@17."
+fi
+
+# --- versionName ----------------------------------------------------------
+[[ -f "$APP_GRADLE" ]] || die "app/build.gradle.kts not found at $APP_GRADLE"
+version_name="$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' "$APP_GRADLE" | head -n 1)"
+[[ -n "$version_name" ]] || die "Could not read versionName from $APP_GRADLE"
+
+echo "Android APK publish"
+echo "  JAVA_HOME:   $JAVA_HOME_DETECTED"
+echo "  versionName: $version_name"
+echo "  build:       $BUILD_SCRIPT"
+echo "  marketing:   $INSTALL_HTML"
+echo
+
+# --- 1. build + upload APK ------------------------------------------------
+[[ -x "$BUILD_SCRIPT" ]] || die "Build script not found or not executable: $BUILD_SCRIPT"
+
+if [[ "$DRY_RUN" == "1" ]]; then
+    echo "[dry-run] would run: JAVA_HOME=$JAVA_HOME_DETECTED $BUILD_SCRIPT"
+else
+    echo "Building and uploading APK ..."
+    JAVA_HOME="$JAVA_HOME_DETECTED" "$BUILD_SCRIPT"
+fi
+echo
+
+# --- 2. marketing downloads-card label bump -------------------------------
+# The label pattern we own. Matches "Test build · v<version>" (any version).
+LABEL_RE='Test build · v[0-9][0-9A-Za-z._-]*'
+NEW_LABEL="Test build · v${version_name}"
+
+if [[ ! -d "$MARKETING_REPO/.git" ]]; then
+    warn "Marketing repo checkout missing at $MARKETING_REPO — skipping the downloads-card bump. APK is uploaded; bump the card manually."
+    exit 0
+fi
+if [[ ! -f "$INSTALL_HTML" ]]; then
+    warn "install.html missing at $INSTALL_HTML — skipping the downloads-card bump."
+    exit 0
+fi
+
+# Refuse to clobber an in-progress edit to this one file (unrelated untracked
+# files elsewhere in the repo are fine and ignored).
+if [[ -n "$(git -C "$MARKETING_REPO" status --porcelain -- "$INSTALL_HTML_REL")" ]]; then
+    warn "$INSTALL_HTML_REL has uncommitted local changes — skipping the downloads-card bump to avoid clobbering other work."
+    exit 0
+fi
+
+match_count="$(grep -c "$LABEL_RE" "$INSTALL_HTML" || true)"
+if [[ "$match_count" != "1" ]]; then
+    die "Expected exactly one Android APK card label matching '${LABEL_RE}' in $INSTALL_HTML, found ${match_count}. Refusing to edit (the page markup changed — update this script's LABEL_RE)."
+fi
+
+current_label="$(grep -o "$LABEL_RE" "$INSTALL_HTML" | head -n 1)"
+updated="$(sed "s|${LABEL_RE}|${NEW_LABEL}|" "$INSTALL_HTML")"
+
+if [[ "$current_label" == "$NEW_LABEL" ]]; then
+    echo "Marketing card already at '${NEW_LABEL}' — nothing to commit."
+    exit 0
+fi
+
+echo "Marketing card: '${current_label}' -> '${NEW_LABEL}'"
+
+if [[ "$DRY_RUN" == "1" ]]; then
+    echo "[dry-run] would write the updated label to $INSTALL_HTML_REL"
+    echo "[dry-run] would: git -C <marketing> add $INSTALL_HTML_REL"
+    echo "[dry-run] would: git commit -m 'Downloads page: bump Android APK card to v${version_name}'  (no Agent-Thread-Id trailer — automation)"
+    echo "[dry-run] would: git push origin main  (triggers site deploy)"
+    exit 0
+fi
+
+printf '%s\n' "$updated" > "$INSTALL_HTML"
+
+git -C "$MARKETING_REPO" add -- "$INSTALL_HTML_REL"
+git -C "$MARKETING_REPO" commit -m "Downloads page: bump Android APK card to v${version_name}" \
+    || die "git commit failed in $MARKETING_REPO"
+git -C "$MARKETING_REPO" push origin main \
+    || die "git push origin main failed in $MARKETING_REPO"
+
+echo "Marketing downloads card bumped to v${version_name} and pushed (site deploy triggered)."

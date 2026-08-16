@@ -104,6 +104,18 @@ pre-release checks run automatically first.
 Pushing cli main auto-cuts the CLI release (step 4). Preview first with
 `--dry-run` if you want to see the plan without running the checks or pushing.
 
+- **Android APK is published automatically.** When this step promotes the
+  `android` repo into main, `scripts/promote` runs `scripts/publish-android-apk`
+  as its final action: it builds the debug APK, uploads versioned + latest
+  keys to S3 (`android/scripts/build-and-upload-apk.sh`), and bumps the
+  "Test build · vX.Y.Z" downloads-card label in the marketing repo's
+  `site-content/install.html`, committing that one file and pushing
+  `origin main` (which triggers the site deploy). It runs **after** all repo
+  pushes, so an APK/upload/marketing failure never unwinds the promotions —
+  it surfaces as a loud error summary and a non-zero exit at the very end; fix
+  the cause and re-run `scripts/publish-android-apk` standalone. It skips (with
+  a loud warning, not a failure) if the marketing checkout is missing or its
+  `install.html` has uncommitted local changes.
 - **Every** repo except desktop moves in this step, not just the ones you
   remember touching: a repo left on staging is silently baked into the release
   at its older main and nothing fails (the release's sibling-move guard only

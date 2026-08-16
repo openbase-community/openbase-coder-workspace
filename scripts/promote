@@ -19,6 +19,12 @@
 # multi-react and boilersync-react are external symlinks — promote them in
 # their own workspaces (~/Projects/multi, ~/Projects/boilersync) first if
 # they changed.
+#
+# When a promotion into main/master actually moves the android repo, this
+# script runs scripts/publish-android-apk as its final step (build + upload
+# the APK to S3, bump the marketing downloads-card label). That runs after
+# every push, so a failure there never unwinds the promotions — it just prints
+# a loud error summary and exits non-zero at the end.
 
 set -euo pipefail
 
@@ -190,6 +196,7 @@ run_prechecks() {
 
 declare -a PLAN_REPO PLAN_ACTION PLAN_DETAIL
 FAILED=0
+ANDROID_PROMOTED=0
 
 echo "Planning promotion ${FROM} -> ${TO} ..."
 if [[ -n "${EXTERNAL_NOTE:-}" ]]; then
@@ -271,6 +278,7 @@ for i in "${!PLAN_REPO[@]}"; do
     dir="${ROOT_DIR}/${repo}"
     echo "Pushing ${label}: origin/${FROM} -> ${TO}"
     git -C "$dir" push origin "origin/${FROM}:refs/heads/${TO}"
+    [[ "$repo" == "android" ]] && ANDROID_PROMOTED=1
     # Keep the local TO ref current; best-effort (a checked-out TO in another
     # worktree, or a dirty tree, just leaves the local ref behind).
     if [[ "$(git -C "$dir" symbolic-ref --short --quiet HEAD || true)" == "$TO" ]]; then
@@ -281,3 +289,21 @@ for i in "${!PLAN_REPO[@]}"; do
 done
 
 echo "Promoted ${PUSH_COUNT} repo(s) ${FROM} -> ${TO}."
+
+# Auto-publish the Android APK + marketing downloads-card bump after a
+# production promotion, once the android repo has actually been promoted to
+# main. This runs LAST and on purpose does not unwind the promotions already
+# pushed above: a build/upload/marketing failure surfaces as a loud error
+# summary and a non-zero exit here, but every repo push already succeeded.
+if [[ "$TO" == "main" || "$TO" == "master" ]] && [[ "$ANDROID_PROMOTED" == "1" ]]; then
+    echo
+    echo "Publishing Android APK (android was promoted to ${TO}) ..."
+    if ! "$SCRIPT_DIR/publish-android-apk"; then
+        echo >&2
+        echo "ERROR: Android APK publish FAILED after the promotion completed." >&2
+        echo "  All ${PUSH_COUNT} repo(s) were promoted ${FROM} -> ${TO} successfully," >&2
+        echo "  but building/uploading the APK or bumping the marketing card did not." >&2
+        echo "  Fix the cause and re-run standalone: scripts/publish-android-apk" >&2
+        exit 1
+    fi
+fi
