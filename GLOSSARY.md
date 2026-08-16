@@ -41,13 +41,15 @@ notarization** (`pnpm dist:mac`, or `install:local` for the seedless dev-app
 variant) — see the `live-installation-test` skill. (3) **Openbase Cloud
 workspace AMI** — the dev-ami bake installs the CLI via `uv tool install
 openbase-coder` (PyPI) plus a pre-baked workspace clone, and instances
-finish with `openbase-coder provision`. Everything else — the standalone
-`install.sh` script, the release tarballs, PyPI — is an internal mechanism
-that supports these pathways (desktop seed, self-update, AMI bake, manual
-desktop setup), never a separately advertised way to install. The Docker
-image (`cli/Dockerfile` + `cli/docker/`) is likewise an internal/dev
-mechanism for headless runtime testing, not a user-facing pathway; it gets
-no user docs in `cli/docs/`.
+finish with `openbase-coder provision`. (4) **Docker image** —
+`openbaseai/openbase` on Docker Hub, built from `cli/Dockerfile` +
+`cli/docker/`; runs the full runtime in a Linux container with Tailscale as
+the networking layer, and is the supported way to run on Windows hosts (via
+Docker Desktop). User docs in `cli/docs/docker.md`; deeper image/dev docs in
+`cli/docker/README.md`. Everything else — the standalone `install.sh`
+script, the release tarballs, PyPI — is an internal mechanism that supports
+these pathways (desktop seed, self-update, AMI bake, manual desktop setup),
+never a separately advertised way to install.
 
 **Console**: The shared dashboard UI (from `coder-react`, built in
 `console`). The desktop app embeds it, the local runtime serves it in a
