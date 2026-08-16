@@ -210,8 +210,8 @@ polled while the step is visible:
 ### B2 — Setup mode selection
 
 - **Render:** two primary CTAs + one secondary link:
-  `[ Link Your Computer ]  [ Start with Cloud (Beta) ]` / `View Documentation →`
-- **"Link Your Computer"** → B3
+  `[ Set Up a New Computer ]  [ Start with Cloud (Beta) ]` / `View Documentation →`
+- **"Set Up a New Computer"** → B3
 - **"Start with Cloud (Beta)"** → cloud onboarding flow, out of scope here
 - **"View Documentation"** → open docs in browser
 
