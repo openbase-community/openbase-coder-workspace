@@ -119,6 +119,11 @@ exclude it.
 
 - Commit-message overrides on the pushed head commit: `[skip release]`,
   `[release patch]`, `[release major]`.
+- Concurrency contract: a push burst cancels in-flight release builds so the
+  final push releases once — but a `[skip release]` push never cancels
+  (`cancel-in-progress` is conditional on the head commit message). Its own
+  run skips itself, so letting it cancel would silently drop the
+  predecessor's release with nothing replacing it.
 - Manual releases: `workflow_dispatch` on auto-release (bump choice) or on
   release-standalone directly (exact version, draft option, sibling branch).
 - Pushes to `main` are production; pushes to `staging` serve only
