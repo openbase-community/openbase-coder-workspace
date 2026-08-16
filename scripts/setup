@@ -111,6 +111,28 @@ require_pnpm() {
 
 require_pnpm
 
+# The console build (Vite) and workspace tooling need a modern Node. CI
+# builds on Node 22; 20 is the supported floor.
+MIN_NODE_MAJOR=20
+require_node() {
+  if ! command -v node >/dev/null 2>&1; then
+    echo "Error: 'node' (>= ${MIN_NODE_MAJOR}) is required but was not found on PATH. Install it with:" >&2
+    echo "  brew install node   # or: pnpm env use --global 22" >&2
+    MISSING_PREREQ=true
+    return
+  fi
+  local node_version node_major
+  node_version="$(node --version 2>/dev/null)"
+  node_major="$(printf '%s' "$node_version" | sed -nE 's/^v([0-9]+)\..*/\1/p')"
+  if [ -z "$node_major" ] || [ "$node_major" -lt "$MIN_NODE_MAJOR" ]; then
+    echo "Error: Node >= ${MIN_NODE_MAJOR} is required (found ${node_version:-unknown}). Upgrade with:" >&2
+    echo "  brew upgrade node   # or: pnpm env use --global 22" >&2
+    MISSING_PREREQ=true
+  fi
+}
+
+require_node
+
 if [ "$MISSING_PREREQ" = true ]; then
   echo "Install the missing prerequisites above, then re-run ./scripts/setup." >&2
   exit 1
