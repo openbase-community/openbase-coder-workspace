@@ -305,7 +305,30 @@ TCP 127.0.0.1:7880 (LISTEN)
 
 ### Fix
 
-If the bindings and Tailscale Serve config are correct, bounce the local LiveKit server and agent together:
+**This is now self-healing.** The `sync-workers` service runs a
+`livekit_pool_watchdog` job (in
+`cli/openbase_coder_cli/services/livekit_pool_watchdog.py`) that tails
+`livekit-agent.log`, and on a newly-written `wait_pc_connection timed out`
+bounces `livekit-agent` automatically — escalating to bouncing
+`livekit-server` + `livekit-agent` if the signature recurs within 15 minutes.
+It also proactively recycles the idle agent every ~45 minutes so the stale
+pre-warmed pool never forms in the first place. Both paths are gated by an
+active-call guard (never bounces mid-call; a signature that fires during a
+live call is deferred and bounced once the call ends) and a rolling rate
+limit (max 3 bounces / 30 min).
+
+Look for its activity in the sync-workers log:
+
+```sh
+tail -n 200 ~/.openbase/logs/sync-workers.log | rg -i 'livekit_pool_watchdog'
+```
+
+You should see `bounce reason=stale_pool_signature`,
+`reason=stale_pool_signature_escalated`, or `reason=idle_recycle`; `deferred`
+(active call) and `rate_limited` lines explain why a bounce did **not** fire.
+
+If the watchdog is rate-limited, or `sync-workers` itself is down, fall back
+to bouncing the local LiveKit server and agent together by hand:
 
 ```sh
 ./.venv/bin/openbase-coder services stop livekit-agent
@@ -355,7 +378,9 @@ report the file as valid on disk — trust the crash report, not codesign.
 ### Fix
 
 Delete and reinstall the binary, then bounce server and agent together (see
-the WebRTC-timeout section above):
+the WebRTC-timeout section above — that section's `livekit_pool_watchdog`
+only bounces existing binaries, so a corrupt-signature crash-loop still needs
+this manual reinstall first):
 
 ```sh
 rm ~/.openbase/bin/livekit-server
