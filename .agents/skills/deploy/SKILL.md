@@ -94,7 +94,10 @@ promote pushes provider-first (cli ahead of the rest), skips repos with no
 staging delta so they trigger no rebuild/release, and **aborts before pushing
 anything** if any repo cannot fast-forward or if promoted content would pin a
 sibling to a less-stable branch ref ("main must point to main"). The step-0
-pre-release checks run automatically first.
+pre-release checks run automatically first; the console/desktop typechecks
+run against the committed origin/FROM refs in a throwaway worktree assembly,
+so another agent's dirty or untracked working-tree files can never fail (or
+force `--skip-checks` on) a promotion.
 
 ```bash
 # From the workspace root:
