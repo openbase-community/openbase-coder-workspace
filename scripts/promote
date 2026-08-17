@@ -41,11 +41,18 @@ EXTERNAL_NOTE="multi-react and boilersync-react are external trunk-based project
 # severity is `fatal` (failure aborts the whole promotion) or `warn` (failure
 # only prints a warning). These mirror the deploy skill's Section 0
 # preconditions; edit this list to change what a production promotion gates on.
+# Context column: `committed` checks run in a temporary assembly built from
+# the origin/FROM refs, so another agent's dirty/untracked working-tree files
+# can never fail (or pass) a promotion gate — tsc compiles everything under
+# src/, including foreign scratch files, which is exactly how two promotions
+# were force-skipped in Aug 2026. `local` checks stay in the real checkout:
+# the cli suite needs its established venv, and the mac preflight inspects
+# machine-local signing credentials by design.
 PRECHECKS=(
-    "cli test suite|cli|uv run pytest -q|fatal"
-    "console typecheck|console|pnpm exec tsc --noEmit -p tsconfig.app.json|fatal"
-    "desktop typecheck|desktop|pnpm exec tsc --noEmit -p tsconfig.app.json|fatal"
-    "desktop mac-release prereqs|desktop|pnpm run release:preflight:mac|warn"
+    "cli test suite|cli|uv run pytest -q|fatal|local"
+    "console typecheck|console|pnpm exec tsc --noEmit -p tsconfig.app.json|fatal|committed"
+    "desktop typecheck|desktop|pnpm exec tsc --noEmit -p tsconfig.app.json|fatal|committed"
+    "desktop mac-release prereqs|desktop|pnpm run release:preflight:mac|warn|local"
 )
 
 usage() {
@@ -148,6 +155,49 @@ check_branch_refs() {
     ! git -C "$dir" grep -nIE "$pattern" "$rev" -- 2>/dev/null
 }
 
+# Assembly of the committed origin/FROM refs for `committed`-context checks.
+# Shape mirrors the real pnpm workspace: the workspace-root repo as the base
+# worktree (manifests, lockfile, e2e), sibling JS repos as worktrees, and the
+# externally-symlinked multi-react/boilersync-react as real copies (pnpm
+# drops their importers otherwise). Built lazily, removed on exit.
+PRECHECK_ASSEMBLY=""
+PRECHECK_ASSEMBLY_WORKTREES=()
+
+cleanup_precheck_assembly() {
+    local wt repo_dir wt_dir
+    for wt in ${PRECHECK_ASSEMBLY_WORKTREES[@]+"${PRECHECK_ASSEMBLY_WORKTREES[@]}"}; do
+        IFS='#' read -r repo_dir wt_dir <<<"$wt"
+        git -C "$repo_dir" worktree remove --force "$wt_dir" >/dev/null 2>&1 || true
+    done
+    if [[ -n "$PRECHECK_ASSEMBLY" ]]; then
+        rm -rf "$PRECHECK_ASSEMBLY"
+    fi
+    return 0
+}
+trap cleanup_precheck_assembly EXIT
+
+build_precheck_assembly() {
+    [[ -n "$PRECHECK_ASSEMBLY" ]] && return 0
+    PRECHECK_ASSEMBLY="$(mktemp -d "${TMPDIR:-/tmp}/promote-prechecks.XXXXXX")"
+    local ws="${PRECHECK_ASSEMBLY}/ws" r
+    git -C "$ROOT_DIR" worktree add --detach --quiet "$ws" "origin/${FROM}" || return 1
+    PRECHECK_ASSEMBLY_WORKTREES+=("${ROOT_DIR}#${ws}")
+    for r in console desktop coder-react; do
+        git -C "${ROOT_DIR}/${r}" worktree add --detach --quiet "${ws}/${r}" "origin/${FROM}" || return 1
+        PRECHECK_ASSEMBLY_WORKTREES+=("${ROOT_DIR}/${r}#${ws}/${r}")
+    done
+    for r in multi-react boilersync-react; do
+        rsync -aL --exclude node_modules --exclude .git --exclude dist \
+            "${ROOT_DIR}/${r}/" "${ws}/${r}/" || return 1
+    done
+    ( cd "$ws" && pnpm install --prefer-offline --ignore-scripts ) \
+        >"${PRECHECK_ASSEMBLY}/pnpm-install.log" 2>&1 || {
+        echo "      pnpm install in the precheck assembly failed:"
+        sed 's/^/      /' "${PRECHECK_ASSEMBLY}/pnpm-install.log" | tail -n 12
+        return 1
+    }
+}
+
 # Run the deploy skill's pre-release checks before a production promotion.
 # Only gates when promoting into main/master; other targets (develop->staging,
 # feature->staging) skip the heavy suite. --skip-checks bypasses entirely. A
@@ -162,16 +212,26 @@ run_prechecks() {
         return 0
     fi
     echo "Running pre-release checks before promoting to ${TO} ..."
-    local failed=0 entry label reldir cmd sev dir out
+    echo "(typechecks run against the committed origin/${FROM} refs, not working trees)"
+    local failed=0 entry label reldir cmd sev ctx dir out
     for entry in "${PRECHECKS[@]}"; do
-        IFS='|' read -r label reldir cmd sev <<<"$entry"
-        dir="${ROOT_DIR}/${reldir}"
+        IFS='|' read -r label reldir cmd sev ctx <<<"$entry"
+        if [[ "$ctx" == "committed" ]]; then
+            if ! build_precheck_assembly; then
+                printf '  %-30s FAIL (could not build committed-refs assembly)\n' "$label"
+                failed=1
+                continue
+            fi
+            dir="${PRECHECK_ASSEMBLY}/ws/${reldir}"
+        else
+            dir="${ROOT_DIR}/${reldir}"
+            if [[ "$cmd" == *tsc* && ! -d "$dir/node_modules" ]]; then
+                printf '  %-30s SKIP (node_modules not installed)\n' "$label"
+                continue
+            fi
+        fi
         if [[ ! -d "$dir" ]]; then
             printf '  %-30s SKIP (no %s)\n' "$label" "$reldir"
-            continue
-        fi
-        if [[ "$cmd" == *tsc* && ! -d "$dir/node_modules" ]]; then
-            printf '  %-30s SKIP (node_modules not installed)\n' "$label"
             continue
         fi
         printf '  %-30s ... ' "$label"
