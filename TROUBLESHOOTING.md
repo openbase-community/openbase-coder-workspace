@@ -470,3 +470,33 @@ it.
 Run `openbase-coder auth status --json`. If `login_expired`, the stored
 refresh token was rejected — run `openbase-coder login` again. If surfaces
 still disagree, the install predates the consolidation; update it.
+
+## Stale Peer Trees, Resurrected Deleted Files, Or Branch Switches Not Propagating (Syncthing Stall)
+
+Symptoms on a two-Mac code-sync pair: the other machine's checkouts lag by
+hours; files a commit deleted reappear as *untracked* copies with
+pre-deletion mtimes (breaking builds/typecheck on files nobody edited);
+`*.sync-conflict-*` copies pile up; branch switches stop mirroring. Git-state
+sync deliberately rides Syncthing (repository manifests are synced files), so
+a file-sync stall freezes both layers.
+
+Diagnose:
+
+1. `openbase-coder sync status` — look for a red `ERROR:` under a folder
+   (e.g. `insufficient space on disk for database`) and the `Reconcile:`
+   line (`awaiting_files` climbing means files are behind git state).
+2. `df -h /System/Volumes/Data` — the classic cause is low disk; Syncthing
+   pauses folders below its free-space floor (2 GiB absolute in the managed
+   config; 1% of the disk on configs rendered before that floor shipped).
+3. Engine detail: `curl -H "X-API-Key: $(sed -n 's/.*<apikey>\(.*\)<\/apikey>.*/\1/p' ~/.openbase/code-sync/config.xml)" "http://127.0.0.1:8385/rest/db/status?folder=<folder-id>"`
+   — the `error` field names the stall reason.
+4. Reconcile heartbeat: `grep "code_sync tick_complete" ~/.openbase/logs/sync-workers.log | tail`
+   — no lines means the sync-workers service is down; `errors>0` lines are
+   explained by an adjacent `code_sync tick_errors` warning naming the repo.
+
+Remedy: free disk space (Docker VM images under
+`~/Library/Containers/com.docker.docker` are a known multi-hundred-GB
+offender), then `openbase-coder services stop code-sync && openbase-coder
+services start code-sync`. If a deleted file was resurrected, remove the
+stray untracked copies on **both** machines (SSH to the peer) or Syncthing
+round-trips them back.
