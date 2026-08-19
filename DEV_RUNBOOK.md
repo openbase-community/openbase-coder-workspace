@@ -128,3 +128,22 @@ To test first-run behavior from scratch: stop services
 re-run `./scripts/setup`. You lose cloud login (re-run `openbase-coder
 login`), dispatcher settings (e.g. the skills auto-link toggle), and the
 Syncthing thread-sync folder identity.
+
+To exercise the macOS install flows **without** disturbing your real install,
+use the installation-flow tests instead of archiving `~/.openbase`:
+
+```bash
+./install-tests/run-all.sh                                              # developer install (install.sh), sandbox $HOME
+./install-tests/electron-macos/bootstrap-golden.sh                      # one-time: bake the Tart golden VM
+./install-tests/electron-macos/run.sh --tailscale-authkey tskey-auth-...# Electron app flow in a disposable VM
+```
+
+The developer-install flow runs `cli/scripts/install.sh` in a throwaway sandbox
+`$HOME` (services skipped, Tailscale stubbed), so your install, PATH, and
+launchd services are untouched. The Electron flow runs the real onboarding —
+which activates the bundled CLI, installs launchd services, and configures
+Tailscale Serve — inside a disposable macOS VM (Tart), so it can't clobber this
+machine; because onboarding gates setup on Tailscale being connected, that run
+needs an ephemeral Tailscale auth key. The dev-**workspace** flow
+(`scripts/setup`) is a Linux concern and is not covered here. See
+`install-tests/README.md` and `install-tests/electron-macos/README.md`.
