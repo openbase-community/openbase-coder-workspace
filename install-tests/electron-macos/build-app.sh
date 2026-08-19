@@ -37,6 +37,17 @@ while [ "$#" -gt 0 ]; do
 done
 
 step() { printf '\033[34m==>\033[0m %s\n' "$*"; }
+die()  { printf '\033[31mFATAL\033[0m %s\n' "$*" >&2; exit 1; }
+
+# Prerequisites for the local build (fail early with a clear message). This
+# builds the live-installation-test skill's UNSIGNED install-test app; it needs
+# the full desktop/CLI toolchain. (manual-vm.sh needs NONE of this — it just
+# downloads the released DMG.)
+[ "$(uname -m)" = "arm64" ] || die "Apple Silicon Mac required (build is --arm64)."
+command -v uv   >/dev/null 2>&1 || die "uv is required (curl -LsSf https://astral.sh/uv/install.sh | sh)."
+command -v pnpm >/dev/null 2>&1 || die "pnpm is required (corepack enable / https://pnpm.io)."
+command -v node >/dev/null 2>&1 || die "Node >= 20 is required."
+command -v xcodebuild >/dev/null 2>&1 || die "Xcode is required to build the macOS companion (xcodebuild not found)."
 
 CLI_PKG_DIR="$CLI_DIR/dist/openbase-coder-package"
 

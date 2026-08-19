@@ -33,6 +33,27 @@ Out of scope: the **Login** (browser OAuth) and **Pairing** (a physical phone)
 onboarding steps — they need a real cloud account and device and cannot be
 automated. Those remain the domain of live no-mock E2E.
 
+## Prerequisites
+
+- **Apple Silicon Mac** — Tart virtualizes macOS on arm64 only (Intel can't run
+  any of this); the build and DMGs are `-arm64`.
+- **Homebrew** — `bootstrap-golden.sh` installs Tart + sshpass through it (and
+  runs `brew trust cirruslabs/cli`, which current Homebrew requires before it
+  will install from that tap).
+- **Disk**: ~50 GB for the golden image (steady state ~31 GB). Apple caps **2**
+  concurrently-running macOS VMs.
+- **`run.sh` (Electron flow)** needs an **ephemeral Tailscale auth key**
+  (onboarding gates setup on Tailscale being connected).
+- **`run.sh`'s local build** (`build-app.sh`, only when you don't pass `--app`)
+  needs the full desktop/CLI toolchain: **Xcode** (companion `xcodebuild`),
+  **uv**, **pnpm**, **Node ≥ 20**, and a **`~/.openbase/bin/livekit-server`**
+  binary — which only exists if you already have a local Openbase dev install
+  (or pass `--livekit-bin`). This produces the **unsigned** install-test app per
+  the `live-installation-test` skill (not a new build pathway — it is that
+  skill's local-test build, distinct from `dist:mac` / `dist:mac:publish`).
+- **`manual-vm.sh` needs none of the build toolchain** — it clones a bare macOS
+  image and you download the real signed DMG inside the VM.
+
 ## One-time bootstrap (~50 GB, headless, do this once)
 
 ```bash

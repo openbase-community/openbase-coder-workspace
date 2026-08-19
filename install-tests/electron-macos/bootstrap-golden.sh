@@ -23,14 +23,20 @@ SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o Connect
 
 step() { printf '\033[34m==>\033[0m %s\n' "$*"; }
 
-if ! command -v brew >/dev/null 2>&1; then
-  echo "Homebrew is required (https://brew.sh)"; exit 1
-fi
+# Prerequisites (fail early with a clear message rather than mid-run).
+[ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ] || {
+  echo "This harness requires an Apple Silicon Mac (Tart virtualizes macOS on arm64)." >&2; exit 1; }
+command -v brew >/dev/null 2>&1 || { echo "Homebrew is required (https://brew.sh)." >&2; exit 1; }
+
 if ! command -v tart >/dev/null 2>&1; then
-  step "Installing Tart"; brew install cirruslabs/cli/tart
+  step "Installing Tart"
+  # Current Homebrew refuses third-party taps until trusted; Tart lives in one.
+  brew trust cirruslabs/cli 2>/dev/null || true
+  brew install cirruslabs/cli/tart
 fi
 if ! command -v sshpass >/dev/null 2>&1; then
-  step "Installing sshpass"; brew install sshpass
+  step "Installing sshpass"
+  brew install sshpass || brew install esolitos/ipa/sshpass
 fi
 
 if tart list 2>/dev/null | grep -q "[[:space:]]$GOLDEN[[:space:]]"; then
