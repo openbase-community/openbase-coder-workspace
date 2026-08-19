@@ -41,3 +41,5 @@ write for a public audience.
   registry, CLI/desktop/iOS flows. Shipped.
 - `code-sync/` — managed Syncthing sync of selected directories between a
   user's machines, with git-state reconciliation. Implemented; rolling out.
+- `inbound-voip/` — explicit, short-lived agent-to-user calls delivered with
+  PushKit and answered through the user's authenticated local runtime.
