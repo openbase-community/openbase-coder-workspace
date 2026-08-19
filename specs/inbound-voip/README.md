@@ -2,8 +2,10 @@
 
 ## Status (updated 2026-08-19)
 
-Implementation is in progress on `develop`. This feature is not release-ready
-until its production APNs configuration and physical-iPhone matrix pass.
+Implementation and automated validation are complete on `develop`. This
+feature is not release-ready until the composed Cloud/CLI revisions are
+deployed, production APNs configuration is verified, and the signed
+physical-iPhone matrix passes.
 
 ## Product boundary
 
