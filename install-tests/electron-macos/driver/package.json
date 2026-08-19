@@ -1,0 +1,13 @@
+{
+  "name": "openbase-electron-install-driver",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Playwright-Electron clickthrough + verification for the Openbase Coder macOS install flow. Runs inside a disposable Tart VM.",
+  "scripts": {
+    "test": "node onboard-and-verify.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}
