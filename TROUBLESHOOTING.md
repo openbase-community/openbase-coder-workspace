@@ -409,7 +409,7 @@ denying having started it.
 ### Root cause
 
 The dispatcher's Claude conversation is one shared native session
-(`~/.openbase/claude_config/projects/-Users-<user>/<session>.jsonl`), but
+(`~/.claude/projects/-Users-<user>/<session>.jsonl`), but
 several LiveKit worker processes (and any long-lived MCP server holding a
 `ClaudeAgentSdkClient`) each keep their own Claude CLI subprocess attached to
 it. Concurrent writers interleave the transcript's parent chains, and a CLI
