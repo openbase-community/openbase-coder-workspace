@@ -25,6 +25,14 @@ physical-phone, Appium, voice, or production-cloud E2E runs.
 - When the iOS app may be listening, do not use incidental agent `tts` for
   status updates or completion messages. Only speak when the audio is an
   intentional test stimulus or Gabe explicitly asks for an audible prompt.
+- Any time the agent interacts with Appium directly — ad-hoc taps, screenshots,
+  page source, alerts, app lifecycle, or debugging outside the wdio spec
+  runner — it must go through the `appium` MCP server (`mcp__appium__*` tools;
+  registered as `appium`, command `npx -y appium-mcp`). Do not hand-start an
+  `appium` CLI server, curl WebDriver endpoints, or write one-off
+  WebdriverIO scripts. The pnpm `manual:e2e:ios:*` specs keep using their own
+  wdio-managed Appium; the MCP is for agent-driven interaction. See "Direct
+  Appium Interaction" below.
 - Do not source broad env files for the test process. Cherry-pick only the
   specific credentials or variables required for the command.
 - Treat Mac-speaker prompt audio as a real but lossy test dependency. Do not put
@@ -95,6 +103,28 @@ Use repo-relative or `~`-relative paths in the RMOT.
 5. If audio stimulus is enabled, provide only the Cartesia key needed by the
    child process, for example by extracting one variable from a private env
    file. Do not source the whole file.
+
+## Direct Appium Interaction
+
+When you need to drive or inspect the phone yourself (reproduce a failing spec
+step, check what is on screen, dismiss an alert, take a screenshot, relaunch
+the app), use only the `appium` MCP server tools. If the `mcp__appium__*` tools
+are deferred, load them via ToolSearch first. Typical flow:
+
+1. `select_device` — pick the physical iPhone (matches `OPENBASE_IOS_UDID`).
+2. `appium_prepare_ios_real_device` — call once without
+   `provisioningProfileUuid` to list profiles, then again with the chosen UUID;
+   this readies WebDriverAgent on the device.
+3. `appium_session_management` `action=create` against `com.openbase.coder`
+   (or `action=attach` to inspect an existing session instead of creating one).
+4. Interact with `appium_find_element`, `appium_gesture`, `appium_set_value`,
+   `appium_get_text`, `appium_get_page_source`, `appium_screenshot`,
+   `appium_alert`, `appium_app_lifecycle`.
+5. `appium_session_management` `action=delete` (or `detach`) when done.
+
+Do not create an MCP session while a live wdio spec is mid-run — a second
+XCUITest session can steal WebDriverAgent from the run. Interact between runs,
+or attach rather than create.
 
 ## Live Commands
 

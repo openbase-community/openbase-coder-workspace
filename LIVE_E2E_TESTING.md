@@ -32,6 +32,12 @@ The suite is manual-only because it can spend real API credits, speak audio into
 Gabe's phone, and create real agent work. Do not run live specs unless Gabe
 explicitly asks for live full-system testing, and load the live E2E skill first.
 
+When an agent interacts with Appium directly (outside the wdio spec runner —
+ad-hoc phone driving, debugging, screen inspection), it must use the `appium`
+MCP server tools (`mcp__appium__*`; `npx -y appium-mcp`) rather than a
+hand-started Appium server or one-off WebDriver scripts. See
+`e2e/ios-physical/README.md` and the live E2E skill for the flow.
+
 ## Runtime Targets
 
 The tests drive whichever Openbase services are active. Use
