@@ -159,10 +159,10 @@ matches their trigger.
 
 **Skills auto-link**: An off-by-default setting, toggled from the console
 skills settings, that symlinks every personal skill under `~/.agents/skills`
-into both Openbase agent homes: `~/.openbase/codex_home/skills` and
-`~/.openbase/claude_config/skills`. Auto-linked skills share one source copy;
-the `openbase-routines` service re-syncs the links roughly every five minutes,
-so newly added personal skills appear without a restart.
+into both shared agent homes: `~/.codex/skills` and `~/.claude/skills`.
+Auto-linked skills share one source copy; the `openbase-routines` service
+re-syncs the links roughly every five minutes, so newly added personal skills
+appear without a restart.
 
 **Plugin**: A local Python package that can contribute bootstrappers, stacks,
 skills, Django URL modules, and iframe console pages to Openbase Coder.
@@ -258,38 +258,38 @@ only installed for backends that use them.
 
 **Session-ID hook**: The `inject-session-id.sh` SessionStart hook that
 `openbase-coder setup` installs into `~/.openbase/hooks` and registers in both
-Openbase agent homes (Claude `settings.json` hooks and a trusted codex
-`[[hooks.SessionStart]]` entry). It injects the session's thread/session ID
+shared agent homes (`~/.claude/settings.json` hooks and a trusted codex
+`[[hooks.SessionStart]]` entry in `~/.codex/config.toml`). It injects the session's thread/session ID
 into the conversation along with the instructions for using it, so agents
 stamp commits with the `Agent-Thread-Id` trailer without a standing
 `AGENTS.md` rule; the instructions ride in the hook so they ship, update, and
 uninstall with it.
 
-**Codex home**: The Openbase-specific Codex configuration directory, usually
-`~/.openbase/codex_home`, that stores Codex instructions, skills, and related
-runtime configuration.
+**Shared agent homes**: The user's own `~/.codex` and `~/.claude`, which
+Openbase Coder uses directly for every session — one thread/session store per
+backend shared with the terminal CLIs, IDE extensions, and desktop apps.
+Setup registers only the super-agents MCP server and the session-ID hook
+there; Openbase's full-permission posture and base instructions are passed
+per session (super-agents `SUPER_AGENTS_CODEX_APPROVAL_POLICY`,
+`SUPER_AGENTS_CODEX_SANDBOX_POLICY`, and `SUPER_AGENTS_BASE_INSTRUCTIONS_PATH`
+env), never written into the homes' own defaults.
 
-**Thread sync conflict**: A local coding-thread sync state — for a Codex
-thread or a Claude Code session — that needs human review because both synced
-homes changed the same thread or a remote device snapshot diverged from the
-local copy. Both backends resolve device conflicts the same way: accept the
-local copy or accept the latest remote snapshot. Device conflicts only stand
-while transcripts genuinely diverge: snapshots whose content is identical to
-or an append-only extension of the local copy sync without conflict, and an
+**Thread sync conflict**: A cross-device coding-thread sync state — for a
+Codex thread or a Claude Code session — that needs human review because a
+remote device snapshot diverged from the local copy. (Local sessions live in
+one shared home per backend, so there is no local home-pair conflict.) Both
+backends resolve device conflicts the same way: accept the local copy or
+accept the latest remote snapshot. Device conflicts only stand while
+transcripts genuinely diverge: snapshots whose content is identical to or an
+append-only extension of the local copy sync without conflict, and an
 existing conflict auto-clears once the two sides converge.
 
-**Claude config**: The Openbase-specific Claude Code configuration directory,
-usually `~/.openbase/claude_config`, that stores Claude instructions and related
-runtime configuration. Its `.claude.json` is the merged Claude Code user state
-Claude reads under Openbase's `CLAUDE_CONFIG_DIR`.
-
-**Claude auth bridge (keychain)**: The setup/sync behavior that lets Openbase's
-managed Claude config inherit the user's normal Claude Code login. It merges
-normal `~/.claude.json` state into `~/.openbase/claude_config/.claude.json`
-(existing Openbase values win, `mcpServers` are unioned) and, on macOS, copies
-the normal "Claude Code-credentials" keychain item to Openbase's
-config-dir-specific keychain service, avoiding a second browser OAuth. The
-fallback is `openbase-coder claude login`.
+**Claude app index sync**: A best-effort `sync-workers` job (macOS only) that
+injects Openbase Claude sessions into the Claude desktop app's private
+session index (`~/Library/Application Support/Claude/claude-code-sessions`),
+so sessions started by voice or the CLI appear in the app. Injected entries
+are tracked in `~/.openbase/claude-app-index-ledger.json`; the app's own
+entries are never modified.
 
 **Multi-root workspace**: This checkout, which groups multiple Openbase Coder
 repositories under one `multi.json` so agents and developers can coordinate
