@@ -46,8 +46,9 @@ product (auth, remote workspaces, and the PaaS backend).
 
 ## Working In This Workspace
 
-- Branches: do day-to-day work on `staging`. Deploys merge **every** repo's
-  staging to main in one batch, cli last (see the `deploy` skill). The
+- Branches: do day-to-day work on `develop`. Release promotion moves changes
+  through `staging`; deploys merge **every** repo's staging to main in one
+  batch, cli last (see the `deploy` skill). The
   workspace AND desktop repos require **linear history** on main (no merge
   commits) — integrate feature branches by cherry-pick/rebase, never
   `merge --no-edit`, or the push is rejected.
@@ -113,6 +114,11 @@ product (auth, remote workspaces, and the PaaS backend).
 - Tests under `e2e/` must be true app end-to-end tests (Appium-driven iOS or
   Selenium-driven browser). Direct API, app-server, or service-client
   integration tests do not belong there.
+- When an agent interacts with Appium directly (ad-hoc device driving,
+  debugging, screen inspection — anything outside the wdio spec runner), it
+  must go through the `appium` MCP server tools (`mcp__appium__*`), not a
+  hand-started Appium server, raw WebDriver calls, or one-off WebdriverIO
+  scripts. See `e2e/ios-physical/README.md`.
 - This machine may sync `~/Projects` with another Mac via Syncthing. `.git`
   must never sync (see `~/Projects/.stglobalignore`); if a commit or build
   fails mysteriously, suspect a sync flap and verify `HEAD` matches

@@ -58,6 +58,20 @@ It also reports the active Openbase runtime target and fails if
 
 The helpers use stable accessibility identifiers when the app exposes them and fall back to visible labels where possible. Future iOS app changes should add identifiers such as `nav.call`, `settings.backend.host`, `settings.backend.add`, `call.start`, and `call.end`.
 
+## Agent Interaction via Appium MCP
+
+The `manual:e2e:ios:*` specs manage their own Appium through the wdio runner
+(`@wdio/appium-service`), and that stays unchanged. But any time an **agent**
+interacts with Appium directly — driving the phone ad hoc, debugging a failing
+spec step, reading page source, taking screenshots, handling alerts — it must
+go through the `appium` MCP server (`mcp__appium__*` tools; registered as
+`appium`, command `npx -y appium-mcp`), never a hand-started `appium` server,
+raw WebDriver HTTP calls, or one-off WebdriverIO scripts. The flow
+(`select_device` → `appium_prepare_ios_real_device` →
+`appium_session_management` → interaction tools) is documented in
+`.agents/skills/live-no-mock-e2e/SKILL.md`. Do not create an MCP session while
+a wdio spec is mid-run; it can steal WebDriverAgent from the run.
+
 ## Voice Assertion Policy
 
 Voice E2E tests should default to cheap, deterministic evidence:
