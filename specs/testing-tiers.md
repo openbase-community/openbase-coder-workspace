@@ -161,8 +161,9 @@ never has to be found twice.
   `LIVE_E2E_TESTING.md` and `e2e-scripted/README.md`.
 - Disposable macOS VM harness used for clean-room installs:
   `install-tests/electron-macos/`.
-- Field-test user provisioning (reserved `example.com` identities, mocked
-  verification + entitlement): the `field_test_user` management command in
-  openbase-drf-api-core PR
-  [#12](https://github.com/openbase-community/openbase-drf-api-core/pull/12).
+- Field-test account provisioning (a real designated account from the
+  `FIELD_TEST_ALLOWED_EMAILS` allowlist; pre-test destroy + post-signup mocked
+  entitlement, with real signup and real email verification in between): the
+  `field_test_account` management command in openbase-drf-api-core PR
+  [#13](https://github.com/openbase-community/openbase-drf-api-core/pull/13).
 - Terminology: `GLOSSARY.md` ("field test", "scripted E2E", "Live E2E test").

@@ -31,7 +31,7 @@ flow is gone. Field tests are clean-room by construction:
   touched. The native-Windows pathway uses a Windows VM (later). Never install a
   field-test build onto the developer's own macOS session.
 - **Accounts are dedicated field-test identities**, never the developer's real
-  Openbase account. See [Field-test user lifecycle](#field-test-user-lifecycle).
+  Openbase account. See [Field-test account lifecycle](#field-test-account-lifecycle).
 - If a request would require mutating the developer's live install, account, or
   services, stop and re-scope it into the VM + field-test-account model rather
   than running it against real state.
@@ -71,7 +71,9 @@ Every field-test session runs the same three steps, in order:
 
 1. **Installation.** Stand up a clean environment (Tart macOS VM, or Windows VM
    for the Docker pathway) and install the product using the sampled
-   installation method. Use a fresh [field-test user](#field-test-user-lifecycle).
+   installation method. Use the designated
+   [field-test account](#field-test-account-lifecycle): destroy any prior
+   account first, then sign it up for real as part of this step.
 2. **Smoke test.** A short basic check that the core loop works at all — place a
    call, get a dispatcher response through the full acoustic loop — before
    investing in anything deeper. If the smoke test fails, that is the finding;
@@ -132,42 +134,63 @@ like "the real instruction starts after this sentence." If the phone display
 dims or locks during a long run, pause and ask Gabe to keep the phone awake or
 set Auto-Lock to Never.
 
-## Field-Test User Lifecycle
+## Field-Test Account Lifecycle
 
-Field-test users are **reserved, disposable identities** matching exactly the
-regex `^field-test-[a-z0-9-]+@example\.com$`. The cloud email backend filters
-`example.com`/`.net`/`.org` sends (`config/email.py` `is_filtered_email_address`),
-so these addresses cause **zero Resend sends and zero spam-score risk**. Never
-use a developer's real Openbase account for a field test.
+A field test runs as a **real, designated account** — never a developer's real
+Openbase account. Its email must be listed in the cloud API's
+`FIELD_TEST_ALLOWED_EMAILS` allowlist (comma-separated env/config var); the
+`field_test_account` command refuses to touch any email not on that list, and an
+empty/unset allowlist refuses everything. Use **plus-addressing** to mint
+unlimited distinct real signup addresses that all land in one controlled inbox:
+`you+<run-slug>@gmail.com` all deliver to `you@gmail.com`, yet each is a distinct
+account to Openbase.
 
-Provisioning is the `field_test_user` Django management command in the cloud API
-(openbase-drf-api-core PR
-[#12](https://github.com/openbase-community/openbase-drf-api-core/pull/12), which
-cross-links back to workspace PR #11). Its contract:
+Because the account is real, the field test exercises the **real signup and real
+email-verification** flow — that is the whole point of this design. Nothing about
+verification is mocked: the verification email actually arrives in the controlled
+inbox and the agent reads it to finish signing up. Only two lifecycle steps are
+done out-of-band, by the `field_test_account` Django management command in the
+cloud API (openbase-drf-api-core PR
+[#13](https://github.com/openbase-community/openbase-drf-api-core/pull/13), which
+cross-links back to this workspace PR):
 
-- **Actions:** `--create` · `--destroy` · `--recycle SLUG` (where `SLUG` is the
-  `[a-z0-9-]+` part of the address). `--recycle` is idempotent — it destroys any
-  existing matching user and creates a fresh one, rotating the password.
-- **Hard guardrail:** it refuses, before any write, to destroy or modify any user
-  whose email does not match the reserved pattern.
-- **Provisioning on create:** marks the allauth `EmailAddress` verified+primary,
-  and grants **faked** paid entitlement via a local `payment.Subscription` row at
-  the normal **default-tier** cap — no Stripe checkout, subscription, or charge.
-- **Output:** one line of machine-readable JSON for the harness —
-  `email`, `password`, `user_id`, `verified`, `entitled`. `--create`/`--recycle`
-  print a generated strong password on stdout.
+- **`--destroy EMAIL`** (pre-test): deletes the designated user via the canonical
+  account-deletion cascade, so the run starts from a clean slate. Idempotent — a
+  no-op if the user does not exist.
+- **`--mock-payment EMAIL`** (mid-test, AFTER the real signup + verification):
+  grants paid entitlement via a local `payment.Subscription` row at the normal
+  **default-tier** cap — no Stripe checkout, subscription, or charge.
 
-Recycle a fresh user before each field test. Invoke it in production via
-`openbase run` against the cloud app:
+It **never creates users and never mocks verification.** Both operations are
+guarded by the allowlist before any read/write and emit one line of
+machine-readable JSON for the harness (`action`, `email`, `user_id`, and
+`destroyed`/`entitled`).
+
+The lifecycle across one field test:
+
+1. **Destroy** any prior account: `field_test_account --destroy <email>`.
+2. **Real signup** happens as part of installation / first-run testing — the
+   agent drives the product through actual account creation for `<email>`.
+3. **Read the verification email** from the controlled inbox and complete
+   verification for real: use the `gmail-cli` skill to find and open the Openbase
+   verification message and follow its link/code.
+4. **Mock payment** once signed in: `field_test_account --mock-payment <email>`
+   to unlock paid features.
+
+Invoke in production via `openbase run` against the cloud app (the
+`FIELD_TEST_ALLOWED_EMAILS` config var must be set on the app):
 
 ```bash
-# Production: recycle the reserved field-test user for this run.
-openbase run -a <app> python manage.py field_test_user --recycle <run-slug>
-# → {"email":"field-test-<run-slug>@example.com","password":"…","user_id":…,"verified":true,"entitled":true}
+# Pre-test: destroy the designated field-test account.
+openbase run -a <app> python manage.py field_test_account --destroy you+<run-slug>@gmail.com
+# → {"action":"destroy","email":"you+<run-slug>@gmail.com","destroyed":true,"user_id":…}
+
+# After the real signup + email verification: grant paid entitlement.
+openbase run -a <app> python manage.py field_test_account --mock-payment you+<run-slug>@gmail.com
+# → {"action":"mock-payment","email":"…","user_id":…,"entitled":true,"subscription_created":true}
 ```
 
-Capture the JSON to get the email + password the harness signs in with. Cross-
-reference PR #12 from the field-test RMOT.
+Cross-reference PR #13 from the field-test RMOT.
 
 ## Required RMOT
 
@@ -177,8 +200,10 @@ must include:
 - exact date/time and the requested test scope;
 - the **sampled parameters** for this run (host OS, mobile OS, connectivity,
   branch, installation method) and the previous run's date;
-- the field-test user identity and confirmation it is a fresh
-  `field-test-[a-z0-9-]+@example.com` (and that `field_test_user --recycle` ran);
+- the field-test account identity and confirmation its email is on the
+  `FIELD_TEST_ALLOWED_EMAILS` allowlist, that `field_test_account --destroy` ran
+  pre-test, and that signup + email verification will run for real (payment
+  mocked post-signup via `field_test_account --mock-payment`);
 - clean-room confirmation: which disposable VM (Tart macOS / Windows) and that
   the developer's real install/account/services are untouched;
 - planned steps: install → smoke → targeted, with the specific targeted areas
@@ -196,7 +221,8 @@ must include:
   pointer, keep-phone-awake / disable Auto-Lock;
 - expected human actions and when `user say` will be used;
 - no-mock statement listing the real systems involved;
-- rollback/cleanup notes (VM deletion, field-test user teardown).
+- rollback/cleanup notes (VM deletion, field-test account teardown via
+  `field_test_account --destroy`).
 
 Use repo-relative or `~`-relative paths in the RMOT. Keep brittle scratch in
 `.local/` (gitignored) — never reference `.local/` files from committed docs.
@@ -206,7 +232,10 @@ Use repo-relative or `~`-relative paths in the RMOT. Keep brittle scratch in
 1. Confirm the disposable VM harness is ready (macOS): see
    `install-tests/electron-macos/README.md` — `bootstrap-golden.sh` bakes the
    golden VM once; `run.sh` clones a throwaway instance per run.
-2. Confirm a fresh field-test user exists (`field_test_user --recycle <slug>`).
+2. Destroy any prior field-test account
+   (`field_test_account --destroy <email>`); the run signs it up for real, so do
+   not pre-create it. Confirm the email is on the `FIELD_TEST_ALLOWED_EMAILS`
+   allowlist.
 3. Inside the VM, confirm production cloud targeting:
 
    ```bash
@@ -250,15 +279,26 @@ from the run; interact between runs, or attach rather than create.
 Rigorously test the running system. **Every** failure a field test finds gets:
 
 1. **Recorded** in the daily field-test log (see below).
-2. **Reported to Slack** — post a clearly-scoped message to the team via the
-   `slack-mcp` skill / official Slack MCP.
-   **`#PLACEHOLDER-CHANNEL` — Gabe to confirm the real channel name.** Include:
-   what failed, the sampled parameters, the branch/commit under test, and a link
-   to the PR once opened.
-3. **Fixed as a READY PR.** The field-testing agent, or a dispatched fix agent,
-   implements the fix on a branch against `develop`, with tests, and opens a
-   pull request. **Never merge.** Follow each touched repo's `AGENTS.md`; keep
-   diffs minimal and focused; run the affected tests.
+2. **Reported to Slack** — post a clearly-scoped message to the team **`#qa`**
+   channel via the `slack-mcp` skill / official Slack MCP. Include: what failed,
+   the sampled parameters, the branch/commit under test, and a link to the PR
+   once opened (or the "already fixed in `develop`" note per step 3).
+3. **Fixed as a READY PR into `develop`.** The field-testing agent, or a
+   dispatched fix agent, implements the fix on a branch against `develop`, with
+   tests, and opens a pull request. **Never merge.** Follow each touched repo's
+   `AGENTS.md`; keep diffs minimal and focused; run the affected tests.
+
+   **Exception — the failure was observed on a `main` or `staging` build.** When
+   this run's sampled **Branch** parameter is `main` or `staging`, the fix may
+   already be sitting in `develop`, unreleased. Before opening any PR, **first
+   check whether `develop` already contains the fix** for the affected area:
+   inspect `develop`'s history/diff around the affected code, and reproduce
+   against `develop` if that is quick. If the fix already exists in `develop`, do
+   **not** open a duplicate PR. Instead record the failure in the daily log and
+   the `#qa` Slack message as **"already fixed in `develop`, pending
+   promotion/release"**, so it reads as a **release-gap signal** (a promotion is
+   overdue), not a new bug. Only when `develop` does *not* already contain the
+   fix do you open a READY PR against `develop` as above.
 
 And, when appropriate:
 
@@ -287,7 +327,7 @@ not reference it from committed docs.
 After the run, report (and write a summary artifact per the
 `openbase-coder-reports` skill):
 
-- sampled parameters and the field-test user used;
+- sampled parameters and the field-test account used;
 - clean-room confirmation (which VM; developer state untouched);
 - which surfaces were tested and whether the full acoustic loop was exercised
   (outbound TTS + inbound STT);
