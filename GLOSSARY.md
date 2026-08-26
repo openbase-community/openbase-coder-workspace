@@ -45,12 +45,21 @@ it finds is logged, sent to Slack, and fixed as a READY PR against `develop`,
 and reproducible regressions are pinned as new scripted-E2E specs. Operating
 procedure: the `field-testing` skill.
 
-**Field-test user**: A reserved, disposable test identity matching
-`field-test-*@example.com`. Because the cloud email backend filters
-`example.com`/`.net`/`.org` sends, these addresses cause zero real email sends
-and zero spam-score risk. Before each field test the previous field-test user is
-destroyed and a fresh one created — email pre-verified and payment mocked — via
-the production `manage.py field_test_user` command in the cloud workspace.
+**Field-test user**: A reserved, disposable test identity matching exactly
+`^field-test-[a-z0-9-]+@example\.com$`. Because the cloud email backend filters
+`example.com`/`.net`/`.org` sends (`config/email.py` `is_filtered_email_address`),
+these addresses cause zero real email sends and zero spam-score risk. Before each
+field test the previous field-test user is destroyed and a fresh one created —
+email pre-verified (allauth `EmailAddress` marked verified+primary) and payment
+mocked — via the production `field_test_user` Django management command
+(openbase-drf-api-core PR
+[#12](https://github.com/openbase-community/openbase-drf-api-core/pull/12)). The
+command takes `--create` / `--destroy` / `--recycle SLUG`, guards hard against
+touching any non-matching email, and emits one line of JSON (`email`,
+`password`, `user_id`, `verified`, `entitled`) for the harness. Entitlement is
+**faked** as a local `payment.Subscription` row at the normal default-tier cap
+(no Stripe checkout or charge). Invoke in production via
+`openbase run -a <app> python manage.py field_test_user …`.
 
 **Desktop app**: The macOS Electron app. It bundles and activates the
 standalone CLI runtime, runs guided first-time setup, and hosts the dashboard
@@ -74,9 +83,15 @@ openbase-coder` (PyPI) plus a pre-baked workspace clone, and instances
 finish with `openbase-coder provision`. (4) **Docker image** —
 `openbaseai/openbase` on Docker Hub, built from `cli/Dockerfile` +
 `cli/docker/`; runs the full runtime in a Linux container with Tailscale as
-the networking layer, and is the supported way to run on Windows hosts (via
-Docker Desktop). User docs in `cli/docs/docker.md`; deeper image/dev docs in
-`cli/docker/README.md`. Everything else — the standalone `install.sh`
+the networking layer, on any Docker engine (macOS, Windows, or Linux). User
+docs in `cli/docs/docker.md`; deeper image/dev docs in `cli/docker/README.md`.
+(5) **Native Windows (beta)** — Openbase Coder runs natively on Windows:
+`openbase-coder setup` supports Windows directly, on a cross-platform service
+backend with cross-platform file locking and the official Tailscale client for
+networking (foundation from the Peruvian hackathon fork; see `cli/README.md`).
+This — not the Docker image — is the supported way to run Openbase on a Windows
+host. Installer/packaging details are still firming up and are not documented
+here yet. Everything else — the standalone `install.sh`
 script, the release tarballs, PyPI — is an internal mechanism that supports
 these pathways (desktop seed, self-update, AMI bake, manual desktop setup),
 never a separately advertised way to install.

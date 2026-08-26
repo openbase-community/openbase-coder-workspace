@@ -74,8 +74,8 @@ Three properties define a field test and separate it from tier 2:
 2. **Clean-room installation.** Every field test installs the product fresh into
    a disposable, isolated environment — never the developer's own machine, user,
    or existing installation. On macOS the host side runs exclusively inside a
-   disposable [Tart](https://tart.run) macOS VM; the Windows/Docker pathway uses
-   a Windows VM. Accounts are dedicated field-test identities, never a
+   disposable [Tart](https://tart.run) macOS VM; the native-Windows pathway runs
+   inside a Windows VM. Accounts are dedicated field-test identities, never a
    developer's real account. A field test must be able to run without disturbing
    any live developer state.
 
@@ -161,6 +161,8 @@ never has to be found twice.
   `LIVE_E2E_TESTING.md` and `e2e-scripted/README.md`.
 - Disposable macOS VM harness used for clean-room installs:
   `install-tests/electron-macos/`.
+- Field-test user provisioning (reserved `example.com` identities, mocked
+  verification + entitlement): the `field_test_user` management command in
+  openbase-drf-api-core PR
+  [#12](https://github.com/openbase-community/openbase-drf-api-core/pull/12).
 - Terminology: `GLOSSARY.md` ("field test", "scripted E2E", "Live E2E test").
-</content>
-</invoke>
