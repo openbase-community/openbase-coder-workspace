@@ -4,4 +4,4 @@ packages:
   - "coder-react"
   - "multi-react"
   - "boilersync-react"
-  - "e2e/ios-physical"
+  - "e2e-scripted"

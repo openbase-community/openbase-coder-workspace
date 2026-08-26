@@ -339,7 +339,7 @@ async function main() {
     env: {
       ...process.env,
       // Suppress the first-launch native installer-cleanup modal, which would
-      // otherwise block automation (see live-installation-test skill).
+      // otherwise block automation (see field-testing skill).
       OPENBASE_DESKTOP_DISABLE_INSTALLER_CLEANUP: "1",
     },
   });

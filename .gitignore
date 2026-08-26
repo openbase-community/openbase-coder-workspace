@@ -1,5 +1,7 @@
 .playwright-mcp/
 settings.local.json
+# Workspace-local planning scratch and field-test daily logs (never committed).
+.local/
 .env
 .venv/
 .pytest_cache/
@@ -11,9 +13,9 @@ dist/
 __pycache__/
 *.py[cod]
 .syncthing.*.tmp
-e2e/ios-physical/.env
-e2e/ios-physical/artifacts/
-e2e/ios-physical/reports/
+e2e-scripted/.env
+e2e-scripted/artifacts/
+e2e-scripted/reports/
 install-tests/electron-macos/last-result.json
 
 # BEGIN multi-managed: repo-directories
