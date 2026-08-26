@@ -12,16 +12,45 @@ app.openbase.cloud, all backed by the local CLI runtime. The product docs (`cli/
 docs.openbase.cloud) cover every surface and carry "In the apps" / "On
 iPhone" cross-references between them.
 
-**Live E2E test**: A manual full-system test that drives real product surfaces
-and real services rather than mocks or test doubles. In Openbase Coder, the
-most sensitive live E2E path is the physical iPhone voice suite because it uses
-the installed iOS app, Appium/WebDriverAgent, LiveKit, Cartesia audio, and real
-agent backends.
+**Testing tiers**: Openbase Coder's three complementary levels of testing:
+(1) **unit tests** (per-repo, mocked, fast), (2) **scripted E2E** (deterministic
+real-service/real-phone regression pinning), and (3) **field tests**
+(agent-driven, clean-room, full acoustic loop). Defined in
+`specs/testing-tiers.md`.
 
-**Physical iPhone E2E**: The `e2e/ios-physical` suite that drives Gabe's real
-iPhone through Appium/XCUITest against the modern Openbase iOS app bundle. It
-is manual-only and requires explicit permission before running because it can
-spend API credits and produce audible speech.
+**Live E2E test**: A manual full-system test that drives real product surfaces
+and real services rather than mocks or test doubles. It spans the scripted-E2E
+and field-test tiers; the most sensitive live path is the physical-phone voice
+loop because it uses the installed app, Appium/WebDriverAgent, LiveKit, Cartesia
+audio, and real agent backends.
+
+**Scripted E2E**: Tier 2 of the testing tiers — the `e2e-scripted/` package
+(formerly `e2e/ios-physical`). Deterministic WebdriverIO/Appium specs that drive
+a real iPhone against real services. Its role is **regression pinning**: when a
+field test finds a bug, the reproduction is frozen here as a spec so it cannot
+silently return. Expected to stay small and grow one spec per real defect.
+Manual-only because it spends API credits and produces audible speech. See
+`e2e-scripted/README.md` and `LIVE_E2E_TESTING.md`.
+
+**Field test**: Tier 3 of the testing tiers, and the top tier — an
+**agent-driven** (unscripted) test where an AI agent installs the product into a
+clean-room, isolated environment and exercises it like a user. Three properties
+define it: the agent drives the phone via the `appium` MCP server (iOS XCUITest
+or Android UiAutomator2); installation is clean-room in a disposable Tart macOS
+VM (or Windows VM) under a dedicated field-test account, never the developer's
+real machine/user/install; and it closes the **full acoustic loop** — Cartesia
+TTS through speakers into the phone mic, and the phone's spoken reply captured
+by microphone and transcribed with local STT to assert on meaning. Every failure
+it finds is logged, sent to Slack, and fixed as a READY PR against `develop`,
+and reproducible regressions are pinned as new scripted-E2E specs. Operating
+procedure: the `field-testing` skill.
+
+**Field-test user**: A reserved, disposable test identity matching
+`field-test-*@example.com`. Because the cloud email backend filters
+`example.com`/`.net`/`.org` sends, these addresses cause zero real email sends
+and zero spam-score risk. Before each field test the previous field-test user is
+destroyed and a fresh one created — email pre-verified and payment mocked — via
+the production `manage.py field_test_user` command in the cloud workspace.
 
 **Desktop app**: The macOS Electron app. It bundles and activates the
 standalone CLI runtime, runs guided first-time setup, and hosts the dashboard
@@ -38,7 +67,8 @@ complete its onboarding; the app activates its bundled CLI package
 (`standalone: true`, empty `workspace_path`). (2.5) For fast debugging of
 the production flow it is permissible to build the Electron app **without
 notarization** (`pnpm dist:mac`, or `install:local` for the seedless dev-app
-variant) — see the `live-installation-test` skill. (3) **Openbase Cloud
+variant) — see the `field-testing` skill and
+`install-tests/electron-macos/`. (3) **Openbase Cloud
 workspace AMI** — the dev-ami bake installs the CLI via `uv tool install
 openbase-coder` (PyPI) plus a pre-baked workspace clone, and instances
 finish with `openbase-coder provision`. (4) **Docker image** —

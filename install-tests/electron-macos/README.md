@@ -48,9 +48,10 @@ automated. Those remain the domain of live no-mock E2E.
   needs the full desktop/CLI toolchain: **Xcode** (companion `xcodebuild`),
   **uv**, **pnpm**, **Node ≥ 20**, and a **`~/.openbase/bin/livekit-server`**
   binary — which only exists if you already have a local Openbase dev install
-  (or pass `--livekit-bin`). This produces the **unsigned** install-test app per
-  the `live-installation-test` skill (not a new build pathway — it is that
-  skill's local-test build, distinct from `dist:mac` / `dist:mac:publish`).
+  (or pass `--livekit-bin`). This produces the **unsigned** field-test build
+  (`build-app.sh` — not a new build pathway; it is this harness's local
+  clean-room build for field testing, distinct from `dist:mac` /
+  `dist:mac:publish`). See the `field-testing` skill.
 - **`manual-vm.sh` needs none of the build toolchain** — it clones a bare macOS
   image and you download the real signed DMG inside the VM.
 
@@ -127,9 +128,9 @@ Gatekeeper). `--source <ref>` clones a different image (e.g. a barer
 
 `run.sh` orchestrates, all on disposable state:
 
-1. build the bundled dev app on the host (`build-app.sh`, mirrors the
-   `live-installation-test` skill's packaging path — bundled CLI + companion,
-   `openbaseDevBuild=true`, no notarize/publish);
+1. build the bundled dev app on the host (`build-app.sh`, mirrors the standard
+   release packaging path — bundled CLI + companion, `openbaseDevBuild=true`, no
+   notarize/publish; used by the `field-testing` skill for clean-room installs);
 2. `tart clone openbase-golden` → a fresh instance; boot it, wait for SSH;
 3. join the tailnet with the auth key (`vm/ts-connect.sh` — userspace
    `tailscaled` on its default socket, `chmod 666` so the non-root CLI can run

@@ -1,27 +1,33 @@
-# Live E2E Testing
+# Live E2E Testing — Scripted E2E (tier 2)
 
-This is the durable workspace reference for live Openbase Coder E2E suites.
-It documents what the suites are, where they live, and which local
-configuration knobs they use.
+This is the durable workspace reference for the **scripted E2E** suite — tier 2
+of the testing taxonomy in `specs/testing-tiers.md`. It documents what the
+suite is, where it lives, and which local configuration knobs it uses. Scripted
+E2E exists for **regression pinning**: deterministic specs that freeze a
+previously-found bug so it cannot silently return.
 
-For live no-mock execution procedure, use the workspace-local
-`.agents/skills/live-no-mock-e2e` skill. That skill is the source of truth for
-operational gates such as RMOT planning, production-cloud confirmation,
-preflight sequencing, audio handling, human prompts, and post-run reporting.
+Agent-driven, unscripted **field tests** (tier 3) are a different thing — see
+the workspace-local `field-testing` skill
+(`.agents/skills/field-testing/SKILL.md`). That skill is the source of truth for
+field-test operating procedure and for the live-run gates reused here: RMOT
+planning, production-cloud confirmation, preflight sequencing, audio handling,
+human prompts, and post-run reporting.
 
 ## Source Of Truth Split
 
-- `LIVE_E2E_TESTING.md`: stable suite map, environment reference, runtime target
-  meanings, and package script inventory.
-- `.agents/skills/live-no-mock-e2e/SKILL.md`: agent instructions for planning,
-  running, debugging, or reporting a live no-mock run.
+- `specs/testing-tiers.md`: the three-tier taxonomy and each tier's role.
+- `LIVE_E2E_TESTING.md`: stable scripted-E2E suite map, environment reference,
+  runtime target meanings, and package script inventory.
+- `.agents/skills/field-testing/SKILL.md`: agent instructions for planning,
+  running, debugging, or reporting a live no-mock run (field test or scripted
+  suite).
 
 When these documents appear to conflict, follow the skill before running any
 live command and update this reference afterward if the suite shape changed.
 
 ## iOS Physical Voice Suite
 
-The physical iPhone suite lives in `e2e/ios-physical`. It drives the installed
+The physical iPhone suite lives in `e2e-scripted`. It drives the installed
 modern iOS app (`com.openbase.coder`) through Appium/XCUITest on a real iPhone.
 The suite talks to the normal local Openbase Coder runtime and real services:
 Openbase Cloud, LiveKit voice services, Cartesia-generated Mac speaker audio,
@@ -36,7 +42,7 @@ When an agent interacts with Appium directly (outside the wdio spec runner —
 ad-hoc phone driving, debugging, screen inspection), it must use the `appium`
 MCP server tools (`mcp__appium__*`; `npx -y appium-mcp`) rather than a
 hand-started Appium server or one-off WebDriver scripts. See
-`e2e/ios-physical/README.md` and the live E2E skill for the flow.
+`e2e-scripted/README.md` and the live E2E skill for the flow.
 
 ## Runtime Targets
 
@@ -59,7 +65,7 @@ OPENBASE_E2E_EXPECT_CODING_BACKEND=openbase_cloud
 
 ## Local Environment
 
-Copy `e2e/ios-physical/env.example` to `e2e/ios-physical/.env` and fill in the
+Copy `e2e-scripted/env.example` to `e2e-scripted/.env` and fill in the
 physical iPhone values. Keep secrets out of this file when possible; provide
 credentials through the current shell or a narrowly extracted value instead of
 sourcing broad private env files.
@@ -87,17 +93,17 @@ the phone. Set it only when Appium should install a specific `.app` or `.ipa`.
 Safe local checks:
 
 ```bash
-pnpm --dir e2e/ios-physical test
-pnpm --dir e2e/ios-physical typecheck
-pnpm --dir e2e/ios-physical e2e:ios:doctor
+pnpm --dir e2e-scripted test
+pnpm --dir e2e-scripted typecheck
+pnpm --dir e2e-scripted e2e:ios:doctor
 ```
 
 Live manual specs:
 
 ```bash
-pnpm --dir e2e/ios-physical manual:e2e:ios:basic-call-response
-pnpm --dir e2e/ios-physical manual:e2e:ios:superagent-own-name
-pnpm --dir e2e/ios-physical manual:e2e:ios:parallel-agents-truth
+pnpm --dir e2e-scripted manual:e2e:ios:basic-call-response
+pnpm --dir e2e-scripted manual:e2e:ios:superagent-own-name
+pnpm --dir e2e-scripted manual:e2e:ios:parallel-agents-truth
 ```
 
 The package scripts set the real-Codex guard variables, but the operational
