@@ -62,9 +62,10 @@ product (auth, remote workspaces, and the PaaS backend).
 - Developer install/test flow: `DEV_RUNBOOK.md` — keep it accurate when
   setup, auth, or service behavior changes.
 - Installation pathways are strict and few (dev workspace setup, the macOS
-  Electron app, the Cloud DevSpace AMI, and the Docker image —
-  `openbaseai/openbase`, which is also how Windows hosts run Openbase;
-  definitions in `GLOSSARY.md`).
+  Electron app, the Cloud DevSpace AMI, the Docker image —
+  `openbaseai/openbase` — and native Windows (beta); definitions in
+  `GLOSSARY.md`). Windows hosts run the **native** Windows install, not the
+  Docker image.
   Never document or build a new install entry point without updating that
   glossary entry; `install.sh`, release tarballs, and PyPI are internal
   mechanisms, not user-facing pathways.

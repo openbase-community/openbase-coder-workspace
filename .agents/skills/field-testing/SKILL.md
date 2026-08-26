@@ -28,7 +28,7 @@ flow is gone. Field tests are clean-room by construction:
   [Tart](https://tart.run) macOS VM exclusively — the harness in
   `install-tests/electron-macos/` clones a throwaway VM so the real machine's
   install, launchd services, Tailscale routes, and ports 7999/7880 are never
-  touched. The Windows/Docker pathway uses a Windows VM (later). Never install a
+  touched. The native-Windows pathway uses a Windows VM (later). Never install a
   field-test build onto the developer's own macOS session.
 - **Accounts are dedicated field-test identities**, never the developer's real
   Openbase account. See [Field-test user lifecycle](#field-test-user-lifecycle).
@@ -134,26 +134,40 @@ set Auto-Lock to Never.
 
 ## Field-Test User Lifecycle
 
-Field-test users are **reserved, disposable identities** matching
-`field-test-*@example.com`. The cloud email backend filters
-`example.com`/`.net`/`.org` sends (`config/email.py` in
-`../openbase-cloud-workspace`), so these addresses cause **zero Resend sends and
-zero spam-score risk**. Never use a developer's real Openbase account for a field
-test.
+Field-test users are **reserved, disposable identities** matching exactly the
+regex `^field-test-[a-z0-9-]+@example\.com$`. The cloud email backend filters
+`example.com`/`.net`/`.org` sends (`config/email.py` `is_filtered_email_address`),
+so these addresses cause **zero Resend sends and zero spam-score risk**. Never
+use a developer's real Openbase account for a field test.
 
-Before each field test, destroy the previous field-test user and create a fresh
-one — email pre-verified and payment mocked — via the production `manage.py`
-command:
+Provisioning is the `field_test_user` Django management command in the cloud API
+(openbase-drf-api-core PR
+[#12](https://github.com/openbase-community/openbase-drf-api-core/pull/12), which
+cross-links back to workspace PR #11). Its contract:
+
+- **Actions:** `--create` · `--destroy` · `--recycle SLUG` (where `SLUG` is the
+  `[a-z0-9-]+` part of the address). `--recycle` is idempotent — it destroys any
+  existing matching user and creates a fresh one, rotating the password.
+- **Hard guardrail:** it refuses, before any write, to destroy or modify any user
+  whose email does not match the reserved pattern.
+- **Provisioning on create:** marks the allauth `EmailAddress` verified+primary,
+  and grants **faked** paid entitlement via a local `payment.Subscription` row at
+  the normal **default-tier** cap — no Stripe checkout, subscription, or charge.
+- **Output:** one line of machine-readable JSON for the harness —
+  `email`, `password`, `user_id`, `verified`, `entitled`. `--create`/`--recycle`
+  print a generated strong password on stdout.
+
+Recycle a fresh user before each field test. Invoke it in production via
+`openbase run` against the cloud app:
 
 ```bash
-# In ../openbase-cloud-workspace (production management command).
-python manage.py field_test_user --recreate field-test-<run-id>@example.com
+# Production: recycle the reserved field-test user for this run.
+openbase run -a <app> python manage.py field_test_user --recycle <run-slug>
+# → {"email":"field-test-<run-slug>@example.com","password":"…","user_id":…,"verified":true,"entitled":true}
 ```
 
-> **Dependency:** the `field_test_user` management command is being built in a
-> parallel PR in `../openbase-cloud-workspace`. Until that PR lands, treat
-> user provisioning as blocked and coordinate before running a field test that
-> needs a fresh account. Cross-reference that PR from the field-test RMOT.
+Capture the JSON to get the email + password the harness signs in with. Cross-
+reference PR #12 from the field-test RMOT.
 
 ## Required RMOT
 
@@ -164,7 +178,7 @@ must include:
 - the **sampled parameters** for this run (host OS, mobile OS, connectivity,
   branch, installation method) and the previous run's date;
 - the field-test user identity and confirmation it is a fresh
-  `field-test-*@example.com` (and that `field_test_user` recreate ran);
+  `field-test-[a-z0-9-]+@example.com` (and that `field_test_user --recycle` ran);
 - clean-room confirmation: which disposable VM (Tart macOS / Windows) and that
   the developer's real install/account/services are untouched;
 - planned steps: install → smoke → targeted, with the specific targeted areas
@@ -192,7 +206,7 @@ Use repo-relative or `~`-relative paths in the RMOT. Keep brittle scratch in
 1. Confirm the disposable VM harness is ready (macOS): see
    `install-tests/electron-macos/README.md` — `bootstrap-golden.sh` bakes the
    golden VM once; `run.sh` clones a throwaway instance per run.
-2. Confirm a fresh field-test user exists (`field_test_user --recreate`).
+2. Confirm a fresh field-test user exists (`field_test_user --recycle <slug>`).
 3. Inside the VM, confirm production cloud targeting:
 
    ```bash
@@ -318,4 +332,3 @@ drives the phone, launches two Super Agents from a prepared `briefing.md`,
 verifies both Markdown reports exist, verifies the voice route transfers to the
 Bill Gates report agent, asks what happened, and returns the route to dispatch.
 Keep exact paths/names/topics out of spoken prompts and in the briefing file.
-</content>
