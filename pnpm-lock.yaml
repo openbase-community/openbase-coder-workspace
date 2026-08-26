@@ -342,7 +342,7 @@ importers:
         specifier: ^8.0.3
         version: 8.0.5
 
-  e2e/ios-physical:
+  e2e-scripted:
     devDependencies:
       '@types/mocha':
         specifier: ^10.0.10

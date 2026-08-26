@@ -1,8 +1,18 @@
-# Openbase Coder iOS Physical E2E
+# Openbase Coder Scripted E2E (tier 2)
 
-Manual-only: this test drives Gabe's physical iPhone and uses real Openbase Coder, Codex, LiveKit, and Cartesia services. Do not run it unless explicitly instructed.
+This is the **scripted E2E** package — tier 2 of the [testing
+taxonomy](../specs/testing-tiers.md). Its role is **regression pinning**: when a
+field test (tier 3) finds a bug, the reproduction is frozen here as a
+deterministic wdio/Appium spec so the bug cannot silently return. It is expected
+to stay small and grow one spec at a time, driven by real defects rather than
+speculative coverage.
 
-This package contains physical iPhone E2E tests for Openbase Coder:
+Manual-only: these specs drive a physical iPhone and use real Openbase Coder,
+Codex, LiveKit, and Cartesia services. Do not run them unless explicitly
+instructed. Agent-driven, unscripted testing belongs in tier 3 — see the
+`field-testing` skill (`.agents/skills/field-testing/SKILL.md`).
+
+This package contains scripted physical iPhone E2E specs for Openbase Coder:
 
 - `specs/basic-call-response.real-codex.spec.ts`
 - `specs/superagent-own-name.real-codex.spec.ts`
@@ -25,7 +35,7 @@ Set `OPENBASE_E2E_EXPECT_RUNTIME` to make the target explicit:
 ## Setup
 
 ```bash
-cp e2e/ios-physical/env.example e2e/ios-physical/.env
+cp e2e-scripted/env.example e2e-scripted/.env
 pnpm install
 pnpm e2e:ios:install-driver
 ```
@@ -48,8 +58,8 @@ These commands do not start real Codex flows:
 
 ```bash
 pnpm e2e:ios:doctor
-pnpm --dir e2e/ios-physical test
-pnpm --dir e2e/ios-physical typecheck
+pnpm --dir e2e-scripted test
+pnpm --dir e2e-scripted typecheck
 ```
 
 `e2e:ios:doctor` validates local prerequisites, confirms the configured iOS UDID is a physical device rather than a simulator, and confirms the normal dispatcher reasoning setting is `low`. Audio stimulus checks only require Cartesia credentials when `OPENBASE_E2E_ENABLE_AUDIO_STIMULUS=1`.
@@ -69,7 +79,7 @@ go through the `appium` MCP server (`mcp__appium__*` tools; registered as
 raw WebDriver HTTP calls, or one-off WebdriverIO scripts. The flow
 (`select_device` → `appium_prepare_ios_real_device` →
 `appium_session_management` → interaction tools) is documented in
-`.agents/skills/live-no-mock-e2e/SKILL.md`. Do not create an MCP session while
+`.agents/skills/field-testing/SKILL.md`. Do not create an MCP session while
 a wdio spec is mid-run; it can steal WebDriverAgent from the run.
 
 ## Voice Assertion Policy
@@ -140,8 +150,8 @@ The test refuses to start unless:
 Run it manually:
 
 ```bash
-OPENBASE_E2E_ENABLE_AUDIO_STIMULUS=1 CARTESIA_API_KEY=... pnpm --dir e2e/ios-physical manual:e2e:ios:basic-call-response
-OPENBASE_E2E_ENABLE_AUDIO_STIMULUS=1 CARTESIA_API_KEY=... pnpm --dir e2e/ios-physical manual:e2e:ios:parallel-agents-truth
+OPENBASE_E2E_ENABLE_AUDIO_STIMULUS=1 CARTESIA_API_KEY=... pnpm --dir e2e-scripted manual:e2e:ios:basic-call-response
+OPENBASE_E2E_ENABLE_AUDIO_STIMULUS=1 CARTESIA_API_KEY=... pnpm --dir e2e-scripted manual:e2e:ios:parallel-agents-truth
 ```
 
 It uses the normal Codex/Openbase home configuration from the current shell and installed services. Do not run it unless you intend to use Gabe's real Openbase Coder, Codex, LiveKit, and Cartesia setup.

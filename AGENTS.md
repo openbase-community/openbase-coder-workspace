@@ -62,18 +62,26 @@ product (auth, remote workspaces, and the PaaS backend).
 - Developer install/test flow: `DEV_RUNBOOK.md` — keep it accurate when
   setup, auth, or service behavior changes.
 - Installation pathways are strict and few (dev workspace setup, the macOS
-  Electron app, the Cloud DevSpace AMI, and the Docker image —
-  `openbaseai/openbase`, which is also how Windows hosts run Openbase;
-  definitions in `GLOSSARY.md`).
+  Electron app, the Cloud DevSpace AMI, the Docker image —
+  `openbaseai/openbase` — and native Windows (beta); definitions in
+  `GLOSSARY.md`). Windows hosts run the **native** Windows install, not the
+  Docker image.
   Never document or build a new install entry point without updating that
   glossary entry; `install.sh`, release tarballs, and PyPI are internal
   mechanisms, not user-facing pathways.
-- Live physical-phone E2E testing: `LIVE_E2E_TESTING.md` — consult before
-  running manual iOS full-system tests; those runs use real services and must
-  not be mocked.
-- Workspace-local live E2E skill: `.agents/skills/live-no-mock-e2e/SKILL.md`
-  — use it before planning or running live no-mock E2E; it requires a pre-run
-  RMOT opened in Typora and production Openbase Cloud targeting.
+- Testing taxonomy: `specs/testing-tiers.md` defines the three tiers — unit
+  tests (tier 1), scripted E2E (tier 2, regression pinning), and field tests
+  (tier 3, agent-driven clean-room full-acoustic-loop). Consult it before
+  writing or classifying any full-system test.
+- Scripted E2E (tier 2): `LIVE_E2E_TESTING.md` — consult before running the
+  manual physical-phone regression suite in `e2e-scripted/`; those runs use
+  real services and must not be mocked.
+- Field testing (tier 3): the workspace-local `field-testing` skill
+  (`.agents/skills/field-testing/SKILL.md`) — use it before planning or running
+  any field test. Field tests run clean-room in a disposable Tart macOS VM (or
+  Windows VM) under a dedicated field-test account, never the developer's own
+  install; the skill requires a pre-run RMOT opened in Typora and production
+  Openbase Cloud targeting.
 - Live share-readiness gate: `manual:e2e:ios:parallel-agents-truth` launches
   parallel Super Agents from a prepared briefing, verifies their Markdown
   reports, tests transfer to the Bill Gates report agent, asks what happened,
@@ -111,14 +119,18 @@ product (auth, remote workspaces, and the PaaS backend).
   state, billing, onboarding, or app-specific UX flows directly to
   `super-agents`; put those in `cli`, `skills`, `console`, the apps, or a
   narrow adapter that calls generic Super Agents primitives.
-- Tests under `e2e/` must be true app end-to-end tests (Appium-driven iOS or
-  Selenium-driven browser). Direct API, app-server, or service-client
-  integration tests do not belong there.
+- Tests under `e2e-scripted/` (tier-2 scripted E2E) must be true app
+  end-to-end tests (Appium-driven iOS/Android or Selenium-driven browser).
+  Direct API, app-server, or service-client integration tests do not belong
+  there. Tier-2 exists for regression pinning — add a spec when a field test
+  finds a bug worth freezing, not for speculative coverage. Agent-driven,
+  unscripted testing is tier 3 (field tests), not a package under
+  `e2e-scripted/`.
 - When an agent interacts with Appium directly (ad-hoc device driving,
-  debugging, screen inspection — anything outside the wdio spec runner), it
-  must go through the `appium` MCP server tools (`mcp__appium__*`), not a
-  hand-started Appium server, raw WebDriver calls, or one-off WebdriverIO
-  scripts. See `e2e/ios-physical/README.md`.
+  debugging, screen inspection, or driving a tier-3 field test — anything
+  outside the wdio spec runner), it must go through the `appium` MCP server
+  tools (`mcp__appium__*`), not a hand-started Appium server, raw WebDriver
+  calls, or one-off WebdriverIO scripts. See `e2e-scripted/README.md`.
 - This machine may sync `~/Projects` with another Mac via Syncthing. `.git`
   must never sync (see `~/Projects/.stglobalignore`); if a commit or build
   fails mysteriously, suspect a sync flap and verify `HEAD` matches

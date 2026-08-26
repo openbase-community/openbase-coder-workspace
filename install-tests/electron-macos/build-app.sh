@@ -2,7 +2,8 @@
 #
 # Build the bundled macOS dev app for the Electron install-flow test.
 #
-# Mirrors the packaging path documented in the `live-installation-test` skill:
+# Mirrors the standard release packaging path (used by the `field-testing` skill
+# for clean-room installs):
 # build a standalone CLI package (with console), stage it + the macOS companion
 # into the desktop app, then electron-builder a dev build with the real
 # extraResources (bundled CLI + companion) intact. No notarization, no publish,
@@ -40,7 +41,7 @@ step() { printf '\033[34m==>\033[0m %s\n' "$*"; }
 die()  { printf '\033[31mFATAL\033[0m %s\n' "$*" >&2; exit 1; }
 
 # Prerequisites for the local build (fail early with a clear message). This
-# builds the live-installation-test skill's UNSIGNED install-test app; it needs
+# builds the field-testing skill's UNSIGNED clean-room install-test app; it needs
 # the full desktop/CLI toolchain. (manual-vm.sh needs NONE of this — it just
 # downloads the released DMG.)
 [ "$(uname -m)" = "arm64" ] || die "Apple Silicon Mac required (build is --arm64)."
