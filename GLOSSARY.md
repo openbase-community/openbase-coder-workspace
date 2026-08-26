@@ -45,21 +45,24 @@ it finds is logged, sent to Slack, and fixed as a READY PR against `develop`,
 and reproducible regressions are pinned as new scripted-E2E specs. Operating
 procedure: the `field-testing` skill.
 
-**Field-test user**: A reserved, disposable test identity matching exactly
-`^field-test-[a-z0-9-]+@example\.com$`. Because the cloud email backend filters
-`example.com`/`.net`/`.org` sends (`config/email.py` `is_filtered_email_address`),
-these addresses cause zero real email sends and zero spam-score risk. Before each
-field test the previous field-test user is destroyed and a fresh one created —
-email pre-verified (allauth `EmailAddress` marked verified+primary) and payment
-mocked — via the production `field_test_user` Django management command
-(openbase-drf-api-core PR
-[#12](https://github.com/openbase-community/openbase-drf-api-core/pull/12)). The
-command takes `--create` / `--destroy` / `--recycle SLUG`, guards hard against
-touching any non-matching email, and emits one line of JSON (`email`,
-`password`, `user_id`, `verified`, `entitled`) for the harness. Entitlement is
-**faked** as a local `payment.Subscription` row at the normal default-tier cap
-(no Stripe checkout or charge). Invoke in production via
-`openbase run -a <app> python manage.py field_test_user …`.
+**Field-test user**: The real, designated account a field test runs as — never a
+developer's real Openbase account. Its email must be listed in the cloud API's
+`FIELD_TEST_ALLOWED_EMAILS` allowlist (comma-separated); use plus-addressing
+(`you+<run-slug>@gmail.com`) to mint unlimited distinct real signup addresses
+that all land in one controlled inbox. Because the account is real, the field
+test exercises the **real signup and real email-verification** flow: the
+verification email actually arrives in the controlled inbox and the testing
+agent reads it (via the `gmail-cli` skill) to complete verification. Only two
+lifecycle steps are done out-of-band, by the `field_test_account` Django
+management command (openbase-drf-api-core PR
+[#13](https://github.com/openbase-community/openbase-drf-api-core/pull/13)):
+`--destroy EMAIL` (pre-test — delete the prior account via the canonical
+account-deletion cascade) and `--mock-payment EMAIL` (post-signup — grant paid
+entitlement as a local `payment.Subscription` row at the normal default-tier cap,
+no Stripe charge). It **never creates users and never mocks verification**,
+guards hard against any email not on the allowlist (empty/unset ⇒ refuses
+everything), and emits one line of JSON per operation for the harness. Invoke in
+production via `openbase run -a <app> python manage.py field_test_account …`.
 
 **Desktop app**: The macOS Electron app. It bundles and activates the
 standalone CLI runtime, runs guided first-time setup, and hosts the dashboard
