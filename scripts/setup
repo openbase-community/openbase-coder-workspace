@@ -188,4 +188,28 @@ pushd "${ROOT_DIR}"/cli
 uv run openbase-coder setup "${SETUP_ARGS[@]}"
 popd
 
+# Screen sharing, computer use, and Chrome control all live in the Swift
+# screen-share companion. The Mac app ships it prebuilt; a developer install
+# gets it by building once from the checkout — the CLI's CompanionClient
+# spawns it from this .derivedData path, no Electron app needed. Best-effort:
+# skipped off-macOS, without Xcode, when already built, or when
+# OPENBASE_SKIP_COMPANION_BUILD=1.
+COMPANION_DIR="${ROOT_DIR}/desktop/companion/livekit-swift-example"
+COMPANION_APP="${COMPANION_DIR}/.derivedData/Build/Products/Debug/OpenbaseScreenShareCompanion.app"
+if [ "$(uname -s)" = "Darwin" ] \
+  && [ "${OPENBASE_SKIP_COMPANION_BUILD:-0}" != "1" ] \
+  && [ ! -d "$COMPANION_APP" ] \
+  && [ -d "$COMPANION_DIR" ] \
+  && command -v xcodebuild >/dev/null 2>&1; then
+  echo "Building the screen-share companion (screen sharing / computer use / Chrome control; a few minutes, one time)..."
+  if xcodebuild -project "${COMPANION_DIR}/LiveKitExample.xcodeproj" \
+      -scheme SwiftSDK.1 -destination 'platform=macOS' -configuration Debug \
+      -derivedDataPath "${COMPANION_DIR}/.derivedData" build >/dev/null 2>&1; then
+    echo "Screen-share companion built."
+  else
+    echo "Warning: companion build failed — screen sharing/computer use stay unavailable." >&2
+    echo "Retry later with: cd desktop && pnpm run companion:build:mac" >&2
+  fi
+fi
+
 echo "Setup complete! Please restart your IDE, then you can run your project with the VS Code run button."
