@@ -56,6 +56,13 @@
       "installSets": ["default", "dev"]
     },
     {
+      "name": "netmesh-go",
+      "fixedBranch": "main",
+      "url": "https://github.com/openbase-community/netmesh-go",
+      "description": "Shared gomobile Tailscale-engine bridge (NetmeshGo) consumed by the iOS packet-tunnel extension and the Android VpnService.",
+      "installSets": ["dev"]
+    },
+    {
       "name": "super-agents",
       "url": "https://github.com/montaguegabe/super-agents",
       "description": "Python MCP wrapper for controlling Codex app-server threads, turns, compact status checks, and Super Agents coordination.",

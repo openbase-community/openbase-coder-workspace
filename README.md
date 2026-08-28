@@ -30,6 +30,8 @@ Product docs are published at <https://docs.openbase.cloud>.
   SwiftUI client for Django AllAuth headless authentication
 - [allauth-client-kotlin](https://github.com/openbase-community/allauth-client-kotlin) -
   Kotlin client for Django AllAuth headless authentication
+- [netmesh-go](https://github.com/openbase-community/netmesh-go) -
+  shared gomobile VPN engine for the iOS and Android apps (private)
 - [multi-react](https://github.com/montaguegabe/multi-react) -
   shared React diff viewer utilities
 - [boilersync-react](https://github.com/montaguegabe/boilersync-react) -

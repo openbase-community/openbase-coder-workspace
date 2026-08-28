@@ -37,6 +37,9 @@ product (auth, remote workspaces, and the PaaS backend).
   outside Openbase Coder: generic coordination primitives may live there;
   Openbase product-domain features belong in Openbase Coder repos or an
   adapter layer.
+- `netmesh-go`: shared gomobile Tailscale-engine bridge (NetmeshGo) consumed
+  by the iOS packet-tunnel extension and the Android VpnService (private,
+  fixed to `main`, dev install set only)
 - `multi-react`: shared React diff viewer used by Multi and Openbase Coder
 - `boilersync-react`: shared React components for BoilerSync workflows
 - `allauth-client-swift` / `allauth-client-kotlin`: SwiftUI / Kotlin clients
@@ -107,7 +110,8 @@ product (auth, remote workspaces, and the PaaS backend).
   `skills`, `multi-react`. Public MIT exceptions — `allauth-client-swift`,
   `allauth-client-kotlin`, `super-agents`, `boilersync-react`.
   Private/proprietary —
-  `android`, `desktop`, `ios`. Never add MIT licensing to any other repo,
+  `android`, `desktop`, `ios`, `netmesh-go`. Never add MIT licensing to any
+  other repo,
   and never add an open-source license to the private apps.
 - Super Agents boundary: this root-level workspace rule applies whenever
   working on `super-agents`, because subrepo `AGENTS.md` files may not be

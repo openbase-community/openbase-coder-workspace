@@ -34,7 +34,7 @@ ROOT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 # Dependency order: providers before consumers; workspace root last.
 REPOS=(super-agents skills coder-react console cli desktop allauth-client-swift ios allauth-client-kotlin android .)
 
-EXTERNAL_NOTE="multi-react and boilersync-react are external trunk-based projects pinned to main (multi.json fixedBranch; CI checks them out at main)"
+EXTERNAL_NOTE="multi-react, boilersync-react, and netmesh-go are external trunk-based projects pinned to main (multi.json fixedBranch; CI checks them out at main)"
 
 # Pre-release checks run before a production promotion (TO is main/master),
 # unless --skip-checks. Format: "label|repo dir|command|severity" where
