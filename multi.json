@@ -62,12 +62,6 @@
       "installSets": ["default", "dev"]
     },
     {
-      "name": "agent-work-scheduler",
-      "url": "https://github.com/montaguegabe/agent-work-scheduler",
-      "description": "Deterministic Notion dependency scheduler for launching Super Agents work in isolated git worktrees.",
-      "installSets": ["dev"]
-    },
-    {
       "name": "multi-react",
       "fixedBranch": "main",
       "url": "https://github.com/montaguegabe/multi-react",

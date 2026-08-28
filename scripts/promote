@@ -8,8 +8,8 @@
 # together. Repos whose branches are already even are skipped entirely so
 # they trigger no rebuild/release.
 #
-# Order rationale: super-agents is the Python lib cli and agent-work-scheduler
-# build against; coder-react is the JS lib console/desktop consume; the cli
+# Order rationale: super-agents is the Python lib cli builds against;
+# coder-react is the JS lib console/desktop consume; the cli
 # standalone release embeds console/coder-react/skills/super-agents at build
 # time, so all of those land before cli. Pushing main auto-cuts the cli
 # standalone release (auto-release.yml), the desktop AppImage to S3
@@ -32,7 +32,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 # Dependency order: providers before consumers; workspace root last.
-REPOS=(super-agents skills coder-react console cli agent-work-scheduler desktop allauth-client-swift ios allauth-client-kotlin android .)
+REPOS=(super-agents skills coder-react console cli desktop allauth-client-swift ios allauth-client-kotlin android .)
 
 EXTERNAL_NOTE="multi-react and boilersync-react are external trunk-based projects pinned to main (multi.json fixedBranch; CI checks them out at main)"
 

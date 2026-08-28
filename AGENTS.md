@@ -37,8 +37,6 @@ product (auth, remote workspaces, and the PaaS backend).
   outside Openbase Coder: generic coordination primitives may live there;
   Openbase product-domain features belong in Openbase Coder repos or an
   adapter layer.
-- `agent-work-scheduler`: deterministic Notion dependency scheduler for
-  launching Super Agents work in isolated git worktrees
 - `multi-react`: shared React diff viewer used by Multi and Openbase Coder
 - `boilersync-react`: shared React components for BoilerSync workflows
 - `allauth-client-swift` / `allauth-client-kotlin`: SwiftUI / Kotlin clients
@@ -107,8 +105,8 @@ product (auth, remote workspaces, and the PaaS backend).
   intact. Do not add duplicate workspace rules under `.cursor/rules`.
 - Licensing: public AGPL-3.0-only — `cli`, `console`, `coder-react`,
   `skills`, `multi-react`. Public MIT exceptions — `allauth-client-swift`,
-  `allauth-client-kotlin`, `super-agents`, `boilersync-react`. Dev-only
-  pending publication — `agent-work-scheduler`. Private/proprietary —
+  `allauth-client-kotlin`, `super-agents`, `boilersync-react`.
+  Private/proprietary —
   `android`, `desktop`, `ios`. Never add MIT licensing to any other repo,
   and never add an open-source license to the private apps.
 - Super Agents boundary: this root-level workspace rule applies whenever

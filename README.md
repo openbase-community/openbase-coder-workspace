@@ -26,8 +26,6 @@ Product docs are published at <https://docs.openbase.cloud>.
   shared Openbase Coder agent skills
 - [super-agents](https://github.com/montaguegabe/super-agents) -
   standalone Python MCP server and library for agent-thread coordination
-- [agent-work-scheduler](https://github.com/montaguegabe/agent-work-scheduler) -
-  deterministic scheduler for launching agent work
 - [allauth-client-swift](https://github.com/openbase-community/allauth-client-swift) -
   SwiftUI client for Django AllAuth headless authentication
 - [allauth-client-kotlin](https://github.com/openbase-community/allauth-client-kotlin) -
