@@ -16,10 +16,16 @@ fresh machine; jump to [Iterating](#5-iterating) day to day.
 - Coding-backend login: `codex login` for the codex backend, and/or your
   normal Claude Code login (setup bridges it into Openbase's managed config
   automatically on macOS)
+- Only if you pick the **Openbase Netmesh (VPN)** tailnet transport: extra
+  macOS build tools (Xcode, `xcodegen`, and Go) to build the VPN companion.
+  You don't need these for the default Tailscale transport or the no-VPN
+  embedded option.
 
 Setup fails fast with the fix command if `uv`, `multi`, pnpm, or Tailscale is
-missing; a missing `codex login` only warns (threads fail later until you log
-in).
+missing; picking the netmesh VPN likewise fails fast listing exactly which
+build tools are missing and how to install each (the authoritative list lives
+in that check, not here, so it can't drift). A missing `codex login` only
+warns (threads fail later until you log in).
 
 ## 2. Install
 
