@@ -1,7 +1,7 @@
 # Dev Runbook
 
-The direct path for developing and testing Openbase Coder from this
-workspace. This is the dev counterpart to the standalone/production install
+The recommended path for developing and testing Openbase Coder starts at the
+GitHub workspace and runs `./scripts/setup`. This is the dev counterpart to the standalone/production install
 (see `AUTO_UPDATE.md` for how that side ships). Follow it top to bottom for a
 fresh machine; jump to [Iterating](#5-iterating) day to day.
 
@@ -11,8 +11,9 @@ fresh machine; jump to [Iterating](#5-iterating) day to day.
   release-pinned version by setup into `~/.openbase/bin`; a Homebrew
   `livekit-server` is only a fallback and will warn if its version skews.)
 - `multi` (`uv tool install multi-workspace`)
-- Tailscale installed, signed in, connected (the iOS app reaches this Mac
-  over the tailnet)
+- A tailnet transport for phone access. Interactive developer setup offers the
+  expert Tailscale transport, Openbase VPN, and Openbase Direct. Electron
+  production onboarding is different: it offers only Openbase VPN or Direct.
 - Coding-backend login: `codex login` for the codex backend, and/or your
   normal Claude Code login (setup bridges it into Openbase's managed config
   automatically on macOS)
@@ -21,8 +22,9 @@ fresh machine; jump to [Iterating](#5-iterating) day to day.
   You don't need these for the default Tailscale transport or the no-VPN
   embedded option.
 
-Setup fails fast with the fix command if `uv`, `multi`, pnpm, or Tailscale is
-missing; picking the netmesh VPN likewise fails fast listing exactly which
+Setup fails fast with the fix command if `uv`, `multi`, or pnpm is missing;
+the selected networking transport reports its own prerequisites. Picking the
+netmesh VPN likewise fails fast listing exactly which
 build tools are missing and how to install each (the authoritative list lives
 in that check, not here, so it can't drift). A missing `codex login` only
 warns (threads fail later until you log in).
@@ -54,7 +56,9 @@ audio provider to openbase-cloud. `openbase-coder setup --interactive`
 combines flags with the pickers. Prerequisites checked up front: `uv`,
 `multi`, `pnpm`, and Node >= 20.
 
-`scripts/setup` syncs the sub-repos with `multi`, creates the cli venv,
+`scripts/setup` preserves the checkout's Multi install set: if any dev-only
+repo is already checked out it syncs `dev`; otherwise it syncs `default` so a
+public clone never requires private repo access. It then creates the cli venv,
 downloads LiveKit model files, builds the console, generates
 `~/.openbase` (env, agent homes, dispatcher config), installs the launchd
 services, and configures Tailscale Serve. It never clones anything itself.
@@ -96,10 +100,16 @@ Then pick the surface you're testing:
   MagicDNS host under Settings → Backend Host (see `android/README.md`).
 - **Web console.** `http://localhost:7999` — served by the django-cli
   service from `console/dist`. Threads, skills, settings, versions footer.
-- **Desktop app (optional — NOT needed for CLI/voice dev).** In `desktop/`:
-  `pnpm dev` for hot-reload iteration, or `pnpm run install:local` to build
-  a packaged copy into `/Applications` (auto-update disabled for that
-  build). The desktop app talks to the same local server and PATH CLI.
+- **Desktop app (optional — NOT needed for CLI/voice dev).** Run
+  `./scripts/dev-launch --electron`. It sets an explicit development
+  dashboard-only mode; Electron also detects the active development
+  `installation.json`. Its installer bridge and onboarding/setup wizard are
+  unavailable, because `./scripts/setup` is the sole dev setup authority.
+  Use `pnpm run install:local` only when intentionally testing a packaged app.
+- **Swift networking menu bar (optional).** Run
+  `./scripts/dev-launch --menu-bar` for native connection/status feedback, or
+  `./scripts/dev-launch --all` for it plus Electron. Both have matching VS Code
+  tasks; the Electron/React surface launches from `tasks.json`.
 
 ## 5. Iterating
 
@@ -111,7 +121,7 @@ Then pick the surface you're testing:
 - **console / coder-react:** `cd console && pnpm run build` — django serves
   `console/dist` directly, so a rebuild + browser refresh is enough. For hot
   reload use `pnpm dev` in `console/` (Vite dev server).
-- **desktop:** `pnpm dev` in `desktop/`.
+- **desktop:** `./scripts/dev-launch --electron` from the workspace root.
 - **Tests:** `cd cli && uv sync --extra dev && uv run pytest` (the venv lives
   at the workspace root — uv workspace); `cd super-agents && uv run pytest`;
   frontend typechecks via `npx tsc -p tsconfig.app.json --noEmit` in

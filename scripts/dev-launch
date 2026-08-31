@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+INSTALLATION_PATH="${HOME}/.openbase/installation.json"
+LAUNCH_ELECTRON=false
+LAUNCH_MENU_BAR=false
+
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/dev-launch [--all | --electron | --menu-bar]
+
+Launch optional visual surfaces for an existing development installation.
+Electron runs dashboard/status-only: it cannot invoke the bundled setup flow.
+EOF
+}
+
+if [ "$#" -eq 0 ]; then
+  LAUNCH_ELECTRON=true
+  LAUNCH_MENU_BAR=true
+fi
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --all)
+      LAUNCH_ELECTRON=true
+      LAUNCH_MENU_BAR=true
+      ;;
+    --electron)
+      LAUNCH_ELECTRON=true
+      ;;
+    --menu-bar)
+      LAUNCH_MENU_BAR=true
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+if [ ! -f "$INSTALLATION_PATH" ]; then
+  echo "No development installation found. Run ./scripts/setup first." >&2
+  exit 1
+fi
+
+node - "$INSTALLATION_PATH" "$ROOT_DIR" <<'NODE'
+const fs = require("node:fs");
+const [installationPath, workspaceRoot] = process.argv.slice(2);
+const installation = JSON.parse(fs.readFileSync(installationPath, "utf8"));
+const configuredRoot = installation.workspace_path;
+if (installation.standalone !== false || !configuredRoot) {
+  console.error("This launcher only supports a ./scripts/setup development installation.");
+  process.exit(1);
+}
+if (fs.realpathSync(configuredRoot) !== fs.realpathSync(workspaceRoot)) {
+  console.error("The active development installation points at a different workspace.");
+  process.exit(1);
+}
+NODE
+
+if [ ! -d "$ROOT_DIR/desktop" ]; then
+  echo "The desktop repo is not present. Contributors with access can run:" >&2
+  echo "  multi sync --install-set dev" >&2
+  exit 1
+fi
+
+launch_menu_bar() {
+  if [ "$(uname -s)" != "Darwin" ]; then
+    echo "The Swift menu-bar UI is available on macOS only; skipping it."
+    return
+  fi
+  for tool in xcodegen xcodebuild; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      echo "'$tool' is required for the Swift menu-bar UI." >&2
+      exit 1
+    fi
+  done
+
+  local project_dir="$ROOT_DIR/desktop/netmesh-macos"
+  local vendor_dir="$project_dir/vendor/tailscale-bin"
+  if [ ! -x "$vendor_dir/tailscaled" ] || [ ! -x "$vendor_dir/tailscale" ]; then
+    if ! command -v go >/dev/null 2>&1; then
+      echo "Go is required once to build the menu-bar UI's networking engine." >&2
+      exit 1
+    fi
+    "$project_dir/scripts/build-tailscale.sh"
+  fi
+
+  (
+    cd "$project_dir"
+    xcodegen generate
+    xcodebuild \
+      -project OpenbaseNetmesh.xcodeproj \
+      -scheme OpenbaseNetmesh \
+      -configuration Debug \
+      -derivedDataPath DerivedData \
+      CODE_SIGNING_ALLOWED=NO \
+      build
+  )
+  open "$project_dir/DerivedData/Build/Products/Debug/OpenbaseNetmesh.app"
+  echo "Opened the Swift Openbase networking menu-bar UI."
+}
+
+if [ "$LAUNCH_MENU_BAR" = true ]; then
+  launch_menu_bar
+fi
+
+if [ "$LAUNCH_ELECTRON" = true ]; then
+  echo "Launching Electron in developer dashboard-only mode (setup is disabled)."
+  export OPENBASE_DESKTOP_DEV_DASHBOARD_ONLY=1
+  exec pnpm --dir "$ROOT_DIR/desktop" dev
+fi

@@ -7,8 +7,9 @@ openbase-cloud backend) can implement against.
 Onboarding has two entry points: **Web** (user starts on desktop) and
 **App Store** (user starts on iOS, TestFlight for now). Both paths converge at
 the same terminal state: a desktop and mobile are registered, each side has
-enough Tailscale rendezvous facts to reach the other, and desktop readiness is
-verified live over Tailscale.
+enough private-network rendezvous facts to reach the other, and desktop
+readiness is verified live over the selected transport. Legacy cloud field
+names retain `tailscale_*` for wire compatibility across all providers.
 
 ```
 terminal_state = desktop_registered
@@ -50,12 +51,21 @@ All four codebases are implemented and **deployed** per this spec (see
   proxy `GET /api/onboarding/cloud-state/` (never the cached `cloud` block,
   which stays a last-report hint). Voice keys are written through the CLI's
   `PUT /api/settings/env/`. The Electron main process no longer implements
-  its own login, voice-key, cloud-state, or Tailscale-status checks; it
-  only probes bootstrap facts (CLI binary present, Tailscale installed).
+  its own login, voice-key, cloud-state, or tailnet-status checks; it only
+  probes bootstrap facts (platform and CLI binary present).
 
-Remaining v1 trade-off: **Tailscale friction** — no terminal, but the user
-installs two apps and creates a third-party Tailscale account. A v2 could
-embed Tailscale via their SDKs or pre-provisioned auth keys.
+The develop candidate for the next coordinated production promotion has two
+Electron networking choices backed by one
+CLI contract (`tailnet` in the onboarding status payload): **Openbase VPN**
+(`netmesh`, recommended) and **Openbase Direct** (`netmesh-tsnet`, no VPN).
+Electron does not offer the official `tailscale` provider. Openbase VPN bundles
+Netmesh with an Openbase-operated Headscale control plane and
+Tailscale-compatible open-source clients and needs no Tailscale account.
+Openbase VPN collects no VPN traffic or usage analytics and sends no VPN
+analytics to Tailscale. Its device-wide route supports browser access to
+created websites; Direct carries Openbase app traffic only.
+This contract is not considered released until the coordinated workspace, CLI,
+desktop, cloud, and mobile `main` promotion is complete.
 
 To verify locally: `uv run pytest tests/test_onboarding_status_api.py
 tests/test_cloud_registration.py tests/test_onboarding_cli.py` in `cli/`,
@@ -130,13 +140,14 @@ entry or QR-scanning ceremony between devices.
 Shared `pairDevices()` step — identical to B4, implement once per client.
 
 - **Trigger:** desktop and mobile registrations both exist
-- **Mac:** prompt the user to install Tailscale (v1 is prompt-based; silent
-  background install is an open question). Once `tailscale status` reports
-  the node is up, register the desktop's Tailscale identity with the cloud
-  (`openbase-coder onboarding report` does this).
-- **iOS:** redirect the user to the Tailscale app on the App Store, tell them
-  to come back when set up. Once the iOS app can read its Tailscale identity,
-  register it with the cloud.
+- **Decision:** ask whether the environment can support a VPN. Yes selects
+  Openbase VPN; no selects Openbase Direct. Never offer a Tailscale-app plus
+  Electron combination.
+- **Mac:** connect the selected bundled/embedded transport, then register its
+  compatibility-shaped identity with the cloud (`openbase-coder onboarding
+  report` does this).
+- **iOS:** join the matching Openbase transport and register its identity with
+  the cloud. The official Tailscale app is not part of Electron onboarding.
 - **Wait:** both clients poll onboarding state until the other side advertises
   a Tailscale IP or MagicDNS name, then verify direct reachability.
 - **Next:** A5
@@ -241,7 +252,7 @@ Path A (Web)          Path B (App Store)
     │     Both devices      │
     │      registered       │
     ↓                       ↓
-  Tailscale pairing (shared pairDevices)
+  Openbase private pairing (shared pairDevices)
     ↓
   CLI setup (shared setupCLI)
     ↓
@@ -283,17 +294,13 @@ payload includes the `backend_auth` block described in
 
 ## Open questions
 
-1. **Silent Tailscale install on macOS** — the Notion doc floats installing
-   and configuring Tailscale silently in the background on the Mac. v1 is
-   prompt-based (user installs the Tailscale app); silent install would
-   require bundling `tailscaled` or Homebrew automation.
-2. **Live desktop verification strictness** — once a peer advertises a
+1. **Live desktop verification strictness** — once a peer advertises a
    Tailscale address, decide which desktop status fields are required before
    the mobile app marks onboarding complete.
-3. **Auth for device registration** — currently the user JWT stored by the
+2. **Auth for device registration** — currently the user JWT stored by the
    CLI after login (assumption). Alternative: a dedicated machine-token scope
    (e.g. `device_state`) added to the machine-token mechanism.
-4. **Install artifact hosting** — the install script currently pulls from
+3. **Install artifact hosting** — the install script currently pulls from
    GitHub releases; S3/CDN hosting and deployment are deferred.
-5. **Cloud endpoint paths** — confirm production URL prefixing still mounts
+4. **Cloud endpoint paths** — confirm production URL prefixing still mounts
    the API at `api/openbase/` before deploy.

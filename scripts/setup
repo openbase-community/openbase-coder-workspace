@@ -147,9 +147,14 @@ if [ "$USER_ARG_COUNT" -eq 0 ] && [ -t 0 ]; then
   echo "No flags passed — setup will prompt you to pick a coding backend and voice audio provider."
 fi
 
-# Clone the public/runtime install repos.
+# Preserve the workspace's current Multi shape. A contributor checkout with a
+# dev-only repo must stay on the dev install set; syncing it as default rewrites
+# managed ignores and makes the remaining dev repos appear untracked. A fresh
+# public checkout still uses default and does not require private repo access.
+INSTALL_SET="$(node "$SCRIPT_DIR/detect-install-set.mjs" "$ROOT_DIR")"
+echo "Syncing the Multi '${INSTALL_SET}' install set."
 pushd "$ROOT_DIR"
-multi sync --install-set default
+multi sync --install-set "$INSTALL_SET"
 popd
 
 # Run the full local Openbase setup against this checkout, wherever it lives.
@@ -188,4 +193,21 @@ pushd "${ROOT_DIR}"/cli
 uv run openbase-coder setup "${SETUP_ARGS[@]}"
 popd
 
-echo "Setup complete! Please restart your IDE, then you can run your project with the VS Code run button."
+echo "Setup complete. The Openbase services and browser dashboard are ready."
+
+# Visual developer surfaces are optional. Electron never owns setup in a
+# source-workspace install: dev-launch forces dashboard-only mode, while this
+# script remains the sole setup authority.
+if [ "$USER_ARG_COUNT" -eq 0 ] && [ -t 0 ] && [ -d "$ROOT_DIR/desktop" ]; then
+  printf "Launch the optional Electron dashboard and Swift menu-bar UI now? [y/N] "
+  DEV_LAUNCH_REPLY=""
+  read -r DEV_LAUNCH_REPLY || true
+  case "$DEV_LAUNCH_REPLY" in
+    y|Y|yes|YES)
+      exec "$ROOT_DIR/scripts/dev-launch" --all
+      ;;
+    *)
+      echo "Launch them later with ./scripts/dev-launch --all."
+      ;;
+  esac
+fi

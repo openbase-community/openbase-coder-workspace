@@ -36,6 +36,34 @@
                 "focus": true,
                 "panel": "dedicated"
             }
+        },
+        {
+            "label": "Openbase Desktop: Dev Dashboard (Electron)",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/dev-launch",
+            "args": ["--electron"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "Openbase Network: Dev Menu Bar (Swift)",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/dev-launch",
+            "args": ["--menu-bar"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
         }
     ]
 }

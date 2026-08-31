@@ -29,6 +29,12 @@ fetched in the main process (`electron/main.cjs`) using a CLI-minted access
 token. Pairing can be degraded/dismissed when the backend does not serve the
 onboarding endpoints yet, without permanently recording pairing completion.
 
+Current networking addendum: the prerequisite decision is VPN capability,
+not whether a user already has Tailscale. Electron offers Openbase VPN or
+Openbase Direct from the CLI's canonical `tailnet` onboarding payload; it does
+not offer the official Tailscale provider. Pairing copy is transport-neutral
+even though cloud compatibility fields retain `tailscale_*` names.
+
 Original work items:
 
 1. Onboarding window implementing the Path A state machine (A2–A5 in

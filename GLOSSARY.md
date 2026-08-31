@@ -70,6 +70,21 @@ UI plus Electron-only features (auto-update, LiveKit companion screen
 sharing, deep links). Its visible app name is **Openbase**; compatibility
 identifiers and the underlying `openbase-coder` CLI keep their technical names.
 
+**Openbase VPN**: The recommended production Electron networking experience.
+It is the `netmesh` provider internally: a bundled Openbase client connects to
+an Openbase-operated Headscale control plane using Tailscale-compatible
+open-source networking. It needs neither the Tailscale app nor a Tailscale
+account. Openbase VPN collects no VPN traffic or usage analytics and sends no
+VPN analytics to Tailscale. Because it is a full-device
+VPN, phone browsers and other apps can reach websites and services created on
+the paired computer.
+
+**Openbase Direct**: The no-VPN Electron networking alternative, internally
+the `netmesh-tsnet` provider. An embedded node carries Openbase app traffic for
+managed or restricted environments that cannot support a VPN. It does not add
+a device-wide route, so other phone apps and browsers cannot use it to open
+websites created on the paired computer.
+
 **Installation pathways**: The only sanctioned ways to install Openbase
 Coder, kept deliberately few and strict. (1) **Dev setup** — clone
 `openbase-coder-workspace` and run `./scripts/setup`; `installation.json`
@@ -297,6 +312,9 @@ with the CLI installed editable (`uv tool install -e ./cli`) or run via
 `uv run`. `openbase-coder setup` never clones a workspace; without
 `--workspace-dir` it discovers the checkout from `~/.openbase/installation.json`
 or the editable CLI install.
+Electron and the Swift networking menu-bar app are optional visual surfaces
+launched with `./scripts/dev-launch`; Electron runs in dashboard-only mode and
+does not expose its setup/installer bridge in this deployment mode.
 
 **Backend binary on-demand install**: Setup behavior that installs the selected
 coding backend's CLI only if it is missing: codex from GitHub release binaries

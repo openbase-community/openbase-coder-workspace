@@ -3,9 +3,12 @@
 Implemented in `openbase-cloud-api` under `openbase_api/openbase/`.
 The cloud is a rendezvous registry: it records fresh device facts so signed-in
 clients can discover each other, but it is not the source of truth for pairing,
-install readiness, or desktop health. Once a mobile app has a Tailscale IP or
-MagicDNS name for a desktop, it should query that desktop live over Tailscale
-for setup/readiness details.
+install readiness, or desktop health. Once a mobile app has a private IP or
+MagicDNS name for a desktop, it should query that desktop live over the
+selected tailnet transport for setup/readiness details. The `tailscale*` keys
+below are compatibility names shared by official Tailscale, Openbase VPN, and
+Openbase Direct; they do not imply use of the Tailscale app or SaaS control
+plane.
 
 Authentication: all endpoints take the user's JWT. The CLI uses the access
 token stored in `~/.openbase/auth.json`; the apps use their existing session
