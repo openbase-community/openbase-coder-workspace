@@ -85,6 +85,12 @@ managed or restricted environments that cannot support a VPN. It does not add
 a device-wide route, so other phone apps and browsers cannot use it to open
 websites created on the paired computer.
 
+**Published service**: A user-named, single-port local HTTP service shared only
+with Openbase VPN/tailnet peers by `openbase-coder service publish`. Its URL uses
+the computer's existing MagicDNS name, an uncommon dynamic/private port, and a
+memorable path; launchd persistence is always opt-in. Openbase Direct cannot
+publish arbitrary host services.
+
 **Installation pathways**: The only sanctioned ways to install Openbase
 Coder, kept deliberately few and strict. (1) **Dev setup** — clone
 `openbase-coder-workspace` and run `./scripts/setup`; `installation.json`
