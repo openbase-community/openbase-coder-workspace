@@ -71,9 +71,8 @@ Every field-test session runs the same three steps, in order:
 
 1. **Installation.** Stand up a clean environment (Tart macOS VM, or Windows VM
    for the Docker pathway) and install the product using the sampled
-   installation method. Use the designated
-   [field-test account](#field-test-account-lifecycle): destroy any prior
-   account first, then sign it up for real as part of this step.
+   installation method. Provision the designated throwaway
+   [field-test account](#field-test-account-lifecycle) before signing in.
 2. **Smoke test.** A short basic check that the core loop works at all — place a
    call, get a dispatcher response through the full acoustic loop — before
    investing in anything deeper. If the smoke test fails, that is the finding;
@@ -136,61 +135,59 @@ set Auto-Lock to Never.
 
 ## Field-Test Account Lifecycle
 
-A field test runs as a **real, designated account** — never a developer's real
-Openbase account. Its email must be listed in the cloud API's
-`FIELD_TEST_ALLOWED_EMAILS` allowlist (comma-separated env/config var); the
-`field_test_account` command refuses to touch any email not on that list, and an
-empty/unset allowlist refuses everything. Use **plus-addressing** to mint
-unlimited distinct real signup addresses that all land in one controlled inbox:
-`you+<run-slug>@gmail.com` all deliver to `you@gmail.com`, yet each is a distinct
-account to Openbase.
+A core field test runs as a provisioned **throwaway account** — never a
+developer's account, personal email, personal inbox, or plus-address. The
+address must be an exact member of the cloud API's comma-separated
+`FIELD_TEST_ALLOWED_EMAILS` allowlist. It must also use an
+`openbase-field-<slug>` local-part on an explicitly non-delivery domain:
+`example.com`, `example.net`, `example.org`, or a `.test`/`.invalid` domain.
+The command rejects Gmail and all other ordinary/provider domains and rejects
+`+` local-parts even if an operator accidentally allowlists them.
 
-Because the account is real, the field test exercises the **real signup and real
-email-verification** flow — that is the whole point of this design. Nothing about
-verification is mocked: the verification email actually arrives in the controlled
-inbox and the agent reads it to finish signing up. Only two lifecycle steps are
-done out-of-band, by the `field_test_account` Django management command in the
-cloud API (openbase-drf-api-core PR
-[#13](https://github.com/openbase-community/openbase-drf-api-core/pull/13), which
-cross-links back to this workspace PR):
+The cloud API's `field_test_account` Django management command owns the
+lifecycle:
 
-- **`--destroy EMAIL`** (pre-test): deletes the designated user via the canonical
-  account-deletion cascade, so the run starts from a clean slate. Idempotent — a
-  no-op if the user does not exist.
-- **`--mock-payment EMAIL`** (mid-test, AFTER the real signup + verification):
-  grants paid entitlement via a local `payment.Subscription` row at the normal
-  **default-tier** cap — no Stripe checkout, subscription, or charge.
+- **`--provision EMAIL`** creates or refreshes an active, verified, nonstaff
+  user without invoking signup, email delivery, Resend, Stripe, or another
+  network path. It reads the password only from the deployed app's temporary,
+  write-only `FIELD_TEST_ACCOUNT_PASSWORD` secret; no password CLI argument
+  exists and JSON output does not include it.
+- **`--mock-payment EMAIL`** grants paid entitlement via a purely local
+  `payment.Subscription` row at the normal default-tier cap—no payment-provider
+  call or charge.
+- **`--destroy EMAIL`** deletes the account through the canonical cascade.
+  It is idempotent when the user is absent.
 
-It **never creates users and never mocks verification.** Both operations are
-guarded by the allowlist before any read/write and emit one line of
-machine-readable JSON for the harness (`action`, `email`, `user_id`, and
-`destroyed`/`entitled`).
+The lifecycle across one core product field test:
 
-The lifecycle across one field test:
+1. Confirm the exact reserved address is allowlisted and the temporary password
+   secret has been injected through a non-argv secret-input path.
+2. **Provision** with `field_test_account --provision <email>`.
+3. Sign in directly with the throwaway credentials. Do not run signup and do
+   not look for a verification email; the provisioned `EmailAddress` is already
+   verified.
+4. **Mock payment** if paid features are in scope.
+5. After the run, **destroy** the account and remove the temporary password
+   secret from the app.
 
-1. **Destroy** any prior account: `field_test_account --destroy <email>`.
-2. **Real signup** happens as part of installation / first-run testing — the
-   agent drives the product through actual account creation for `<email>`.
-3. **Read the verification email** from the controlled inbox and complete
-   verification for real: use the `gmail-cli` skill to find and open the Openbase
-   verification message and follow its link/code.
-4. **Mock payment** once signed in: `field_test_account --mock-payment <email>`
-   to unlock paid features.
-
-Invoke in production via `openbase run` against the cloud app (the
-`FIELD_TEST_ALLOWED_EMAILS` config var must be set on the app):
+With the two app secrets/config vars already present, production invocations
+contain no credential:
 
 ```bash
-# Pre-test: destroy the designated field-test account.
-openbase run -a <app> python manage.py field_test_account --destroy you+<run-slug>@gmail.com
-# → {"action":"destroy","email":"you+<run-slug>@gmail.com","destroyed":true,"user_id":…}
-
-# After the real signup + email verification: grant paid entitlement.
-openbase run -a <app> python manage.py field_test_account --mock-payment you+<run-slug>@gmail.com
-# → {"action":"mock-payment","email":"…","user_id":…,"entitled":true,"subscription_created":true}
+openbase run -a <app> python manage.py field_test_account \
+  --provision openbase-field-20260831@example.com
+openbase run -a <app> python manage.py field_test_account \
+  --mock-payment openbase-field-20260831@example.com
+openbase run -a <app> python manage.py field_test_account \
+  --destroy openbase-field-20260831@example.com
 ```
 
-Cross-reference PR #13 from the field-test RMOT.
+The global email backend independently suppresses every reserved domain allowed
+above before calling Resend. Sending verification/onboarding mail is therefore
+not part of a core field test. An email-delivery or onboarding-email test is a
+separate class of test requiring Gabe's explicit authorization and isolated
+test-recipient infrastructure; it must never use Gabe's or another person's
+inbox.
 
 ## Required RMOT
 
@@ -201,9 +198,9 @@ must include:
 - the **sampled parameters** for this run (host OS, mobile OS, connectivity,
   branch, installation method) and the previous run's date;
 - the field-test account identity and confirmation its email is on the
-  `FIELD_TEST_ALLOWED_EMAILS` allowlist, that `field_test_account --destroy` ran
-  pre-test, and that signup + email verification will run for real (payment
-  mocked post-signup via `field_test_account --mock-payment`);
+  `FIELD_TEST_ALLOWED_EMAILS` allowlist, uses the reserved local-part/domain
+  policy, was provisioned verified via `field_test_account --provision`, and
+  does not send or read email (payment mocked via `--mock-payment` if needed);
 - clean-room confirmation: which disposable VM (Tart macOS / Windows) and that
   the developer's real install/account/services are untouched;
 - planned steps: install → smoke → targeted, with the specific targeted areas
@@ -221,8 +218,8 @@ must include:
   pointer, keep-phone-awake / disable Auto-Lock;
 - expected human actions and when `user say` will be used;
 - no-mock statement listing the real systems involved;
-- rollback/cleanup notes (VM deletion, field-test account teardown via
-  `field_test_account --destroy`).
+- rollback/cleanup notes (VM deletion, `field_test_account --destroy`, and
+  removal of the temporary `FIELD_TEST_ACCOUNT_PASSWORD` app secret).
 
 Use repo-relative or `~`-relative paths in the RMOT. Keep brittle scratch in
 `.local/` (gitignored) — never reference `.local/` files from committed docs.
@@ -232,10 +229,11 @@ Use repo-relative or `~`-relative paths in the RMOT. Keep brittle scratch in
 1. Confirm the disposable VM harness is ready (macOS): see
    `install-tests/electron-macos/README.md` — `bootstrap-golden.sh` bakes the
    golden VM once; `run.sh` clones a throwaway instance per run.
-2. Destroy any prior field-test account
-   (`field_test_account --destroy <email>`); the run signs it up for real, so do
-   not pre-create it. Confirm the email is on the `FIELD_TEST_ALLOWED_EMAILS`
-   allowlist.
+2. Confirm the reserved throwaway email is an exact member of
+   `FIELD_TEST_ALLOWED_EMAILS`, inject the temporary password through a
+   non-argv/write-only secret path, and run
+   `field_test_account --provision <email>`. Never substitute a personal inbox
+   or plus-address.
 3. Inside the VM, confirm production cloud targeting:
 
    ```bash

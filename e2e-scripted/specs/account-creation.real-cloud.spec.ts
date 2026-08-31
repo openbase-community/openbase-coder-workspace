@@ -4,7 +4,6 @@ import { browser } from "@wdio/globals";
 import { loadDeviceEnv, packageRoot } from "../support/deviceEnv.js";
 import {
   assertApprovedSignupEmail,
-  buildSignupEmail,
   ensureSignedOutAtWelcome,
   generateSignupPassword,
   openEmailSignIn,
@@ -15,17 +14,23 @@ import {
 
 // This spec drives the real account-creation pathway against production
 // Openbase Cloud (https://app.openbase.cloud). It creates a real account and
-// production Resend sends a real verification email, so the address is locked
-// to Gabe's own mailbox via plus addressing. It signs the phone out of the
-// current session first; after the run, sign back in manually.
+// production Resend sends a real verification email, so it is separately
+// authorized and must target isolated test-recipient infrastructure. It signs
+// the phone out of the current session first; after the run, sign back in
+// manually.
 describe("Openbase iOS account creation against production cloud", () => {
   const env = loadDeviceEnv({ requirePhysicalDevice: true });
 
   it("signs up with email and reaches the Verify Your Email screen", async function (this: Mocha.Context) {
-    const email = process.env.OPENBASE_E2E_SIGNUP_EMAIL || buildSignupEmail(new Date());
+    const email = process.env.OPENBASE_E2E_SIGNUP_EMAIL;
+    if (!email) {
+      throw new Error(
+        "OPENBASE_E2E_SIGNUP_EMAIL is required; there is no personal-inbox fallback.",
+      );
+    }
     assertApprovedSignupEmail(email);
     const password = process.env.OPENBASE_E2E_SIGNUP_PASSWORD || generateSignupPassword();
-    console.warn(`Signing up with ${email}; password (kept for later account cleanup): ${password}`);
+    console.warn(`Signing up with separately authorized test recipient ${email}.`);
 
     try {
       await ensureSignedOutAtWelcome(env);

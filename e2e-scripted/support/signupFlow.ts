@@ -2,11 +2,23 @@ import { randomBytes } from "node:crypto";
 import { $, browser } from "@wdio/globals";
 import type { DeviceEnv } from "./deviceEnv.js";
 
-// Live signup runs create real production accounts and trigger real Resend
-// verification emails. Every address must deliver to Gabe's own mailbox so a
-// test can never bounce mail and damage sender reputation; Gmail plus
-// addressing keeps each attempt unique while landing in the same inbox.
-const approvedSignupMailboxPattern = /^montague\.gabe(\+[A-Za-z0-9._-]+)?@gmail\.com$/;
+// Signup/email-delivery testing is separate from core field testing and must be
+// explicitly pointed at isolated test-recipient infrastructure. It must never
+// fall back to a person's mailbox or use plus-addressing.
+const personalEmailDomains = new Set([
+  "aol.com",
+  "fastmail.com",
+  "gmail.com",
+  "googlemail.com",
+  "hotmail.com",
+  "icloud.com",
+  "live.com",
+  "me.com",
+  "outlook.com",
+  "proton.me",
+  "protonmail.com",
+  "yahoo.com",
+]);
 
 const freshStartArgument = "--openbase-fresh-start";
 
@@ -70,21 +82,25 @@ export type SignupOutcome =
   | { kind: "timeout"; texts: string[] };
 
 export function assertApprovedSignupEmail(email: string): void {
-  if (!approvedSignupMailboxPattern.test(email)) {
+  const approvedDomain = process.env.OPENBASE_E2E_APPROVED_EMAIL_DOMAIN?.trim().toLowerCase();
+  const normalized = email.trim().toLowerCase();
+  const [localPart, domain, extra] = normalized.split("@");
+  if (
+    !approvedDomain
+    || extra !== undefined
+    || !localPart?.startsWith("openbase-email-test-")
+    || localPart.includes("+")
+    || !domain
+    || personalEmailDomains.has(domain)
+    || domain !== approvedDomain
+  ) {
     throw new Error(
-      `Refusing to sign up with ${email}: live signup must use montague.gabe@gmail.com `
-        + "(plus-addressing allowed) so no production email can ever bounce.",
+      `Refusing to sign up with ${email}: set OPENBASE_E2E_SIGNUP_EMAIL to an `
+        + "openbase-email-test-<slug> identity and OPENBASE_E2E_APPROVED_EMAIL_DOMAIN "
+        + "to its explicitly authorized isolated recipient domain. Personal/provider "
+        + "domains and plus-addressing are forbidden.",
     );
   }
-}
-
-export function buildSignupEmail(now: Date): string {
-  const stamp = [
-    now.getFullYear(),
-    pad(now.getMonth() + 1),
-    pad(now.getDate()),
-  ].join("") + "-" + [pad(now.getHours()), pad(now.getMinutes()), pad(now.getSeconds())].join("");
-  return `montague.gabe+ios-e2e-${stamp}@gmail.com`;
 }
 
 export function generateSignupPassword(): string {
@@ -283,8 +299,4 @@ function decodeXmlEntities(value: string): string {
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&");
-}
-
-function pad(value: number): string {
-  return String(value).padStart(2, "0");
 }

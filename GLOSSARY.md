@@ -45,24 +45,25 @@ it finds is logged, sent to Slack, and fixed as a READY PR against `develop`,
 and reproducible regressions are pinned as new scripted-E2E specs. Operating
 procedure: the `field-testing` skill.
 
-**Field-test user**: The real, designated account a field test runs as — never a
-developer's real Openbase account. Its email must be listed in the cloud API's
-`FIELD_TEST_ALLOWED_EMAILS` allowlist (comma-separated); use plus-addressing
-(`you+<run-slug>@gmail.com`) to mint unlimited distinct real signup addresses
-that all land in one controlled inbox. Because the account is real, the field
-test exercises the **real signup and real email-verification** flow: the
-verification email actually arrives in the controlled inbox and the testing
-agent reads it (via the `gmail-cli` skill) to complete verification. Only two
-lifecycle steps are done out-of-band, by the `field_test_account` Django
-management command (openbase-drf-api-core PR
-[#13](https://github.com/openbase-community/openbase-drf-api-core/pull/13)):
-`--destroy EMAIL` (pre-test — delete the prior account via the canonical
-account-deletion cascade) and `--mock-payment EMAIL` (post-signup — grant paid
-entitlement as a local `payment.Subscription` row at the normal default-tier cap,
-no Stripe charge). It **never creates users and never mocks verification**,
-guards hard against any email not on the allowlist (empty/unset ⇒ refuses
-everything), and emits one line of JSON per operation for the harness. Invoke in
-production via `openbase run -a <app> python manage.py field_test_account …`.
+**Field-test user**: The reserved throwaway account a core field test runs as—
+never a developer account, personal email/inbox, or plus-address. Its email must
+be an exact member of the cloud API's comma-separated
+`FIELD_TEST_ALLOWED_EMAILS` allowlist and use an `openbase-field-<slug>`
+local-part on `example.com`, `example.net`, `example.org`, or a
+`.test`/`.invalid` domain. The `field_test_account` Django management command
+provisions it active and verified with `--provision EMAIL`, reading its password
+only from the temporary write-only `FIELD_TEST_ACCOUNT_PASSWORD` app secret;
+the command has no password argument and never returns the credential. Core
+field tests sign in directly: they do not run signup, send verification email,
+or read a human inbox. `--mock-payment EMAIL` grants purely local paid
+entitlement, and `--destroy EMAIL` performs canonical teardown. Every operation
+rechecks the allowlist and reserved identity; provider domains and `+` are
+rejected even if allowlisted. Provisioning and payment mocking make no Resend,
+Stripe, or other network calls, and the global email backend independently
+suppresses the permitted non-delivery domains before Resend. Email delivery and
+onboarding-email tests require separate explicit authorization and isolated
+test-recipient infrastructure. Invoke the lifecycle in production via
+`openbase run -a <app> python manage.py field_test_account …`.
 
 **Desktop app**: The macOS Electron app. It bundles and activates the
 standalone CLI runtime, runs guided first-time setup, and hosts the dashboard
