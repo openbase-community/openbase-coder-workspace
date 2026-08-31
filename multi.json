@@ -8,6 +8,12 @@
       "installSets": ["dev"]
     },
     {
+      "name": "openbase-agent-ui-swift",
+      "url": "https://github.com/openbase-community/openbase-agent-ui-swift",
+      "description": "Public Swift interfaces and session-facing state for embedding Openbase Agent UI in iOS apps",
+      "installSets": ["dev"]
+    },
+    {
       "name": "allauth-client-kotlin",
       "url": "https://github.com/openbase-community/allauth-client-kotlin",
       "description": "Kotlin client and views for Django AllAuth headless authentication",

@@ -2,6 +2,8 @@
 # Allow us to search inside these gitignored directories
 !/allauth-client-swift/
 !/allauth-client-swift
+!/openbase-agent-ui-swift/
+!/openbase-agent-ui-swift
 !/allauth-client-kotlin/
 !/allauth-client-kotlin
 !/cli/

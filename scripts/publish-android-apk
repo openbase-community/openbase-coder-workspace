@@ -39,8 +39,9 @@ ANDROID_DIR="${ROOT_DIR}/android"
 APP_GRADLE="${ANDROID_DIR}/app/build.gradle.kts"
 BUILD_SCRIPT="${ANDROID_DIR}/scripts/build-and-upload-apk.sh"
 
-# The marketing repo lives outside this workspace. Overridable for testing.
-MARKETING_REPO="${MARKETING_REPO:-${HOME}/Projects/openbase/code/marketing/openbase-voice-marketing}"
+# Marketing is a fixed-main repo in the sibling Cloud Multi workspace.
+# Keep the override for tests and nonstandard workspace layouts.
+MARKETING_REPO="${MARKETING_REPO:-${ROOT_DIR}/../openbase-cloud-workspace/marketing}"
 INSTALL_HTML_REL="site-content/install.html"
 INSTALL_HTML="${MARKETING_REPO}/${INSTALL_HTML_REL}"
 
