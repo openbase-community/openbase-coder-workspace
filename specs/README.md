@@ -43,3 +43,5 @@ write for a public audience.
   user's machines, with git-state reconciliation. Implemented; rolling out.
 - `inbound-voip/` — explicit, short-lived agent-to-user calls delivered with
   PushKit and answered through the user's authenticated local runtime.
+- `secure-maritime-workspaces/` — private container-workspace lifecycle,
+  one-time bootstrap, scoped machine identity, and safe migration contract.
