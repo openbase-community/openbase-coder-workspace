@@ -11,142 +11,32 @@ When reading logs under `~/.openbase/logs`, always use bounded reads
 
 ## iOS Call Stuck On "Connecting..."
 
-This issue can happen when the iOS app successfully gets a LiveKit room token and opens signaling, but WebRTC media never connects.
+The iOS app got a LiveKit room token and opened signaling, but WebRTC media
+never connected.
 
-### Expected Network Targets
+The **user-facing symptom, expected Tailscale Serve routes, the LiveKit
+listener (`lsof`) check, and the regenerate/restart fix are canonical in
+`cli/docs/troubleshooting.md`** ("iPhone Stays On Connecting" and "iPhone
+LiveKit Call Times Out Over Tailscale") — confirm and apply those first. This
+section adds only the agent-side root cause and log signatures that confirm
+the diagnosis; don't restate the routes/fix here.
 
-The iOS app default backend host is:
+Root cause (interface bug): `livekit-server` advertises the Tailscale node IP
+in ICE candidates (e.g. `100.64.0.10:7882`) while `lsof` shows UDP bound only
+on loopback, because its RTC `interfaces.includes` still lists a stale
+interface (e.g. `en7`) instead of the active Tailscale `utunN`. After
+`services regenerate && services install`, the running command
+(`ps -ax -o pid,command | rg '[l]ivekit-server'`) should list `utunN` and
+`lsof -nP -iUDP:7882` should show the Tailscale IP, not just `127.0.0.1`.
 
-```text
-your-mac.tailnet-name.ts.net
-```
+Distinguishing log signatures — media ICE failed but dispatch was fine:
 
-Expected ports:
-
-```text
-http://your-mac.tailnet-name.ts.net:18080 -> Django/Openbase API on 127.0.0.1:7999
-ws://your-mac.tailnet-name.ts.net:7880   -> LiveKit signaling on 127.0.0.1:7880
-100.64.0.10:7881                         -> LiveKit TCP RTC
-100.64.0.10:7882                         -> LiveKit UDP RTC
-```
-
-Check Tailscale Serve:
-
-```sh
-tailscale serve status --json
-```
-
-Expected shape:
-
-```json
-{
-  "TCP": {
-    "18080": { "HTTP": true },
-    "7880": { "TCPForward": "127.0.0.1:7880" }
-  },
-  "Web": {
-    "your-mac.tailnet-name.ts.net:18080": {
-      "Handlers": {
-        "/": { "Proxy": "http://127.0.0.1:7999" }
-      }
-    }
-  }
-}
-```
-
-### Symptoms Seen
-
-The phone was stuck on "connecting..." even though Django returned room tokens:
-
-```text
-POST /api/livekit-room-token/ HTTP/1.1" 200 OK
-```
-
-LiveKit server logs showed the iPhone signaling into the room, then disconnecting before WebRTC completed:
-
-```text
-removing participant without connection
-reason: SIGNAL_SOURCE_CLOSE
-dtls timeout: read/write timeout: context deadline exceeded
-```
-
-The LiveKit agent did receive the job and joined the room, so dispatch was not the problem:
-
-```text
-received job request
-Connected to LiveKit room
-LiveKit AgentSession started
-```
-
-### Root Cause
-
-The LiveKit server had stale Tailscale interface configuration. It advertised the Tailscale node IP in ICE candidates:
-
-```text
-100.64.0.10:7882
-100.64.0.10:7881
-```
-
-But `lsof` showed UDP was only bound on loopback:
-
-```text
-UDP 127.0.0.1:7882
-TCP *:7881
-TCP 127.0.0.1:7880
-```
-
-The running `livekit-server` command was using the wrong interface in its RTC config:
-
-```text
-interfaces:
-  includes:
-    - lo0
-    - en7
-```
-
-The active Tailscale interface was actually `utun4`.
-
-### Fix
-
-Regenerate and reload the Openbase launchd service wrappers:
-
-```sh
-./.venv/bin/openbase-coder services regenerate
-./.venv/bin/openbase-coder services install
-```
-
-Then confirm LiveKit is running with the Tailscale interface:
-
-```sh
-ps -ax -o pid,command | rg '[l]ivekit-server'
-```
-
-The command should include:
-
-```text
-interfaces:
-  includes:
-    - lo0
-    - utun4
-```
-
-Confirm UDP is bound to the Tailscale IP:
-
-```sh
-lsof -nP -iTCP:7880 -iTCP:7881 -iUDP:7882
-```
-
-Expected after the fix:
-
-```text
-UDP 127.0.0.1:7882
-UDP 100.64.0.10:7882
-UDP [TAILSCALE_IPV6]:7882
-TCP *:7881 (LISTEN)
-TCP 127.0.0.1:7880 (LISTEN)
-```
-
-After this, a new call should show the iPhone participant becoming active, media tracks publishing, and audio tracks subscribing instead of `removing participant without connection`.
+- LiveKit server: phone signals in, then `removing participant without
+  connection` / `reason: SIGNAL_SOURCE_CLOSE` / `dtls timeout: ... context
+  deadline exceeded`.
+- LiveKit agent (clean): `received job request` → `Connected to LiveKit room`
+  → `AgentSession started`.
+- Django (clean): `POST /api/livekit-room-token/ ... 200 OK`.
 
 ### Bounded Log Checks
 
@@ -161,6 +51,7 @@ tail -n 360 ~/.openbase/logs/livekit-server.log | rg -i 'participant active|with
 Useful connectivity checks:
 
 ```sh
+tailscale serve status --json   # expect TCP :18080 HTTP + :7880 TCPForward -> 127.0.0.1:7880
 tailscale status
 tailscale ip -4
 dig +short your-mac.tailnet-name.ts.net
@@ -473,30 +364,29 @@ still disagree, the install predates the consolidation; update it.
 
 ## Stale Peer Trees, Resurrected Deleted Files, Or Branch Switches Not Propagating (Syncthing Stall)
 
-Symptoms on a two-Mac code-sync pair: the other machine's checkouts lag by
-hours; files a commit deleted reappear as *untracked* copies with
-pre-deletion mtimes (breaking builds/typecheck on files nobody edited);
-`*.sync-conflict-*` copies pile up; branch switches stop mirroring. Git-state
-sync deliberately rides Syncthing (repository manifests are synced files), so
-a file-sync stall freezes both layers.
+The user-facing explanation, the 2 GiB disk floor, where the stall surfaces
+(dashboard banner, Sync page, `sync status`, `/api/sync/status/`), and the
+baseline fix (free disk, restart `code-sync`) are canonical in
+`cli/docs/code-sync.md` ("File sync stalled" and "Reading the reconcile
+heartbeat"). Symptoms on a two-machine pair: the peer's checkouts lag; files a
+commit deleted reappear as *untracked* copies with pre-deletion mtimes
+(breaking builds on files nobody edited); `*.sync-conflict-*` copies pile up;
+branch switches stop mirroring — because git-state sync rides Syncthing
+(repository manifests are synced files), a file-sync stall freezes both layers.
 
-Diagnose:
+Agent-side diagnosis beyond the user doc:
 
-1. `openbase-coder sync status` — look for a red `ERROR:` under a folder
-   (e.g. `insufficient space on disk for database`) and the `Reconcile:`
-   line (`awaiting_files` climbing means files are behind git state).
-2. `df -h /System/Volumes/Data` — the classic cause is low disk; Syncthing
-   pauses folders below its free-space floor (2 GiB absolute in the managed
-   config; 1% of the disk on configs rendered before that floor shipped).
-3. Engine detail: `curl -H "X-API-Key: $(sed -n 's/.*<apikey>\(.*\)<\/apikey>.*/\1/p' ~/.openbase/code-sync/config.xml)" "http://127.0.0.1:8385/rest/db/status?folder=<folder-id>"`
+1. `openbase-coder sync status` — a red `ERROR:` under a folder names the
+   stall; a climbing `Reconcile: awaiting_files` means files are behind git
+   state.
+2. Engine detail: `curl -H "X-API-Key: $(sed -n 's/.*<apikey>\(.*\)<\/apikey>.*/\1/p' ~/.openbase/code-sync/config.xml)" "http://127.0.0.1:8385/rest/db/status?folder=<folder-id>"`
    — the `error` field names the stall reason.
-4. Reconcile heartbeat: `grep "code_sync tick_complete" ~/.openbase/logs/sync-workers.log | tail`
+3. Reconcile heartbeat: `grep "code_sync tick_complete" ~/.openbase/logs/sync-workers.log | tail`
    — no lines means the sync-workers service is down; `errors>0` lines are
    explained by an adjacent `code_sync tick_errors` warning naming the repo.
 
-Remedy: free disk space (Docker VM images under
-`~/Library/Containers/com.docker.docker` are a known multi-hundred-GB
-offender), then `openbase-coder services stop code-sync && openbase-coder
-services start code-sync`. If a deleted file was resurrected, remove the
-stray untracked copies on **both** machines (SSH to the peer) or Syncthing
-round-trips them back.
+Remedy beyond the baseline: the classic low-disk cause is often Docker VM
+images under `~/Library/Containers/com.docker.docker` (multi-hundred-GB). After
+freeing disk and restarting `code-sync`, if a deleted file was resurrected,
+remove the stray untracked copies on **both** machines (SSH to the peer) or
+Syncthing round-trips them back.
