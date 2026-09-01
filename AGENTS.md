@@ -102,6 +102,9 @@ product (auth, remote workspaces, and the PaaS backend).
 
 ## Hard Rules
 
+- `.reports/` is workspace-local and must never be committed to this public
+  repository. Keep operational reports in a private project workspace when
+  they need to be shared or versioned.
 - `AGENTS.md` and `.agents/` are the source of truth for agent instructions
   and repo-local skills; `CLAUDE.md` and `.claude/skills` entries are
   symlinks to them. Edit the AGENTS/.agents side and keep the symlinks

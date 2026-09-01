@@ -16,6 +16,7 @@
   "scripts": {
     "build": "pnpm --recursive --if-present build",
     "test": "pnpm --recursive --if-present test",
+    "check:public-hygiene": "node scripts/check-public-hygiene.mjs",
     "e2e:ios:doctor": "pnpm --dir e2e-scripted e2e:ios:doctor",
     "manual:e2e:ios:basic-call-response": "pnpm --dir e2e-scripted manual:e2e:ios:basic-call-response",
     "manual:e2e:ios:superagent-own-name": "pnpm --dir e2e-scripted manual:e2e:ios:superagent-own-name",

@@ -334,6 +334,14 @@ After the run, report (and write a summary artifact per the
   scripted-E2E specs pinned;
 - VM/user teardown status.
 
+In this public workspace, the summary artifact stays workspace-local under
+`.reports/` or `.local/field-tests/`. Never force-add it, commit it, link a
+public GitHub blob for it, or copy operational test evidence into another
+tracked workspace file. If a versioned report is required, write it in the
+relevant private Openbase workspace and verify that repository's visibility
+before staging. Before any workspace commit, require
+`git ls-files -- .reports` to produce no output.
+
 ## Scripted-E2E Annex (tier 2)
 
 The tier-2 **scripted-E2E** suite lives in `e2e-scripted/` and exists for
