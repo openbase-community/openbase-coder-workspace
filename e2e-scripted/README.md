@@ -58,7 +58,7 @@ The account-creation spec uses real signup and email verification with Resend's 
 OPENBASE_E2E_SIGNUP_EMAIL=delivered+openbase-field-<opaque-run-slug>@resend.dev
 ```
 
-After the spec reaches "Verify Your Email", use the dedicated secure Resend CLI field-test profile to list messages, select only the exact recipient created after the run began, retrieve it by id, and follow its confirmation URL through the tested phone/browser surface. Never pass a Resend API key on the command line or put the confirmation URL in a report, log, Slack message, or shell command. Full procedure: `.agents/skills/field-testing/SKILL.md`.
+After the spec reaches "Verify Your Email", use the active authenticated Resend CLI profile in secure storage to list messages, select only the exact recipient created after the run began, retrieve it by id, and follow its confirmation URL through the tested phone/browser surface. A separate field-test-specific profile is not required. Never pass a Resend API key on the command line or put the confirmation URL in a report, log, Slack message, or shell command. Full procedure: `.agents/skills/field-testing/SKILL.md`.
 
 ## Safe Checks
 
