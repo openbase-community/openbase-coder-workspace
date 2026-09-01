@@ -30,6 +30,7 @@ flow is gone. Field tests are clean-room by construction:
   install, launchd services, Tailscale routes, and ports 7999/7880 are never
   touched. The native-Windows pathway uses a Windows VM (later). Never install a
   field-test build onto the developer's own macOS session.
+- **Test the real user installation path.** For a full staging or production macOS field test, start from a bare VM and install the signed, notarized channel DMG through the normal download, Gatekeeper, Applications, prerequisite, and onboarding flow. Tart supplies disposable hardware isolation; Tart-only provisioning is not the installation under test. Use the pre-provisioned golden image, `run.sh`, or a local unsigned app only when the harness or a local build is explicitly the subject, or as a secondary diagnostic after the public path has been tested. Record every prerequisite encountered and whether the user-facing product or public documentation disclosed it before it was needed.
 - **Accounts are dedicated field-test identities**, never the developer's real
   Openbase account. See [Field-test account lifecycle](#field-test-account-lifecycle).
 - **Phones run the field-test app variant**, never the developer's normal Openbase app. The field-test variant must have its own bundle/application id and storage so it can coexist with the normal app without replacing its binary, login, VPN state, notification registration, or local data. See [Field-test mobile app variants](#field-test-mobile-app-variants).
@@ -230,9 +231,7 @@ Use repo-relative or `~`-relative paths in the RMOT. Keep brittle scratch in
 
 ## Preflight Sequence
 
-1. Confirm the disposable VM harness is ready (macOS): see
-   `install-tests/electron-macos/README.md` — `bootstrap-golden.sh` bakes the
-   golden VM once; `run.sh` clones a throwaway instance per run.
+1. Confirm the disposable VM path is ready (macOS): see `install-tests/electron-macos/README.md`. For a full installation field test, use `manual-vm.sh` to start a bare VM and download the real signed channel DMG inside it. Reserve the pre-provisioned `openbase-golden` image and `run.sh` for harness-specific testing or secondary diagnostics.
 2. Build/install the platform's field-test mobile variant and verify its distinct bundle/application id. If only the normal app is available, stop.
 3. Confirm the fresh address matches the reserved Resend field-test pattern, confirm the active authenticated Resend CLI profile can list sent-message metadata without exposing its credential, record the UTC start time, and run `field_test_account --destroy <email>`. A separate field-test profile is not required. Never substitute a personal inbox.
 4. Inside the VM, confirm the Cloud target matches the mobile field-test build (staging by default):
