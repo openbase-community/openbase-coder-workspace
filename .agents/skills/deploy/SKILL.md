@@ -281,8 +281,6 @@ pnpm run dist:mac:publish
 - **Syncthing** syncs `~/Projects` (including `.git`) with the mini: files
   can flap mid-commit/mid-build on this Mac. Build outputs are stignore'd;
   if a commit or copy fails mysteriously, suspect a sync flap first.
-- Sourcing all of `~/Developer/.env` replaces AWS credentials with a
-  restricted user — export only the specific vars you need.
 - The release workspace npm deps are pinned by
   `cli/scripts/release-workspace/pnpm-lock.yaml`; regenerate it with
   `cli/scripts/update-release-lockfile.sh` after changing frontend deps, or
