@@ -173,16 +173,16 @@ The lifecycle across one core product field test:
 1. Generate an opaque run slug and choose `delivered+openbase-field-<slug>@resend.dev`. Confirm it matches the reserved pattern exactly; do not use `test@…`, `@example.com`, another Resend test outcome, or a personal-provider plus-address.
 2. Record the UTC run start time. Run `field_test_account --destroy <email>` so a reused address starts clean; an idempotent `not_found` result is acceptable.
 3. Generate a strong ephemeral password locally without printing it, drive the field-test app's normal signup UI, and require the expected unverified/"Verify Your Email" state.
-4. Use the pre-authorized, dedicated Resend CLI field-test profile to poll sent-email metadata. Select only a message addressed to the exact field-test address and created after the recorded start time, then retrieve that message by id. Never pass an API key with `--api-key`, source a broad environment file, or use a general-purpose Resend profile.
+4. Use an authenticated Resend CLI profile to poll sent-email metadata. The active/default profile is acceptable; a separate field-test profile is not required. Select only a message addressed to the exact field-test address and created after the recorded start time, then retrieve that message by id. Never pass an API key with `--api-key` or source a broad environment file.
 5. Read the returned HTML/text, find the real confirmation URL, and follow it through the tested phone/browser surface. Verification URLs are bearer credentials: never put one in a shell command, RMOT, report, Slack message, screenshot caption, or durable log.
 6. Confirm the product reports the email verified and the account can sign in. If paid features are in scope, run `field_test_account --mock-payment <email>` only now.
 7. After the run, always run `field_test_account --destroy <email>` and remove any ephemeral local credential material.
 
-Resend CLI retrieval uses a named profile whose credential remains in secure CLI storage:
+Resend CLI retrieval uses the active authenticated profile, whose credential remains in secure CLI storage. Use `--profile <name>` only when an explicit non-active profile is needed:
 
 ```bash
-resend emails list --profile <field-test-profile> --limit 100 --json
-resend emails get --profile <field-test-profile> <message-id> --json
+resend emails list --limit 100 --json
+resend emails get <message-id> --json
 ```
 
 Inspect list results before `get`: the recipient must exactly equal the selected address, `created_at` must be after the recorded run start, and the message must be the expected verification message. If the dedicated profile is unavailable, the exact message does not arrive, or the provider reports a non-delivered outcome, stop and record the blocker. Never fall back to Gabe's inbox, another person's inbox, Slack, an arbitrary admin-mail endpoint, or direct database verification.
@@ -206,7 +206,7 @@ must include:
 - exact date/time and the requested test scope;
 - the **sampled parameters** for this run (host OS, mobile OS, connectivity,
   branch, installation method) and the previous run's date;
-- the fresh field-test account identity and confirmation it matches `delivered+openbase-field-<slug>@resend.dev`, the recorded UTC start time, the dedicated Resend CLI profile name (never its credential), the planned real signup/message-retrieval/verification steps, and optional post-verification `--mock-payment`;
+- the fresh field-test account identity and confirmation it matches `delivered+openbase-field-<slug>@resend.dev`, the recorded UTC start time, the Resend CLI profile being used (the active/default profile is acceptable; never record its credential), the planned real signup/message-retrieval/verification steps, and optional post-verification `--mock-payment`;
 - clean-room confirmation: which disposable VM (Tart macOS / Windows) and that
   the developer's real install/account/services are untouched;
 - planned steps: install → smoke → targeted, with the specific targeted areas
@@ -234,7 +234,7 @@ Use repo-relative or `~`-relative paths in the RMOT. Keep brittle scratch in
    `install-tests/electron-macos/README.md` — `bootstrap-golden.sh` bakes the
    golden VM once; `run.sh` clones a throwaway instance per run.
 2. Build/install the platform's field-test mobile variant and verify its distinct bundle/application id. If only the normal app is available, stop.
-3. Confirm the fresh address matches the reserved Resend field-test pattern, confirm a dedicated Resend CLI field-test profile can list sent-message metadata without exposing its credential, record the UTC start time, and run `field_test_account --destroy <email>`. Never substitute a personal inbox.
+3. Confirm the fresh address matches the reserved Resend field-test pattern, confirm the active authenticated Resend CLI profile can list sent-message metadata without exposing its credential, record the UTC start time, and run `field_test_account --destroy <email>`. A separate field-test profile is not required. Never substitute a personal inbox.
 4. Inside the VM, confirm the Cloud target matches the mobile field-test build (staging by default):
 
    ```bash
@@ -249,7 +249,7 @@ Use repo-relative or `~`-relative paths in the RMOT. Keep brittle scratch in
    xcrun xctrace list devices
    ```
 
-6. Provide only the specific credential the child process needs (e.g. one Cartesia key), never a whole env file. Resend access must use the dedicated named profile in secure CLI storage, not an exported key.
+6. Provide only the specific credential the child process needs (e.g. one Cartesia key), never a whole env file. Resend access must use an authenticated CLI profile in secure storage, not an exported key.
 
 ## Direct Appium Interaction
 
