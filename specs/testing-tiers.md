@@ -161,11 +161,5 @@ never has to be found twice.
   `e2e-scripted/README.md`.
 - Disposable macOS VM harness used for clean-room installs:
   `install-tests/electron-macos/`.
-- Core field-test account provisioning (a reserved non-delivery identity from
-  the exact `FIELD_TEST_ALLOWED_EMAILS` allowlist, provisioned verified without
-  signup/email/provider calls; optional local mocked entitlement; canonical
-  teardown): the `field_test_account` management command in
-  openbase-drf-api-core. Personal inboxes, plus-addressing, and ordinary email
-  domains are forbidden even if allowlisted. Email-delivery/onboarding-email
-  testing is separately authorized and uses isolated recipient infrastructure.
+- Core field-test account lifecycle: real product signup with an exact allowlisted `delivered+openbase-field-<opaque-run-slug>@resend.dev` testing recipient, production allauth message rendering and Resend submission, retrieval through a dedicated secure Resend CLI profile, real confirmation through the tested product, optional post-verification local entitlement, and canonical teardown. The `field_test_account` command in openbase-drf-api-core can destroy or grant entitlement but cannot create or verify users. Personal inboxes are forbidden.
 - Terminology: `GLOSSARY.md` ("field test", "scripted E2E", "Live E2E test").

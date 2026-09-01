@@ -27,6 +27,7 @@ checks.push(fileCheck("iOS Tuist project", resolve(workspaceRoot, "ios/Project.s
 checks.push(envCheck("OPENBASE_IOS_UDID", env.udid, true));
 checks.push(envCheck("OPENBASE_IOS_DEVICE_NAME", env.deviceName, true));
 checks.push(envCheck("OPENBASE_IOS_BUNDLE_ID", env.bundleId, true));
+checks.push(fieldTestBundleCheck());
 checks.push(envCheck("OPENBASE_IOS_XCODE_ORG_ID", env.xcodeOrgId ?? "", false));
 checks.push(physicalIosDeviceCheck());
 checks.push(runtimeTargetCheck());
@@ -92,6 +93,17 @@ function envCheck(name: string, value: string, required: boolean): Check {
     name,
     ok: !required,
     detail: required ? "missing" : "not set; may be required for physical WebDriverAgent signing",
+  };
+}
+
+function fieldTestBundleCheck(): Check {
+  const expected = "com.openbase.coder.field-test";
+  return {
+    name: "isolated iOS field-test app",
+    ok: env.bundleId === expected,
+    detail: env.bundleId === expected
+      ? expected
+      : `expected ${expected}; refusing normal or unknown app bundle ${env.bundleId}`,
   };
 }
 

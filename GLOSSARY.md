@@ -45,25 +45,7 @@ it finds is logged, sent to Slack, and fixed as a READY PR against `develop`,
 and reproducible regressions are pinned as new scripted-E2E specs. Operating
 procedure: the `field-testing` skill.
 
-**Field-test user**: The reserved throwaway account a core field test runs as—
-never a developer account, personal email/inbox, or plus-address. Its email must
-be an exact member of the cloud API's comma-separated
-`FIELD_TEST_ALLOWED_EMAILS` allowlist and use an `openbase-field-<slug>`
-local-part on `example.com`, `example.net`, `example.org`, or a
-`.test`/`.invalid` domain. The `field_test_account` Django management command
-provisions it active and verified with `--provision EMAIL`, reading its password
-only from the temporary write-only `FIELD_TEST_ACCOUNT_PASSWORD` app secret;
-the command has no password argument and never returns the credential. Core
-field tests sign in directly: they do not run signup, send verification email,
-or read a human inbox. `--mock-payment EMAIL` grants purely local paid
-entitlement, and `--destroy EMAIL` performs canonical teardown. Every operation
-rechecks the allowlist and reserved identity; provider domains and `+` are
-rejected even if allowlisted. Provisioning and payment mocking make no Resend,
-Stripe, or other network calls, and the global email backend independently
-suppresses the permitted non-delivery domains before Resend. Email delivery and
-onboarding-email tests require separate explicit authorization and isolated
-test-recipient infrastructure. Invoke the lifecycle in production via
-`openbase run -a <app> python manage.py field_test_account …`.
+**Field-test user**: The throwaway Openbase account a field test creates through the real product signup and mandatory email-verification flow—never a developer account or personal inbox. Its exact `delivered+openbase-field-<opaque-run-slug>@resend.dev` address must be in the cloud API's `FIELD_TEST_ALLOWED_EMAILS` allowlist. Allauth creates it unverified and renders the normal production message; the production backend submits that message to Resend's official delivered-test recipient; the agent retrieves the exact post-start message with a dedicated secure Resend CLI profile and follows its real confirmation URL through the tested app/browser surface. The `field_test_account` Django management command cannot create or verify users: `--destroy EMAIL` performs canonical teardown and `--mock-payment EMAIL` grants purely local entitlement only after real verification. Verification URLs and Resend credentials never enter reports, logs, Slack, or shell arguments, and no personal mailbox is used. Invoke lifecycle operations in production via `openbase run -a <app> python manage.py field_test_account …`.
 
 **Desktop app**: The macOS Electron app. It bundles and activates the
 standalone CLI runtime, runs guided first-time setup, and hosts the dashboard

@@ -12,12 +12,10 @@ import {
   waitForSignupOutcome,
 } from "../support/signupFlow.js";
 
-// This spec drives the real account-creation pathway against production
-// Openbase Cloud (https://app.openbase.cloud). It creates a real account and
-// production Resend sends a real verification email, so it is separately
-// authorized and must target isolated test-recipient infrastructure. It signs
-// the phone out of the current session first; after the run, sign back in
-// manually.
+// This spec drives real account creation against production Openbase Cloud with
+// an exact allowlisted Resend testing recipient. The surrounding field-test
+// procedure retrieves the rendered message and completes normal verification.
+// It must run against the isolated field-test app variant, never the normal app.
 describe("Openbase iOS account creation against production cloud", () => {
   const env = loadDeviceEnv({ requirePhysicalDevice: true });
 
@@ -53,7 +51,7 @@ describe("Openbase iOS account creation against production cloud", () => {
             + `recognizable error within 90s. Visible texts: ${JSON.stringify(outcome.texts)}`,
         );
       }
-      console.warn(`Account created; production sent a verification email to ${email}.`);
+      console.warn(`Account created; retrieve and verify the exact Resend test message for ${email}.`);
     } finally {
       try {
         const artifactsDir = resolve(packageRoot, "artifacts");

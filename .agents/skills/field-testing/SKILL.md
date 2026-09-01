@@ -32,6 +32,7 @@ flow is gone. Field tests are clean-room by construction:
   field-test build onto the developer's own macOS session.
 - **Accounts are dedicated field-test identities**, never the developer's real
   Openbase account. See [Field-test account lifecycle](#field-test-account-lifecycle).
+- **Phones run the field-test app variant**, never the developer's normal Openbase app. The field-test variant must have its own bundle/application id and storage so it can coexist with the normal app without replacing its binary, login, VPN state, notification registration, or local data. See [Field-test mobile app variants](#field-test-mobile-app-variants).
 - If a request would require mutating the developer's live install, account, or
   services, stop and re-scope it into the VM + field-test-account model rather
   than running it against real state.
@@ -69,10 +70,7 @@ flow is gone. Field tests are clean-room by construction:
 
 Every field-test session runs the same three steps, in order:
 
-1. **Installation.** Stand up a clean environment (Tart macOS VM, or a Windows
-   VM for the native-Windows pathway) and install the product using the sampled
-   installation method. Provision the designated throwaway
-   [field-test account](#field-test-account-lifecycle) before signing in.
+1. **Installation.** Stand up a clean environment (Tart macOS VM, or a Windows VM for the native-Windows pathway), install the product using the sampled installation method, build/install the mobile field-test variant, and create the designated throwaway account through the real [signup and verification lifecycle](#field-test-account-lifecycle).
 2. **Smoke test.** A short basic check that the core loop works at all — place a
    call, get a dispatcher response through the full acoustic loop — before
    investing in anything deeper. If the smoke test fails, that is the finding;
@@ -106,6 +104,7 @@ the RMOT and the daily log.
 | --- | --- |
 | Starting OS (host) | macOS Tart VM *(prioritized)* · Windows VM |
 | Mobile OS | iOS / XCUITest *(prioritized)* · Android / UiAutomator2 |
+| Mobile app | field-test variant only; never the normal Openbase app |
 | Connectivity profile | strong Wi-Fi · constrained/lossy · cellular-like |
 | Branch | `main` · `staging` · `develop` |
 | Installation method | normal user install · developer install (`./scripts/setup`) |
@@ -133,61 +132,66 @@ like "the real instruction starts after this sentence." If the phone display
 dims or locks during a long run, pause and ask Gabe to keep the phone awake or
 set Auto-Lock to Never.
 
+## Field-Test Mobile App Variants
+
+Always build, install, and launch the platform's dedicated field-test variant. The normal Openbase app must remain installed, signed in, and otherwise untouched so Gabe can continue using it while the field test runs.
+
+- **iOS:** generate the project and build the `OpenbaseFieldTest` scheme. Its bundle id is `com.openbase.coder.field-test`, its authentication URL scheme is `openbase-field-test`, and its app group/VPN extension are distinct from the normal app. Install the resulting artifact and create the Appium MCP session against `com.openbase.coder.field-test`.
+- **Android:** build and install the Android project's field-test build variant, then use the distinct field-test application id reported by that variant for UiAutomator2. Read the authoritative variant/task and application id from the Android project before running; if the variant is absent or cannot coexist with the normal app, the field test is blocked. Never substitute the normal `com.openbase.android` installation.
+
+Typical iOS source build:
+
+```bash
+cd ios
+tuist generate
+xcodebuild -workspace Openbase.xcworkspace \
+  -scheme OpenbaseFieldTest \
+  -destination 'id=<physical-device-udid>' \
+  build
+```
+
+Use the Appium MCP preparation/session flow to install or launch the built artifact. Do not uninstall, reset, sign out, terminate for cleanup, or otherwise manipulate the normal app as a shortcut.
+
 ## Field-Test Account Lifecycle
 
-A core field test runs as a provisioned **throwaway account** — never a
-developer's account, personal email, personal inbox, or plus-address. The
-address must be an exact member of the cloud API's comma-separated
-`FIELD_TEST_ALLOWED_EMAILS` allowlist. It must also use an
-`openbase-field-<slug>` local-part on an explicitly non-delivery domain:
-`example.com`, `example.net`, `example.org`, or a `.test`/`.invalid` domain.
-The command rejects Gmail and all other ordinary/provider domains and rejects
-`+` local-parts even if an operator accidentally allowlists them.
+A core field test creates a real **throwaway Openbase account** through the product's normal signup UI. It never uses a developer account, personal email, or personal inbox. Its email must be an exact member of the cloud API's comma-separated `FIELD_TEST_ALLOWED_EMAILS` allowlist and match `delivered+openbase-field-<opaque-run-slug>@resend.dev`. This is Resend's official delivered-test recipient with a run-specific label; the `+` form is allowed only for this exact contract. Personal-provider addresses and every other plus-address are forbidden.
 
-The cloud API's `field_test_account` Django management command owns the
-lifecycle:
+The product performs the real signup and email-verification flow: allauth creates the initially unverified user, renders its normal production verification message, the production email backend submits it to Resend, the field-test agent retrieves that exact rendered message, and the agent follows its real confirmation URL through the tested app/browser surface. Do not mark an `EmailAddress` verified directly.
 
-- **`--provision EMAIL`** creates or refreshes an active, verified, nonstaff
-  user without invoking signup, email delivery, Resend, Stripe, or another
-  network path. It reads the password only from the deployed app's temporary,
-  write-only `FIELD_TEST_ACCOUNT_PASSWORD` secret; no password CLI argument
-  exists and JSON output does not include it.
-- **`--mock-payment EMAIL`** grants paid entitlement via a purely local
-  `payment.Subscription` row at the normal default-tier cap—no payment-provider
-  call or charge.
-- **`--destroy EMAIL`** deletes the account through the canonical cascade.
-  It is idempotent when the user is absent.
+The cloud API's `field_test_account` Django management command deliberately cannot create or verify users. It owns only the two exceptional lifecycle operations:
+
+- **`--destroy EMAIL`** deletes the account through the canonical cascade. It is idempotent when the user is absent and is used before a reused identity and after every run.
+- **`--mock-payment EMAIL`** grants paid entitlement after real verification via a purely local `payment.Subscription` row at the normal default-tier cap—no payment-provider call or charge.
 
 The lifecycle across one core product field test:
 
-1. Confirm the exact reserved address is allowlisted and the temporary password
-   secret has been injected through a non-argv secret-input path.
-2. **Provision** with `field_test_account --provision <email>`.
-3. Sign in directly with the throwaway credentials. Do not run signup and do
-   not look for a verification email; the provisioned `EmailAddress` is already
-   verified.
-4. **Mock payment** if paid features are in scope.
-5. After the run, **destroy** the account and remove the temporary password
-   secret from the app.
+1. Generate an opaque run slug and choose `delivered+openbase-field-<slug>@resend.dev`. Confirm that exact address is present in `FIELD_TEST_ALLOWED_EMAILS`; do not infer permission from the pattern alone.
+2. Record the UTC run start time. Run `field_test_account --destroy <email>` so a reused address starts clean; an idempotent `not_found` result is acceptable.
+3. Generate a strong ephemeral password locally without printing it, drive the field-test app's normal signup UI, and require the expected unverified/"Verify Your Email" state.
+4. Use the pre-authorized, dedicated Resend CLI field-test profile to poll sent-email metadata. Select only a message addressed to the exact field-test address and created after the recorded start time, then retrieve that message by id. Never pass an API key with `--api-key`, source a broad environment file, or use a general-purpose Resend profile.
+5. Read the returned HTML/text, find the real confirmation URL, and follow it through the tested phone/browser surface. Verification URLs are bearer credentials: never put one in a shell command, RMOT, report, Slack message, screenshot caption, or durable log.
+6. Confirm the product reports the email verified and the account can sign in. If paid features are in scope, run `field_test_account --mock-payment <email>` only now.
+7. After the run, always run `field_test_account --destroy <email>` and remove any ephemeral local credential material.
 
-With the two app secrets/config vars already present, production invocations
-contain no credential:
+Resend CLI retrieval uses a named profile whose credential remains in secure CLI storage:
+
+```bash
+resend emails list --profile <field-test-profile> --limit 100 --json
+resend emails get --profile <field-test-profile> <message-id> --json
+```
+
+Inspect list results before `get`: the recipient must exactly equal the selected address, `created_at` must be after the recorded run start, and the message must be the expected verification message. If the dedicated profile is unavailable, the exact message does not arrive, or the provider reports a non-delivered outcome, stop and record the blocker. Never fall back to Gabe's inbox, another person's inbox, Slack, an arbitrary admin-mail endpoint, or direct database verification.
+
+Production lifecycle invocations contain no credential:
 
 ```bash
 openbase run -a <app> python manage.py field_test_account \
-  --provision openbase-field-20260831@example.com
+  --mock-payment delivered+openbase-field-20260901-a7f3@resend.dev
 openbase run -a <app> python manage.py field_test_account \
-  --mock-payment openbase-field-20260831@example.com
-openbase run -a <app> python manage.py field_test_account \
-  --destroy openbase-field-20260831@example.com
+  --destroy delivered+openbase-field-20260901-a7f3@resend.dev
 ```
 
-The global email backend independently suppresses every reserved domain allowed
-above before calling Resend. Sending verification/onboarding mail is therefore
-not part of a core field test. An email-delivery or onboarding-email test is a
-separate class of test requiring Gabe's explicit authorization and isolated
-test-recipient infrastructure; it must never use Gabe's or another person's
-inbox.
+This exercises real production signup, mandatory verification, template rendering, Resend submission, message retrieval, and allauth confirmation. Resend's delivered-test recipient simulates the mailbox end without sending to a person. A separate scheduled delivery canary may test receipt by a real mailbox provider; it never uses a personal inbox.
 
 ## Required RMOT
 
@@ -197,16 +201,12 @@ must include:
 - exact date/time and the requested test scope;
 - the **sampled parameters** for this run (host OS, mobile OS, connectivity,
   branch, installation method) and the previous run's date;
-- the field-test account identity and confirmation its email is on the
-  `FIELD_TEST_ALLOWED_EMAILS` allowlist, uses the reserved local-part/domain
-  policy, was provisioned verified via `field_test_account --provision`, and
-  does not send or read email (payment mocked via `--mock-payment` if needed);
+- the field-test account identity and confirmation its exact `delivered+openbase-field-<slug>@resend.dev` address is on `FIELD_TEST_ALLOWED_EMAILS`, the recorded UTC start time, the dedicated Resend CLI profile name (never its credential), the planned real signup/message-retrieval/verification steps, and optional post-verification `--mock-payment`;
 - clean-room confirmation: which disposable VM (Tart macOS / Windows) and that
   the developer's real install/account/services are untouched;
 - planned steps: install → smoke → targeted, with the specific targeted areas
   derived from recent commits;
-- iOS/Android target: device/emulator, driver (XCUITest/UiAutomator2), app
-  bundle/package id, and app provenance;
+- iOS/Android target: device/emulator, driver (XCUITest/UiAutomator2), field-test variant name, its distinct bundle/application id, app provenance, and confirmation the normal Openbase app will remain untouched;
 - local runtime target inside the VM: `electron-bundled`, `standalone`, or
   `workspace`;
 - CLI/service details: runtime mode, package version, service status, coding
@@ -218,8 +218,7 @@ must include:
   pointer, keep-phone-awake / disable Auto-Lock;
 - expected human actions and when `user say` will be used;
 - no-mock statement listing the real systems involved;
-- rollback/cleanup notes (VM deletion, `field_test_account --destroy`, and
-  removal of the temporary `FIELD_TEST_ACCOUNT_PASSWORD` app secret).
+- rollback/cleanup notes (VM deletion, `field_test_account --destroy`, ephemeral-password cleanup, field-test Appium session deletion, and field-test app cleanup without touching the normal app).
 
 Use repo-relative or `~`-relative paths in the RMOT. Keep brittle scratch in
 `.local/` (gitignored) — never reference `.local/` files from committed docs.
@@ -229,12 +228,9 @@ Use repo-relative or `~`-relative paths in the RMOT. Keep brittle scratch in
 1. Confirm the disposable VM harness is ready (macOS): see
    `install-tests/electron-macos/README.md` — `bootstrap-golden.sh` bakes the
    golden VM once; `run.sh` clones a throwaway instance per run.
-2. Confirm the reserved throwaway email is an exact member of
-   `FIELD_TEST_ALLOWED_EMAILS`, inject the temporary password through a
-   non-argv/write-only secret path, and run
-   `field_test_account --provision <email>`. Never substitute a personal inbox
-   or plus-address.
-3. Inside the VM, confirm production cloud targeting:
+2. Build/install the platform's field-test mobile variant and verify its distinct bundle/application id. If only the normal app is available, stop.
+3. Confirm the exact Resend testing recipient is a member of `FIELD_TEST_ALLOWED_EMAILS`, confirm a dedicated Resend CLI field-test profile can list sent-message metadata without exposing its credential, record the UTC start time, and run `field_test_account --destroy <email>`. Never substitute a personal inbox.
+4. Inside the VM, confirm production cloud targeting:
 
    ```bash
    openbase-coder backend status
@@ -242,14 +238,13 @@ Use repo-relative or `~`-relative paths in the RMOT. Keep brittle scratch in
 
    If the backend is not `openbase_cloud`, switch it with the packaged CLI and
    restart services before the run.
-4. If the mobile target is a physical iPhone, confirm it is visible:
+5. If the mobile target is a physical iPhone, confirm it is visible:
 
    ```bash
    xcrun xctrace list devices
    ```
 
-5. Provide only the specific credential the child process needs (e.g. one
-   Cartesia key), never a whole env file.
+6. Provide only the specific credential the child process needs (e.g. one Cartesia key), never a whole env file. Resend access must use the dedicated named profile in secure CLI storage, not an exported key.
 
 ## Direct Appium Interaction
 
@@ -261,8 +256,7 @@ iOS flow:
 2. `appium_prepare_ios_real_device` — call once without
    `provisioningProfileUuid` to list profiles, then again with the chosen UUID to
    ready WebDriverAgent (iOS only; Android skips this).
-3. `appium_session_management` `action=create` against the app id
-   (`com.openbase.coder`), or `action=attach` to inspect an existing session.
+3. `appium_session_management` `action=create` against the installed field-test app id (`com.openbase.coder.field-test` on iOS; the distinct application id declared by the Android field-test variant), or `action=attach` to inspect an existing field-test session. Refuse the normal app ids.
 4. Interact with `appium_find_element`, `appium_gesture`, `appium_set_value`,
    `appium_get_text`, `appium_get_page_source`, `appium_screenshot`,
    `appium_alert`, `appium_app_lifecycle`.
@@ -359,6 +353,7 @@ pnpm --dir e2e-scripted typecheck
 OPENBASE_E2E_EXPECT_RUNTIME=electron-bundled \
 OPENBASE_E2E_EXPECT_WEB_BACKEND=https://app.openbase.cloud \
 OPENBASE_E2E_EXPECT_CODING_BACKEND=openbase_cloud \
+OPENBASE_IOS_BUNDLE_ID=com.openbase.coder.field-test \
   pnpm --dir e2e-scripted e2e:ios:doctor
 ```
 
@@ -368,9 +363,12 @@ Live manual specs (only after the RMOT is open and the doctor passes):
 OPENBASE_E2E_EXPECT_RUNTIME=electron-bundled \
 OPENBASE_E2E_EXPECT_WEB_BACKEND=https://app.openbase.cloud \
 OPENBASE_E2E_EXPECT_CODING_BACKEND=openbase_cloud \
+OPENBASE_IOS_BUNDLE_ID=com.openbase.coder.field-test \
 OPENBASE_E2E_CARTESIA_API_KEY="$CARTESIA_KEY" \
   pnpm --dir e2e-scripted manual:e2e:ios:basic-call-response
 ```
+
+Every live scripted spec must target the isolated field-test app variant under the same mobile-variant rules as tier 3. A doctor result naming the normal app bundle/application id is a failed preflight.
 
 `manual:e2e:ios:parallel-agents-truth` is the live share-readiness gate: it
 drives the phone, launches two Super Agents from a prepared `briefing.md`,

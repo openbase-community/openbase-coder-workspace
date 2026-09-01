@@ -43,7 +43,7 @@ export function loadDeviceEnv(options: LoadOptions = {}): DeviceEnv {
     udid: readEnv("OPENBASE_IOS_UDID", ""),
     deviceName: readEnv("OPENBASE_IOS_DEVICE_NAME", "iPhone"),
     platformVersion: optionalEnv("OPENBASE_IOS_PLATFORM_VERSION"),
-    bundleId: readEnv("OPENBASE_IOS_BUNDLE_ID", "com.openbase.coder"),
+    bundleId: readEnv("OPENBASE_IOS_BUNDLE_ID", "com.openbase.coder.field-test"),
     appPath: optionalPathEnv("OPENBASE_IOS_APP_PATH"),
     xcodeOrgId: optionalEnv("OPENBASE_IOS_XCODE_ORG_ID"),
     xcodeSigningId: readEnv("OPENBASE_IOS_XCODE_SIGNING_ID", "iPhone Developer"),
