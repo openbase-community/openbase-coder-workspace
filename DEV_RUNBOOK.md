@@ -43,18 +43,13 @@ CLI and the services can never disagree about dependencies. (If a
 `uv tool install openbase-coder` shim exists, setup replaces it and tells
 you; run `uv tool uninstall openbase-coder` to drop the orphaned venv.)
 
-With no flags, setup runs interactively on a fresh install: numbered pickers
-choose the coding backend (codex, claude-code, or openbase-cloud) and the
-voice audio provider — Cloud TTS/STT (default), bring-your-own-keys
-(AssemblyAI + Cartesia, prompts for the keys), or local models (not
-recommended). The interactive run finishes by offering `openbase-coder
-login`, verifying cloud device registration and Tailscale Serve health, and
-printing a QR code for the phone app downloads page. Passing any flag makes
-the run fully non-interactive (safe for scripts, AI agents, and the Electron
-onboarding flow): a fresh install then requires `--backend` and defaults the
-audio provider to openbase-cloud. `openbase-coder setup --interactive`
-combines flags with the pickers. Prerequisites checked up front: `uv`,
-`multi`, `pnpm`, and Node >= 20.
+With no flags, setup runs the interactive first-run pickers (coding backend
+and voice audio provider), then offers `openbase-coder login`, verifies cloud
+device registration and Tailscale Serve health, and prints a phone-downloads
+QR code. Any flag makes the run non-interactive (a fresh install then requires
+`--backend`). The picker/flag semantics are owned by
+[`cli/docs/commands/setup.md`](cli/docs/commands/setup.md) — don't restate
+them here.
 
 `scripts/setup` preserves the checkout's Multi install set: if any dev-only
 repo is already checked out it syncs `dev`; otherwise it syncs `default` so a
