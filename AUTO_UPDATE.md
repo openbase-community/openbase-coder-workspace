@@ -131,9 +131,12 @@ exclude it.
 - Pushes to `main` are production; pushes to `staging` serve only
   staging-channel installs. Sibling-only changes (console, skills, …) need
   a manual dispatch since only cli pushes trigger auto-release.
-- The release build stamps the release version into the packaged CLI
-  (`SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENBASE_CODER`) so
-  `openbase-coder --version` matches the package version.
+- The release build stamps the release version into the packaged CLI via the
+  **unsuffixed** `SETUPTOOLS_SCM_PRETEND_VERSION` so `openbase-coder --version`
+  matches the package version. hatch-vcs silently ignores the
+  `SETUPTOOLS_SCM_PRETEND_VERSION_FOR_<dist>` variant and would fall back to a
+  dev version, so the release build sets (and a build-time guard checks) the
+  unsuffixed form only.
 
 ## Inspecting versions
 
