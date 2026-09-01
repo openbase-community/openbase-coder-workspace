@@ -20,8 +20,7 @@ This package contains scripted physical iPhone E2E specs for Openbase Coder:
 - `specs/orphaned-answer-recovery.real-codex.spec.ts`
 
 It intentionally uses the normal Codex/Openbase configuration from the current shell and installed launchctl services.
-Live no-mock runs should use production Openbase Cloud unless Gabe explicitly
-asks for another target. Set `OPENBASE_E2E_EXPECT_WEB_BACKEND` and
+Dedicated field-test mobile variants use staging Openbase Cloud by default. Set `OPENBASE_E2E_EXPECT_WEB_BACKEND` and
 `OPENBASE_E2E_EXPECT_CODING_BACKEND` so the runner fails before using the wrong
 cloud/backend.
 Set `OPENBASE_E2E_EXPECT_RUNTIME` to make the target explicit:
@@ -53,11 +52,10 @@ OPENBASE_IOS_WDA_BUNDLE_ID=com.openbase.coder.WebDriverAgentRunner
 
 Always use the isolated `OpenbaseFieldTest` iOS scheme and `com.openbase.coder.field-test` bundle for live specs. The normal Openbase app must remain installed, signed in, and untouched. If the field-test app is already installed, keep `OPENBASE_IOS_APP_PATH` empty; otherwise point it at the field-test `.app` or `.ipa`. Android field testing likewise requires the Android project's distinct field-test build variant and application id; if that variant is unavailable, do not substitute or reset the normal app.
 
-The production account-creation spec uses real signup and email verification with Resend's official testing recipient. Set both variables to the same exact address, and ensure that address is also an exact member of production `FIELD_TEST_ALLOWED_EMAILS`:
+The account-creation spec uses real signup and email verification with Resend's official testing recipient. Generate a fresh opaque address in the reserved Openbase namespace for each run; no deployment allowlist change is required:
 
 ```bash
 OPENBASE_E2E_SIGNUP_EMAIL=delivered+openbase-field-<opaque-run-slug>@resend.dev
-OPENBASE_E2E_FIELD_TEST_ALLOWED_EMAILS=delivered+openbase-field-<opaque-run-slug>@resend.dev
 ```
 
 After the spec reaches "Verify Your Email", use the dedicated secure Resend CLI field-test profile to list messages, select only the exact recipient created after the run began, retrieve it by id, and follow its confirmation URL through the tested phone/browser surface. Never pass a Resend API key on the command line or put the confirmation URL in a report, log, Slack message, or shell command. Full procedure: `.agents/skills/field-testing/SKILL.md`.

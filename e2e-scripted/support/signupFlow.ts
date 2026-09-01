@@ -4,8 +4,8 @@ import type { DeviceEnv } from "./deviceEnv.js";
 
 // Field tests use Resend's official delivered+<label>@resend.dev recipient so
 // signup, rendering, provider submission, and allauth verification remain real
-// without involving a person's mailbox. Require an exact local allowlist too;
-// matching the provider address pattern alone is never authorization.
+// without involving a person's mailbox. Restrict the helper to Openbase's
+// reserved per-run namespace; each run may generate a fresh opaque label.
 const resendFieldTestEmailPattern = /^delivered\+openbase-field-[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?@resend\.dev$/;
 
 const freshStartArgument = "--openbase-fresh-start";
@@ -71,20 +71,10 @@ export type SignupOutcome =
 
 export function assertApprovedSignupEmail(email: string): void {
   const normalized = email.trim().toLowerCase();
-  const allowedEmails = new Set(
-    (process.env.OPENBASE_E2E_FIELD_TEST_ALLOWED_EMAILS ?? "")
-      .split(",")
-      .map(candidate => candidate.trim().toLowerCase())
-      .filter(Boolean),
-  );
-  if (
-    !resendFieldTestEmailPattern.test(normalized)
-    || !allowedEmails.has(normalized)
-  ) {
+  if (!resendFieldTestEmailPattern.test(normalized)) {
     throw new Error(
       `Refusing to sign up with ${email}: set OPENBASE_E2E_SIGNUP_EMAIL to an `
         + "exact delivered+openbase-field-<opaque-run-slug>@resend.dev recipient and "
-        + "include that exact address in OPENBASE_E2E_FIELD_TEST_ALLOWED_EMAILS. "
         + "Personal inboxes and other plus-addresses are forbidden.",
     );
   }

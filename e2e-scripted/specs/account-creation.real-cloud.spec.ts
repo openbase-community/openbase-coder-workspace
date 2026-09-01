@@ -12,11 +12,11 @@ import {
   waitForSignupOutcome,
 } from "../support/signupFlow.js";
 
-// This spec drives real account creation against production Openbase Cloud with
-// an exact allowlisted Resend testing recipient. The surrounding field-test
+// This spec drives real account creation against the selected Openbase Cloud with
+// a fresh reserved Resend testing recipient. The surrounding field-test
 // procedure retrieves the rendered message and completes normal verification.
 // It must run against the isolated field-test app variant, never the normal app.
-describe("Openbase iOS account creation against production cloud", () => {
+describe("Openbase iOS account creation against real cloud", () => {
   const env = loadDeviceEnv({ requirePhysicalDevice: true });
 
   it("signs up with email and reaches the Verify Your Email screen", async function (this: Mocha.Context) {
@@ -28,7 +28,7 @@ describe("Openbase iOS account creation against production cloud", () => {
     }
     assertApprovedSignupEmail(email);
     const password = process.env.OPENBASE_E2E_SIGNUP_PASSWORD || generateSignupPassword();
-    console.warn(`Signing up with separately authorized test recipient ${email}.`);
+    console.warn(`Signing up with reserved field-test recipient ${email}.`);
 
     try {
       await ensureSignedOutAtWelcome(env);
