@@ -103,9 +103,11 @@ the production flow it is permissible to build the Electron app **without
 notarization** (`pnpm dist:mac`, or `install:local` for the seedless dev-app
 variant) — see the `field-testing` skill and
 `install-tests/electron-macos/`. (3) **Openbase Cloud
-workspace AMI** — the dev-ami bake installs the CLI via `uv tool install
-openbase-coder` (PyPI) plus a pre-baked workspace clone, and instances
-finish with `openbase-coder provision`. (4) **Docker image** —
+workspace AMI** — the dev-ami bake installs the CLI **from git**
+(`dev-ami/setup.sh`: `main` for default AMIs, the workspace branch for
+staging AMIs; `openbase-coder` is no longer published to PyPI) plus a
+pre-baked workspace clone, and instances finish with
+`openbase-coder provision`. (4) **Docker image** —
 `openbaseai/openbase` on Docker Hub, built from `cli/Dockerfile` +
 `cli/docker/`; runs the full runtime in a Linux container with Tailscale as
 the networking layer, on any Docker engine (macOS, Windows, or Linux). User
