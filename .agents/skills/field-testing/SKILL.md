@@ -43,9 +43,7 @@ flow is gone. Field tests are clean-room by construction:
   Openbase Cloud, Appium, WebDriverAgent, the iOS/Android app, the desktop app,
   or phone interaction. A field test is real end-to-end or it is not a field
   test.
-- Field tests target production Openbase Cloud by default:
-  `https://app.openbase.cloud` for cloud/account APIs and `openbase_cloud` for
-  the coding backend, unless Gabe explicitly asks for another backend.
+- Dedicated field-test mobile variants target staging Openbase Cloud by default: `https://app-staging.openbase.cloud` for cloud/account APIs and `openbase_cloud` for the coding backend. Verify the desktop/VM uses the same cloud target before starting. A production field test requires an explicitly production-targeted field-test build; never substitute the normal app.
 - Before running a field test, write an RMOT plan to `.local/field-tests/` (or
   `/tmp`) and open it in Typora. Do not skip this even if the command seems
   obvious. See [Required RMOT](#required-rmot).
@@ -136,8 +134,8 @@ set Auto-Lock to Never.
 
 Always build, install, and launch the platform's dedicated field-test variant. The normal Openbase app must remain installed, signed in, and otherwise untouched so Gabe can continue using it while the field test runs.
 
-- **iOS:** generate the project and build the `OpenbaseFieldTest` scheme. Its bundle id is `com.openbase.coder.field-test`, its authentication URL scheme is `openbase-field-test`, and its app group/VPN extension are distinct from the normal app. Install the resulting artifact and create the Appium MCP session against `com.openbase.coder.field-test`.
-- **Android:** build and install the Android project's field-test build variant, then use the distinct field-test application id reported by that variant for UiAutomator2. Read the authoritative variant/task and application id from the Android project before running; if the variant is absent or cannot coexist with the normal app, the field test is blocked. Never substitute the normal `com.openbase.android` installation.
+- **iOS:** generate the project and build the `OpenbaseFieldTest` scheme. Its bundle id is `com.openbase.coder.field-test`, its authentication URL scheme is `openbase-field-test`, and its app group/VPN extension are distinct from the normal app. It targets `https://app-staging.openbase.cloud`. Install and launch the resulting artifact, then create the Appium MCP session against `com.openbase.coder.field-test`.
+- **Android:** run `./gradlew :app:assembleFieldTest`, install and launch the resulting field-test APK, and create the UiAutomator2 session against `com.openbase.android.fieldtest`. The variant has separate storage and the `openbase-field-test` authentication URL scheme, targets `https://app-staging.openbase.cloud`, and can coexist with `com.openbase.android`. Never substitute, reset, or uninstall the normal app.
 
 Typical iOS source build:
 
@@ -150,13 +148,20 @@ xcodebuild -workspace Openbase.xcworkspace \
   build
 ```
 
+Typical Android source build:
+
+```bash
+cd android
+./gradlew :app:assembleFieldTest
+```
+
 Use the Appium MCP preparation/session flow to install or launch the built artifact. Do not uninstall, reset, sign out, terminate for cleanup, or otherwise manipulate the normal app as a shortcut.
 
 ## Field-Test Account Lifecycle
 
-A core field test creates a real **throwaway Openbase account** through the product's normal signup UI. It never uses a developer account, personal email, or personal inbox. Its email must be an exact member of the cloud API's comma-separated `FIELD_TEST_ALLOWED_EMAILS` allowlist and match `delivered+openbase-field-<opaque-run-slug>@resend.dev`. This is Resend's official delivered-test recipient with a run-specific label; the `+` form is allowed only for this exact contract. Personal-provider addresses and every other plus-address are forbidden.
+A core field test creates a real **throwaway Openbase account** through the product's normal signup UI. It never uses a developer account, personal email, or personal inbox. Generate a fresh address matching `delivered+openbase-field-<opaque-run-slug>@resend.dev` for each run; no deployment allowlist change is required. This is Resend's official delivered-test recipient with a run-specific label; the `+` form is allowed only for this exact reserved contract. Personal-provider addresses and every other plus-address are forbidden.
 
-The product performs the real signup and email-verification flow: allauth creates the initially unverified user, renders its normal production verification message, the production email backend submits it to Resend, the field-test agent retrieves that exact rendered message, and the agent follows its real confirmation URL through the tested app/browser surface. Do not mark an `EmailAddress` verified directly.
+The product performs the real signup and email-verification flow: allauth creates the initially unverified user, renders its normal verification message, the selected Cloud deployment submits it to Resend, the field-test agent retrieves that exact rendered message, and the agent follows its real confirmation URL through the tested app/browser surface. Do not mark an `EmailAddress` verified directly.
 
 The cloud API's `field_test_account` Django management command deliberately cannot create or verify users. It owns only the two exceptional lifecycle operations:
 
@@ -165,7 +170,7 @@ The cloud API's `field_test_account` Django management command deliberately cann
 
 The lifecycle across one core product field test:
 
-1. Generate an opaque run slug and choose `delivered+openbase-field-<slug>@resend.dev`. Confirm that exact address is present in `FIELD_TEST_ALLOWED_EMAILS`; do not infer permission from the pattern alone.
+1. Generate an opaque run slug and choose `delivered+openbase-field-<slug>@resend.dev`. Confirm it matches the reserved pattern exactly; do not use `test@…`, `@example.com`, another Resend test outcome, or a personal-provider plus-address.
 2. Record the UTC run start time. Run `field_test_account --destroy <email>` so a reused address starts clean; an idempotent `not_found` result is acceptable.
 3. Generate a strong ephemeral password locally without printing it, drive the field-test app's normal signup UI, and require the expected unverified/"Verify Your Email" state.
 4. Use the pre-authorized, dedicated Resend CLI field-test profile to poll sent-email metadata. Select only a message addressed to the exact field-test address and created after the recorded start time, then retrieve that message by id. Never pass an API key with `--api-key`, source a broad environment file, or use a general-purpose Resend profile.
@@ -182,7 +187,7 @@ resend emails get --profile <field-test-profile> <message-id> --json
 
 Inspect list results before `get`: the recipient must exactly equal the selected address, `created_at` must be after the recorded run start, and the message must be the expected verification message. If the dedicated profile is unavailable, the exact message does not arrive, or the provider reports a non-delivered outcome, stop and record the blocker. Never fall back to Gabe's inbox, another person's inbox, Slack, an arbitrary admin-mail endpoint, or direct database verification.
 
-Production lifecycle invocations contain no credential:
+Cloud lifecycle invocations contain no credential:
 
 ```bash
 openbase run -a <app> python manage.py field_test_account \
@@ -191,7 +196,7 @@ openbase run -a <app> python manage.py field_test_account \
   --destroy delivered+openbase-field-20260901-a7f3@resend.dev
 ```
 
-This exercises real production signup, mandatory verification, template rendering, Resend submission, message retrieval, and allauth confirmation. Resend's delivered-test recipient simulates the mailbox end without sending to a person. A separate scheduled delivery canary may test receipt by a real mailbox provider; it never uses a personal inbox.
+This exercises real signup against the selected Cloud deployment, mandatory verification, template rendering, Resend submission, message retrieval, and allauth confirmation. Resend's delivered-test recipient simulates the mailbox end without sending to a person. A separate scheduled delivery canary may test receipt by a real mailbox provider; it never uses a personal inbox.
 
 ## Required RMOT
 
@@ -201,7 +206,7 @@ must include:
 - exact date/time and the requested test scope;
 - the **sampled parameters** for this run (host OS, mobile OS, connectivity,
   branch, installation method) and the previous run's date;
-- the field-test account identity and confirmation its exact `delivered+openbase-field-<slug>@resend.dev` address is on `FIELD_TEST_ALLOWED_EMAILS`, the recorded UTC start time, the dedicated Resend CLI profile name (never its credential), the planned real signup/message-retrieval/verification steps, and optional post-verification `--mock-payment`;
+- the fresh field-test account identity and confirmation it matches `delivered+openbase-field-<slug>@resend.dev`, the recorded UTC start time, the dedicated Resend CLI profile name (never its credential), the planned real signup/message-retrieval/verification steps, and optional post-verification `--mock-payment`;
 - clean-room confirmation: which disposable VM (Tart macOS / Windows) and that
   the developer's real install/account/services are untouched;
 - planned steps: install → smoke → targeted, with the specific targeted areas
@@ -211,7 +216,7 @@ must include:
   `workspace`;
 - CLI/service details: runtime mode, package version, service status, coding
   backend, and cloud web backend;
-- production-cloud confirmation;
+- exact cloud-target confirmation, normally staging for the dedicated mobile variants;
 - audio path: Cartesia model/voice, host speaker audio, phone mic, and local STT
   for inbound capture;
 - audio-prompt reliability notes: prepared briefing file, minimal spoken
@@ -229,8 +234,8 @@ Use repo-relative or `~`-relative paths in the RMOT. Keep brittle scratch in
    `install-tests/electron-macos/README.md` — `bootstrap-golden.sh` bakes the
    golden VM once; `run.sh` clones a throwaway instance per run.
 2. Build/install the platform's field-test mobile variant and verify its distinct bundle/application id. If only the normal app is available, stop.
-3. Confirm the exact Resend testing recipient is a member of `FIELD_TEST_ALLOWED_EMAILS`, confirm a dedicated Resend CLI field-test profile can list sent-message metadata without exposing its credential, record the UTC start time, and run `field_test_account --destroy <email>`. Never substitute a personal inbox.
-4. Inside the VM, confirm production cloud targeting:
+3. Confirm the fresh address matches the reserved Resend field-test pattern, confirm a dedicated Resend CLI field-test profile can list sent-message metadata without exposing its credential, record the UTC start time, and run `field_test_account --destroy <email>`. Never substitute a personal inbox.
+4. Inside the VM, confirm the Cloud target matches the mobile field-test build (staging by default):
 
    ```bash
    openbase-coder backend status
@@ -323,7 +328,7 @@ After the run, report (and write a summary artifact per the
 - clean-room confirmation (which VM; developer state untouched);
 - which surfaces were tested and whether the full acoustic loop was exercised
   (outbound TTS + inbound STT);
-- production-cloud confirmation;
+- exact cloud-target confirmation;
 - first failure with concise evidence, PRs opened, Slack messages sent, and any
   scripted-E2E specs pinned;
 - VM/user teardown status.
@@ -341,7 +346,7 @@ before staging. Before any workspace commit, require
 The tier-2 **scripted-E2E** suite lives in `e2e-scripted/` and exists for
 regression pinning: deterministic wdio/Appium specs that freeze a
 previously-found bug. Its suite map, environment reference, and package
-script inventory are in `e2e-scripted/README.md`. The live-run gates above (RMOT, production-cloud
+script inventory are in `e2e-scripted/README.md`. The live-run gates above (RMOT, exact cloud-target
 confirmation, audio handling, `user say` rules, Appium-via-MCP) apply to scripted
 runs too.
 
@@ -351,7 +356,7 @@ Safe checks (no real Codex flows):
 pnpm --dir e2e-scripted test
 pnpm --dir e2e-scripted typecheck
 OPENBASE_E2E_EXPECT_RUNTIME=electron-bundled \
-OPENBASE_E2E_EXPECT_WEB_BACKEND=https://app.openbase.cloud \
+OPENBASE_E2E_EXPECT_WEB_BACKEND=https://app-staging.openbase.cloud \
 OPENBASE_E2E_EXPECT_CODING_BACKEND=openbase_cloud \
 OPENBASE_IOS_BUNDLE_ID=com.openbase.coder.field-test \
   pnpm --dir e2e-scripted e2e:ios:doctor
@@ -361,7 +366,7 @@ Live manual specs (only after the RMOT is open and the doctor passes):
 
 ```bash
 OPENBASE_E2E_EXPECT_RUNTIME=electron-bundled \
-OPENBASE_E2E_EXPECT_WEB_BACKEND=https://app.openbase.cloud \
+OPENBASE_E2E_EXPECT_WEB_BACKEND=https://app-staging.openbase.cloud \
 OPENBASE_E2E_EXPECT_CODING_BACKEND=openbase_cloud \
 OPENBASE_IOS_BUNDLE_ID=com.openbase.coder.field-test \
 OPENBASE_E2E_CARTESIA_API_KEY="$CARTESIA_KEY" \
