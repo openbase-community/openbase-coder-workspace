@@ -30,7 +30,7 @@ a real iPhone against real services. Its role is **regression pinning**: when a
 field test finds a bug, the reproduction is frozen here as a spec so it cannot
 silently return. Expected to stay small and grow one spec per real defect.
 Manual-only because it spends API credits and produces audible speech. See
-`e2e-scripted/README.md` and `LIVE_E2E_TESTING.md`.
+`e2e-scripted/README.md`.
 
 **Field test**: Tier 3 of the testing tiers, and the top tier — an
 **agent-driven** (unscripted) test where an AI agent installs the product into a

@@ -69,8 +69,8 @@ flow is gone. Field tests are clean-room by construction:
 
 Every field-test session runs the same three steps, in order:
 
-1. **Installation.** Stand up a clean environment (Tart macOS VM, or Windows VM
-   for the Docker pathway) and install the product using the sampled
+1. **Installation.** Stand up a clean environment (Tart macOS VM, or a Windows
+   VM for the native-Windows pathway) and install the product using the sampled
    installation method. Provision the designated throwaway
    [field-test account](#field-test-account-lifecycle) before signing in.
 2. **Smoke test.** A short basic check that the core loop works at all — place a
@@ -346,9 +346,8 @@ before staging. Before any workspace commit, require
 
 The tier-2 **scripted-E2E** suite lives in `e2e-scripted/` and exists for
 regression pinning: deterministic wdio/Appium specs that freeze a
-previously-found bug. Its stable suite map, environment reference, and package
-script inventory are in `LIVE_E2E_TESTING.md`; per-package details are in
-`e2e-scripted/README.md`. The live-run gates above (RMOT, production-cloud
+previously-found bug. Its suite map, environment reference, and package
+script inventory are in `e2e-scripted/README.md`. The live-run gates above (RMOT, production-cloud
 confirmation, audio handling, `user say` rules, Appium-via-MCP) apply to scripted
 runs too.
 

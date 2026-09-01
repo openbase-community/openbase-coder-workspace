@@ -74,9 +74,10 @@ product (auth, remote workspaces, and the PaaS backend).
   tests (tier 1), scripted E2E (tier 2, regression pinning), and field tests
   (tier 3, agent-driven clean-room full-acoustic-loop). Consult it before
   writing or classifying any full-system test.
-- Scripted E2E (tier 2): `LIVE_E2E_TESTING.md` — consult before running the
+- Scripted E2E (tier 2): `e2e-scripted/README.md` — consult before running the
   manual physical-phone regression suite in `e2e-scripted/`; those runs use
-  real services and must not be mocked.
+  real services and must not be mocked. The `field-testing` skill is the
+  operational annex for those runs.
 - Field testing (tier 3): the workspace-local `field-testing` skill
   (`.agents/skills/field-testing/SKILL.md`) — use it before planning or running
   any field test. Field tests run clean-room in a disposable Tart macOS VM (or

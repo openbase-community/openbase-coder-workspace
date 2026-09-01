@@ -52,8 +52,8 @@ readiness gate, orphaned-answer recovery, and others) each pin a specific past
 failure mode.
 
 Scripted E2E is manual-to-launch because it spends real API credits, speaks
-audio, and creates real agent work. See `e2e-scripted/README.md` and
-`LIVE_E2E_TESTING.md` for the suite map, environment knobs, and run commands.
+audio, and creates real agent work. See `e2e-scripted/README.md` for the suite
+map, environment knobs, and run commands.
 
 ## Tier 3 — Field tests
 
@@ -158,7 +158,7 @@ never has to be found twice.
   loop, sampling, logging, Slack, PRs): the workspace-local `field-testing`
   skill, `.agents/skills/field-testing/SKILL.md`.
 - Scripted-E2E suite map, environment reference, and run commands:
-  `LIVE_E2E_TESTING.md` and `e2e-scripted/README.md`.
+  `e2e-scripted/README.md`.
 - Disposable macOS VM harness used for clean-room installs:
   `install-tests/electron-macos/`.
 - Core field-test account provisioning (a reserved non-delivery identity from
