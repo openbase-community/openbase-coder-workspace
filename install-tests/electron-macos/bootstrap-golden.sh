@@ -91,3 +91,25 @@ echo
 step "Golden VM '$GOLDEN' is ready."
 echo "  Run a test with:"
 echo "    ./install-tests/electron-macos/run.sh --tailscale-authkey tskey-..."
+echo
+step "IMPORTANT — SIP for the macOS Openbase VPN (netmesh) leg."
+cat <<'SIPNOTE'
+  The cirruslabs base image ships with SIP DISABLED. The Openbase VPN
+  companion's privileged helper validates its XPC peer with
+  setConnectionCodeSigningRequirement, which Apple documents as NON-FUNCTIONAL
+  when SIP is off (you'll see -67065 errSecCSGuestInvalid and tailscaled never
+  starts). To exercise the macOS Openbase VPN / pairing / full-acoustic-loop
+  leg in a VM, the clone must have SIP ENABLED. Virtualization.framework guests
+  fully support SIP; the CI image just turns it off.
+
+  One-time, per golden image (needs the GUI Recovery Terminal — no SSH there):
+    tart clone openbase-golden openbase-golden-sip     # keep a SIP-on variant
+    tart run openbase-golden-sip --recovery            # boots to Recovery
+    # In the Recovery window: Utilities -> Terminal, then:
+    #   csrutil enable         (auth as admin/admin; "re-tighten" is reliable)
+    #   reboot
+    # Verify after reboot (SSH):  csrutil status  ->  enabled
+  Then field tests that need the VPN clone from openbase-golden-sip instead of
+  openbase-golden. Everything up to pairing (install/onboard/setup/sign-in) is
+  fully testable on the plain SIP-disabled golden.
+SIPNOTE
