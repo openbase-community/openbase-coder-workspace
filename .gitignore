@@ -26,6 +26,8 @@ install-tests/electron-macos/last-result.json
 /openbase-agent-ui-swift
 /allauth-client-kotlin/
 /allauth-client-kotlin
+/openbase-agent-ui-kotlin/
+/openbase-agent-ui-kotlin
 /cli/
 /cli
 /console/

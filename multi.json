@@ -26,6 +26,14 @@
       ]
     },
     {
+      "name": "openbase-agent-ui-kotlin",
+      "url": "https://github.com/openbase-community/openbase-agent-ui-kotlin",
+      "description": "Public Kotlin interfaces and session-facing state for embedding Openbase Agent UI in Android apps",
+      "installSets": [
+        "internal"
+      ]
+    },
+    {
       "name": "cli",
       "url": "https://github.com/openbase-community/openbase",
       "description": "CLI for Openbase Coder.  This runs a Django server that provides git diffs for repos across the file system.",

@@ -19,6 +19,8 @@ Product docs are published at <https://docs.openbase.cloud>.
 - [super-agents](https://github.com/montaguegabe/super-agents) - standalone Python MCP server and library for agent-thread coordination
 - [allauth-client-swift](https://github.com/openbase-community/allauth-client-swift) - SwiftUI client for Django AllAuth headless authentication
 - [allauth-client-kotlin](https://github.com/openbase-community/allauth-client-kotlin) - Kotlin client for Django AllAuth headless authentication
+- [openbase-agent-ui-swift](https://github.com/openbase-community/openbase-agent-ui-swift) - public Swift contract for embedding Openbase Agent UI in iOS apps
+- [openbase-agent-ui-kotlin](https://github.com/openbase-community/openbase-agent-ui-kotlin) - public Kotlin contract for embedding Openbase Agent UI in Android apps
 - [netmesh-go](https://github.com/openbase-community/netmesh-go) - shared gomobile VPN engine for the iOS and Android apps (private)
 - [multi-react](https://github.com/montaguegabe/multi-react) - shared React diff viewer utilities
 - [boilersync-react](https://github.com/montaguegabe/boilersync-react) - shared React components for BoilerSync workflows
