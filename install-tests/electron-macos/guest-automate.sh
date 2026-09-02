@@ -112,15 +112,20 @@ case "$cmd" in
     # session with a CDP port. --remote-debugging-port is a debug-only launch
     # deviation from a Finder double-click; keep one pure launch in the run's
     # smoke pass and record this flag as a known deviation in the field log.
+    # Root can adopt the GUI (Aqua) audit session; a plain SSH user cannot
+    # (see run-driver.sh, which uses the same sudo-asuser-sudo pattern).
     ssh_vm "$IP" "
       set -e
       EXE=\"\$(/usr/bin/defaults read '$APP/Contents/Info' CFBundleExecutable)\"
       UID_N=\"\$(id -u)\"
-      launchctl asuser \"\$UID_N\" nohup \"$APP/Contents/MacOS/\$EXE\" \
+      echo '$VM_PASS' | sudo -S -p '' launchctl asuser \"\$UID_N\" sudo -u \"\$USER\" \
+        nohup \"$APP/Contents/MacOS/\$EXE\" \
         --remote-debugging-port=$PORT >/tmp/openbase-cdp-launch.log 2>&1 &
-      sleep 2
-      curl -sf http://127.0.0.1:$PORT/json/version >/dev/null \
-        || { echo 'CDP endpoint not up yet — check /tmp/openbase-cdp-launch.log'; exit 1; }
+      for _ in 1 2 3 4 5 6 7 8 9 10; do
+        sleep 2
+        curl -sf http://127.0.0.1:$PORT/json/version >/dev/null && exit 0
+      done
+      echo 'CDP endpoint not up — check /tmp/openbase-cdp-launch.log'; exit 1
     "
     step "app launched with CDP on guest :$PORT — forwarding to localhost:$PORT"
     step "CDP endpoint: http://127.0.0.1:$PORT  (Ctrl-C to stop)"

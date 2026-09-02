@@ -160,6 +160,23 @@ async function wdMain() {
       console.log(`clicked: ${rest.join(" ")}`);
       break;
     }
+    case "clicktext": {
+      // Click the first visible button/link whose text matches (case-insensitive).
+      const target = rest.join(" ");
+      const clicked = await wd("POST", `/session/${s}/execute/sync`, {
+        script: `const want = arguments[0].toLowerCase();
+          const els = [...document.querySelectorAll("button, a, [role=button], input[type=submit]")];
+          const el = els.find(e => (e.innerText || e.value || "").trim().toLowerCase().includes(want)
+            && e.offsetParent !== null && !e.disabled);
+          if (!el) return null;
+          el.click();
+          return (el.innerText || el.value || "").trim();`,
+        args: [target],
+      });
+      if (clicked === null) throw new Error(`no visible control matching text: ${target}`);
+      console.log(`clicked: "${clicked}"`);
+      break;
+    }
     case "fill": {
       const selector = rest.join(" ");
       const value = stdinText();
