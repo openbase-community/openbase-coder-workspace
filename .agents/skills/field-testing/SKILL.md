@@ -44,6 +44,24 @@ Every field-test session runs the same three steps, in order:
 2. **Smoke test.** A short basic check that the core loop works at all — place a call, get a dispatcher response through the full acoustic loop — before investing in anything deeper. If the smoke test fails, that is the finding; stop and file it.
 3. **Targeted testing.** Exercise whatever most likely changed since the last field test. Determine this by reading recent commits across the workspace repos since the previous field-test log entry (see below). Effort follows the code: concentrate on the surfaces and flows that were just modified.
 
+### Exercise a Super Agent, not just the dispatcher
+
+The dispatcher answering a question ("what is seven times six?") only proves the **voice dispatcher** brain + cloud auth + acoustic loop. A full field test must also prove the product's actual job: **spawning and steering a coding Super Agent**. After the dispatcher smoke passes, escalate:
+
+1. By voice, give the dispatcher a real coding task (keep brittle specifics in a `briefing.md` and point at it — e.g. "start a coding session in the openbase field test folder and follow the briefing"). The task should be small but real (create/edit a file, run a command, report back).
+2. Confirm a **Super Agent thread is actually started** — not just a spoken dispatcher reply. Check the store and the log:
+
+   ```bash
+   sqlite3 ~/.local/share/super-agents-*/state.sqlite3 \
+     'select name,backend,model,status from sessions;'   # a non-"dispatcher" thread appears
+   grep -E 'start_thread|turn_start_response|super_agents_client' ~/.openbase/logs/livekit-agent.log | tail
+   ```
+
+   A Super Agent turn requires the coding backend to authenticate (the same `openbase_cloud`/machine-token or personal `claude login`/`codex login` path as the dispatcher). If the dispatcher says a coding-backend error aloud (now a graceful "trouble reaching the coding service" line, not a raw dump), grep for `stage=voice_turn_backend_auth_failure` / `voice_turn_backend_error` — that is the finding.
+3. Verify the thread **did the work** (the file/command exists in the VM) and that the dispatcher can **report its result back** by voice and **hand the call to it / return to dispatch**. The scripted `manual:e2e:ios:parallel-agents-truth` gate (below) is the frozen version of this — launch agents from a briefing, verify their Markdown reports, transfer the voice route, ask what happened, return to dispatch.
+
+Note the store's `UNIQUE(name)` on sessions is not backend-scoped: if a prior run left a `dispatcher` (or same-named) session under a *different* backend identity, `create_session` collides (`sqlite3.IntegrityError: UNIQUE constraint failed: sessions.name`). Clear stale rows (`DELETE FROM sessions …`) or start from a fresh clone — a real clean-room run never hits this.
+
 Deciding what to target from recent commits:
 
 ```bash
@@ -79,6 +97,28 @@ Field tests close the real audio loop **in both directions**:
 - **Inbound capture:** the phone's spoken reply captured back through a microphone and transcribed with **local STT**, so the agent asserts on the *meaning* of what the product said, not just on log lines.
 
 **Transport health is NOT a pass — assert on the actual words.** `voice_delivery_audio_delivered delivered=True`, RTP flowing, a non-empty `speech_len`, and a clean STT round-trip only prove the *pipe* works in both directions. They do **not** prove the assistant answered. The dispatcher will faithfully speak an *error* through that same healthy pipe — e.g. every reply being the 34-char `"Not logged in · Please run /login."` when the coding backend is unauthenticated (`~/.codex/auth.json` missing), which looks identical in the delivery logs to a real answer. Before calling the loop (or the whole test) a pass: read the real spoken **text** (`tts_stream_flush` / `livekit_llm_delta_emitted` `text_excerpt=`), confirm it is a correct, substantive response to what was asked, and confirm it is not the same canned string every turn. A clean-room install that reaches a live call where the assistant can only say "/login" is a **failed** field test, not a passing acoustic loop.
+
+### Driving the call through Appium (do this before you speak)
+
+A from-scratch run stalls here if it just speaks and reads logs. The concrete mechanics:
+
+- **The field-test call starts with the microphone MUTED, and "Auto-mute (mute when the agent speaks)" is ON.** If you speak a stimulus without unmuting, STT never hears it and you get only ambient fragments. Before any spoken prompt: appium-tap the `call.unmute` button, and toggle the **Auto-mute** switch OFF so the agent's own greeting can't re-mute you mid-prompt. Confirm the mic is live — when unmuted the bottom-left control is `call.mute` (label "Mute"); when muted it is `call.unmute` (label "Unmute") and the screen reads "Microphone muted". Call-control accessibility ids: `call.start`, `call.end`, `call.mute`, `call.unmute`, `call.speaker`.
+- **The phone must be physically near the host speakers.** A phone in another room (or a muted phone) breaks the outbound leg — the loop needs real acoustic coupling.
+- **Use a neutral host-TTS voice for the stimulus.** The default Cartesia voice is distractingly informal; prefer macOS `say` (e.g. `say -v Daniel -r 175 "…"`) or pass a neutral `--voice` id. This is only the *stimulus*; the product's own reply still uses its real TTS.
+- **Read the dispatcher's ACTUAL answer from the VM agent log**, not the phone screen alone:
+
+  ```bash
+  # What the phone heard (your stimulus):
+  grep stage=stt_final_transcript ~/.openbase/logs/livekit-agent.log | tail -3
+  # What the dispatcher actually SAID (assert on this):
+  grep tts_stream_flush ~/.openbase/logs/livekit-agent.log | tail -3   # text_excerpt=...
+  # Whether the turn was really an error masquerading as an answer:
+  grep stage=voice_turn_result ~/.openbase/logs/livekit-agent.log | tail -2   # backend_auth_failure=<bool>
+  ```
+
+  A pass is a correct, substantive `text_excerpt` with `backend_auth_failure=False` — e.g. asking "what is seven times six?" and getting "Seven times six is 42." with `voice_delivery_audio_delivered delivered=True`.
+- **`appium_screenshot` returns oversized inline base64** (it errors on token size); it also saves a PNG to a temp path in its result — read that file instead of the inline payload.
+- **The livekit-agent worker watchdog bounces the agent** (recycling the idle pool); the phone then shows "The agent left the call. End the call and try again." After any agent or `services` restart, appium-tap `call.end` then `call.start` for a fresh room — an old room's agent is gone.
 
 Treat speaker-prompt audio as a real but lossy dependency. Do not put exact paths, filenames, people's names, or acceptance criteria into spoken audio. Put brittle details in a prepared `briefing.md` file and make the spoken prompt a short natural pointer, e.g. "In the home folder, open the folder named openbase field test and follow the briefing markdown file." Do not use meta-instructions like "the real instruction starts after this sentence." If the phone display dims or locks during a long run, pause and ask the user to keep the phone awake or set Auto-Lock to Never.
 
@@ -184,6 +224,18 @@ Use repo-relative or `~`-relative paths in the run plan. Keep brittle scratch in
 
    If the backend is not `openbase_cloud`, switch it with the packaged CLI and restart services before the run.
 4.5. **Confirm the selected Cloud's netmesh (Openbase VPN) is actually configured before starting a pairing/VPN test.** Staging and prod each need their OWN headscale control plane; staging must NOT borrow prod's (prod's headscale API key is a global admin credential — the least-trusted env must never hold it). Verify from the selected Cloud app that `HEADSCALE_API_URL`/`HEADSCALE_API_KEY`/`HEADSCALE_CONTROL_URL` are set and the enroll endpoint returns 200 (not 502): `openbase run --memory 1024 -a "<Cloud app>" python -c "import os;print(os.environ.get('HEADSCALE_API_URL'))"`. Staging's isolated headscale is `net-staging.openbase.cloud`, provisioned by `../openbase-cloud-workspace/netmesh-infra/aws-headscale` with `-var-file=terraform.staging.tfvars` against `netmesh/headscale-staging.tfstate` (see that README's "Staging control plane" section). If enroll 502s, netmesh is misconfigured — that is a real finding, and pairing/VPN/acoustic is blocked until it's fixed; do not wire staging into prod's headscale to force it. (Note: creating a *secret* config var via `openbase config set --secret[-stdin]` currently 500s; store non-DB secrets like `HEADSCALE_API_KEY` as a plaintext config var, matching how prod already stores it.)
+4.6. **Confirm the dispatcher/Super-Agent model is runnable by the configured backend AND available on the account's plan.** The model is chosen per *execution* backend in `~/.openbase/dispatcher-config.json` (`backend_models.<claude_code|codex>`), and `openbase_cloud` executes on `claude_code`. A managed/trial `openbase_cloud` account **rejects premium models** — `claude-opus-4-8` (the `opus` alias, and the SDK's family default) returns HTTP 403 "not available on the free or trial plan", while `claude-sonnet-5` works. So under `openbase_cloud`, the `claude_code` model must be `sonnet`, not `opus`. Confirm the proxy accepts it with a direct probe using the machine token:
+
+   ```bash
+   TOK=$(openbase-coder auth print-machine-token)
+   BASE=$(grep -E '^OPENBASE_CODER_CLI_WEB_BACKEND_URL=' ~/.openbase/.env | cut -d= -f2-)
+   curl -sS -o /dev/null -w '%{http_code}\n' -X POST "$BASE/api/openbase/llm/anthropic/v1/messages" \
+     -H "x-api-key: $TOK" -H 'anthropic-version: 2023-06-01' -H 'content-type: application/json' \
+     -d '{"model":"claude-sonnet-5","max_tokens":16,"messages":[{"role":"user","content":"ok"}]}'
+   ```
+
+   200 means the proxy + machine token authenticate for that model; a 403 naming the model is the finding (open finding FT-DISPATCH-012: managed/trial `openbase_cloud` installs should default to a plan-available model, not inherit the personal-login `opus`). If the dispatcher answers turns with a spoken auth/proxy error, this and the netmesh check above are the first two suspects.
+
 5. If the mobile target is a physical iPhone, confirm it is visible:
 
    ```bash
