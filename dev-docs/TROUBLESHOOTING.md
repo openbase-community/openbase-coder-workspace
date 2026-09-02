@@ -259,3 +259,28 @@ Agent-side diagnosis beyond the user doc:
    — no lines means the sync-workers service is down; `errors>0` lines are explained by an adjacent `code_sync tick_errors` warning naming the repo.
 
 Remedy beyond the baseline: the classic low-disk cause is often Docker VM images under `~/Library/Containers/com.docker.docker` (multi-hundred-GB). After freeing disk and restarting `code-sync`, if a deleted file was resurrected, remove the stray untracked copies on **both** machines (SSH to the peer) or Syncthing round-trips them back.
+
+## Openbase VPN (netmesh) Companion Fails To Connect In A Tart / Virtualization.framework VM (SIP Disabled)
+
+### Symptoms Seen
+
+Inside a Tart (or any Virtualization.framework) macOS guest, the netmesh companion never brings up `tailscaled`: the privileged `NetmeshHelper` rejects its XPC peer and the console/helper log shows `-67065` (`errSecCSGuestInvalid`); pairing and the full-acoustic-loop leg of a field test are unreachable even though everything up to pairing (install/onboard/setup/sign-in) works. Phone-side netmesh is unaffected.
+
+### Diagnosis
+
+`NetmeshHelper` validates its XPC connection with `NSXPCListener.setConnectionCodeSigningRequirement` (macOS 13+). Apple documents that constraint as **non-functional when System Integrity Protection is disabled** (DevForums 783186); `security.mac.amfi.launch_constraints_enforced` must be `1`. The cirruslabs CI base images used for field-test golden VMs ship with **SIP disabled**, so the requirement silently fails guest validation and the helper refuses the companion. This is a property of the *image*, not of virtualization: Virtualization.framework guests fully support SIP (a clean IPSW install has it enabled), so switching hypervisors (Parallels/VMware/UTM/Anka all share VF) does not help — only re-enabling SIP does. Check with `csrutil status` (`enabled` is required).
+
+### Fix
+
+Enable SIP on the golden clone once, from the GUI Recovery Terminal (no SSH there — Recovery has no Remote Login):
+
+```sh
+tart clone openbase-golden openbase-golden-sip     # keep a SIP-on variant
+tart run openbase-golden-sip --recovery            # boots to Recovery
+# In the Recovery window: Utilities -> Terminal, then:
+#   csrutil enable        (auth as admin/admin)
+#   reboot
+# After reboot, over SSH:  csrutil status  ->  enabled
+```
+
+Then clone VPN-exercising field tests from `openbase-golden-sip`. See the `field-testing` skill and `install-tests/electron-macos/bootstrap-golden.sh` for the full golden-image procedure. (Openbase Direct would be the VM fallback that avoids netmesh entirely, but the standalone/desktop package currently omits `openbase-tunneld` — a separate real bug.)

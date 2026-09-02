@@ -4,7 +4,7 @@
 
 Openbase Coder is a voice IDE — "write code from voice." The user speaks a task and keeps a live coding call open: a dispatcher agent answers, starts and steers coding sessions (threads) on the user's Mac or cloud DevSpace, and hands the call to Super Agents; the user approves sensitive actions and reviews diffs from the same control surface. Product surfaces: the iOS app, the Android app, the macOS Electron desktop app, the shared web console, and Openbase Cloud (app.openbase.cloud) — all backed by the local `openbase-coder` CLI runtime. Openbase Cloud is also a PaaS.
 
-Product behavior and user-facing docs are in `cli/docs/`, published at https://docs.openbase.cloud — use the `openbase-product-knowledge` skill to route product questions to the right page. Workspace terms are defined in `dev-docs/GLOSSARY.md`; keep it maintained when introducing recurring Openbase-specific terms rather than redefining them across repos.
+Product behavior and user-facing docs are in `cli/docs/`, published at https://docs.openbase.cloud — use the `openbase-product-knowledge` skill to route product questions to the right page. Despite living in the `cli` repo, `cli/docs/` documents the **entire product/workspace** — the iOS/Android apps, the desktop app, the console, and Openbase Cloud — not just the `openbase-coder` CLI runtime; treat it as the workspace-wide user-facing docs, and place product docs for any surface there. Workspace terms are defined in `dev-docs/GLOSSARY.md`; keep it maintained when introducing recurring Openbase-specific terms rather than redefining them across repos.
 
 The sibling workspace `../openbase-cloud-workspace` contains the cloud product (auth, remote workspaces, and the PaaS backend).
 
