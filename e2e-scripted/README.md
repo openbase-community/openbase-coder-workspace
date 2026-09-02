@@ -1,7 +1,7 @@
 # Openbase Coder Scripted E2E (tier 2)
 
 This is the **scripted E2E** package — tier 2 of the [testing
-taxonomy](../specs/testing-tiers.md). Its role is **regression pinning**: when a
+taxonomy](../dev-docs/testing-tiers.md). Its role is **regression pinning**: when a
 field test (tier 3) finds a bug, the reproduction is frozen here as a
 deterministic wdio/Appium spec so the bug cannot silently return. It is expected
 to stay small and grow one spec at a time, driven by real defects rather than

@@ -5,82 +5,42 @@ description: Use when planning, running, debugging, or reporting an Openbase Cod
 
 # Field Testing (tier 3)
 
-This workspace-local skill is the operating procedure for **field tests** — tier
-3 of the testing taxonomy (`specs/testing-tiers.md`). A field test is
-agent-driven: no script. An agent installs Openbase Coder from scratch into a
-disposable, isolated environment, exercises it like a real user (driving the
-phone through the `appium` MCP server), notices what breaks, and turns every
-failure into a logged, Slack-reported, READY-PR fix.
+This workspace-local skill is the operating procedure for **field tests** — tier 3 of the testing taxonomy (`dev-docs/testing-tiers.md`). A field test is agent-driven: no script. An agent installs Openbase Coder from scratch into a disposable, isolated environment, exercises it like a real user (driving the phone through the `appium` MCP server), notices what breaks, and turns every failure into a logged, Slack-reported, READY-PR fix.
 
-It applies whenever the user asks for a field test, live/full-system/no-mock test, or
-to install-and-exercise the product end to end. For the **tier-2 scripted-E2E
-regression suite** (deterministic wdio/Appium specs in `e2e-scripted/`), see the
-[Scripted-E2E annex](#scripted-e2e-annex-tier-2) at the bottom — it is the same
-live-run gates, applied to frozen specs instead of agent-driven exploration.
+It applies whenever the user asks for a field test, live/full-system/no-mock test, or to install-and-exercise the product end to end. For the **tier-2 scripted-E2E regression suite** (deterministic wdio/Appium specs in `e2e-scripted/`), see the [Scripted-E2E annex](#scripted-e2e-annex-tier-2) at the bottom — it is the same live-run gates, applied to frozen specs instead of agent-driven exploration.
 
 ## The One Hard Boundary: Never Touch The Developer's State
 
-**A field test never touches the developer's active user, machine, or local
-installation.** There is no "uninstall your active install first" step — that old
-flow is gone. Field tests are clean-room by construction:
+**A field test never touches the developer's active user, machine, or local installation.** There is no "uninstall your active install first" step — that old flow is gone. Field tests are clean-room by construction:
 
-- **Host OS runs in a disposable VM.** On macOS, use a
-  [Tart](https://tart.run) macOS VM exclusively — the harness in
-  `install-tests/electron-macos/` clones a throwaway VM so the real machine's
-  install, launchd services, Tailscale routes, and ports 7999/7880 are never
-  touched. The native-Windows pathway uses a Windows VM (later). Never install a
-  field-test build onto the developer's own macOS session.
+- **Host OS runs in a disposable VM.** On macOS, use a [Tart](https://tart.run) macOS VM exclusively — the harness in `install-tests/electron-macos/` clones a throwaway VM so the real machine's install, launchd services, Tailscale routes, and ports 7999/7880 are never touched. The native-Windows pathway uses a Windows VM (later). Never install a field-test build onto the developer's own macOS session.
 - **Test the real user installation path.** For a full staging or production macOS field test, start from a bare VM and install the signed, notarized channel DMG through the normal download, Gatekeeper, Applications, prerequisite, and onboarding flow. Open `https://openbase.cloud/downloads?staging=true` in the VM for a staging build (omit `?staging=true` for production) and use the page's download control; do not start with the raw S3 release-bucket URL, because that bypasses the public CDN-backed download pathway under test and is not the user-facing installation flow. If Tart keyboard or clipboard forwarding prevents reliable navigation, or the user explicitly opts out of testing the marketing download page, stop fighting the guest UI: use SSH and the bare macOS VM's built-in `curl -fL` to download the exact signed channel DMG into `~/Downloads`, then resume the normal Finder, Gatekeeper, Applications, prerequisite, and onboarding flow. Bare macOS does not include `wget`; do not install it just for this fallback. Record the SSH download as an explicit exception and leave the marketing-download surface unclaimed. Tart supplies disposable hardware isolation; Tart-only provisioning is not the installation under test. Use the pre-provisioned golden image, `run.sh`, or a local unsigned app only when the harness or a local build is explicitly the subject, or as a secondary diagnostic after the public path has been tested. Record every prerequisite encountered and whether the user-facing product or public documentation disclosed it before it was needed.
 - **Use Computer Use key syntax exactly when typing through Tart.** `sky.press_key` encodes modifiers inside its single `key` string, such as `super+v`; it does not accept a separate `modifiers` list. Supplying `key: "v"` with an ignored modifier field types a lone `v` into the guest. `sky.paste` requires `format: "text"` as well as `text`. After any Tart paste or punctuation-heavy entry, inspect the field before submitting; if it is malformed, clear it once and switch to a byte-preserving guest path instead of repeatedly appending corrective text.
-- **Accounts are dedicated field-test identities**, never the developer's real
-  Openbase account. See [Field-test account lifecycle](#field-test-account-lifecycle).
+- **Accounts are dedicated field-test identities**, never the developer's real Openbase account. See [Field-test account lifecycle](#field-test-account-lifecycle).
 - **Phones run the field-test app variant**, never the developer's normal Openbase app. The field-test variant must have its own bundle/application id and storage so it can coexist with the normal app without replacing its binary, login, VPN state, notification registration, or local data. See [Field-test mobile app variants](#field-test-mobile-app-variants).
-- If a request would require mutating the developer's live install, account, or
-  services, stop and re-scope it into the VM + field-test-account model rather
-  than running it against real state.
+- If a request would require mutating the developer's live install, account, or services, stop and re-scope it into the VM + field-test-account model rather than running it against real state.
 
 ## Non-Negotiables
 
-- Do not mock Codex, Super Agents, the dispatcher, LiveKit, Cartesia, Tailscale,
-  Openbase Cloud, Appium, WebDriverAgent, the iOS/Android app, the desktop app,
-  or phone interaction. A field test is real end-to-end or it is not a field
-  test.
+- Do not mock Codex, Super Agents, the dispatcher, LiveKit, Cartesia, Tailscale, Openbase Cloud, Appium, WebDriverAgent, the iOS/Android app, the desktop app, or phone interaction. A field test is real end-to-end or it is not a field test.
 - A direct user request to run or continue a full field test explicitly authorizes the expected clean-room installation sequence inside the disposable VM: open the verified signed channel DMG, drag Openbase into Applications, accept the ordinary macOS first-launch confirmation, and launch it. Do not interrupt that routine sequence for another install/run confirmation. Pause only if the UI requests an unexpected privilege, credential, security bypass, destructive action, or materially different software installation.
 - On macOS, choosing the recommended Openbase VPN can install the `OpenbaseNetmesh` background item and pause setup until the user approves it in **System Settings → General → Login Items & Extensions → Allow in the Background**. Treat this as an expected OS-level prerequisite but not as part of the routine DMG confirmation: prepare and navigate to the setting, then obtain the user's action-time approval before enabling it. Once approval is present, operate the disposable VM yourself—including toggling the background item and entering disposable-VM credentials—instead of asking the user to click, unless Computer Use is technically blocked. Keep the setup process running because it resumes automatically after approval. Record whether the onboarding UI and public installation documentation disclosed this requirement before macOS blocked progress.
 - Dedicated field-test mobile variants target staging Openbase Cloud by default: `https://app-staging.openbase.cloud` for cloud/account APIs and `openbase_cloud` for the coding backend. Verify the desktop/VM uses the same cloud target before starting. A production field test requires an explicitly production-targeted field-test build; never substitute the normal app.
 - Never infer the desktop Cloud target from its staging icon, version suffix, branch, or update feed. At the login step, open the browser flow and verify its origin before entering field-test credentials; staging must open `https://app-staging.openbase.cloud`, and a production origin is a blocker. Also verify the generated CLI environment persists the expected `OPENBASE_CODER_CLI_WEB_BACKEND_URL` so later services use the same target.
 - A multi-repo release records sibling repository SHAs and aborts if any captured branch moves before publication. Once a CLI or desktop release build starts, freeze every sibling staging branch it consumes until that workflow completes; batch field-testing skill and documentation promotions before triggering the release or after it finishes. If the coherent-snapshot guard catches a race, leave the already-tested trees unchanged and rerun only after all captured refs are stable.
 - Before running a field test, record a concise run plan in the gitignored daily field-test log. A separate RMOT or Typora window is not required. See [Required Run Plan](#required-run-plan).
-- Use `openbase-coder user say "<agent name>" "<message>"` whenever the user needs to
-  do something off-chat (move the phone near the speaker, unlock it, trust the
-  Mac, provide a missing credential). Keep spoken prompts short and natural.
-- When the phone app may be listening, do not use incidental `tts`/`user say` for
-  status or completion updates. Speak only when the audio is an intentional test
-  stimulus or the user explicitly asks for an audible prompt.
-- Any time the agent interacts with Appium directly — driving the phone,
-  screenshots, page source, alerts, app lifecycle — it must go through the
-  `appium` MCP server (`mcp__appium__*` tools; registered as `appium`, command
-  `npx -y appium-mcp`). Never hand-start an `appium` CLI server, curl WebDriver
-  endpoints, or write one-off WebdriverIO scripts. iOS uses the XCUITest driver;
-  Android uses the UiAutomator2 driver — both through this one MCP surface. See
-  [Direct Appium Interaction](#direct-appium-interaction).
-- Do not source broad env files into the test process. Cherry-pick only the
-  specific credentials required (e.g. extract a single Cartesia key), never
-  `source` a whole private env file.
+- Use `openbase-coder user say "<agent name>" "<message>"` whenever the user needs to do something off-chat (move the phone near the speaker, unlock it, trust the Mac, provide a missing credential). Keep spoken prompts short and natural.
+- When the phone app may be listening, do not use incidental `tts`/`user say` for status or completion updates. Speak only when the audio is an intentional test stimulus or the user explicitly asks for an audible prompt.
+- Any time the agent interacts with Appium directly — driving the phone, screenshots, page source, alerts, app lifecycle — it must go through the `appium` MCP server (`mcp__appium__*` tools; registered as `appium`, command `npx -y appium-mcp`). Never hand-start an `appium` CLI server, curl WebDriver endpoints, or write one-off WebdriverIO scripts. iOS uses the XCUITest driver; Android uses the UiAutomator2 driver — both through this one MCP surface. See [Direct Appium Interaction](#direct-appium-interaction).
+- Do not source broad env files into the test process. Cherry-pick only the specific credentials required (e.g. extract a single Cartesia key), never `source` a whole private env file.
 
 ## Field-Test Procedure
 
 Every field-test session runs the same three steps, in order:
 
 1. **Installation.** Stand up a clean environment (Tart macOS VM, or a Windows VM for the native-Windows pathway), install the product using the sampled installation method, build/install the mobile field-test variant, and create the designated throwaway account through the real [signup and verification lifecycle](#field-test-account-lifecycle).
-2. **Smoke test.** A short basic check that the core loop works at all — place a
-   call, get a dispatcher response through the full acoustic loop — before
-   investing in anything deeper. If the smoke test fails, that is the finding;
-   stop and file it.
-3. **Targeted testing.** Exercise whatever most likely changed since the last
-   field test. Determine this by reading recent commits across the workspace
-   repos since the previous field-test log entry (see below). Effort follows the
-   code: concentrate on the surfaces and flows that were just modified.
+2. **Smoke test.** A short basic check that the core loop works at all — place a call, get a dispatcher response through the full acoustic loop — before investing in anything deeper. If the smoke test fails, that is the finding; stop and file it.
+3. **Targeted testing.** Exercise whatever most likely changed since the last field test. Determine this by reading recent commits across the workspace repos since the previous field-test log entry (see below). Effort follows the code: concentrate on the surfaces and flows that were just modified.
 
 Deciding what to target from recent commits:
 
@@ -92,15 +52,11 @@ git -C ios log --oneline -20
 git -C cli log --oneline -20
 ```
 
-Read the last entry in `.local/field-tests/` to find the previous run's date and
-what was covered, so this run targets new risk rather than repeating old ground.
+Read the last entry in `.local/field-tests/` to find the previous run's date and what was covered, so this run targets new risk rather than repeating old ground.
 
 ## Parameter Model (sample per run)
 
-Each run samples a point in this space. Sampling is **stochastic but weighted**:
-prioritize **iOS and macOS**, sampling the others less often, so coverage spreads
-over time without abandoning the most-used surfaces. Record the sampled values in
-the daily log.
+Each run samples a point in this space. Sampling is **stochastic but weighted**: prioritize **iOS and macOS**, sampling the others less often, so coverage spreads over time without abandoning the most-used surfaces. Record the sampled values in the daily log.
 
 | Parameter | Options |
 | --- | --- |
@@ -111,28 +67,16 @@ the daily log.
 | Branch | `main` · `staging` · `develop` |
 | Installation method | normal user install · developer install (`./scripts/setup`) |
 
-Pick a concrete value for each before starting the run. If the sampler is
-unavailable, choose by hand but keep the iOS/macOS bias and vary from the
-previous run so the matrix fills in.
+Pick a concrete value for each before starting the run. If the sampler is unavailable, choose by hand but keep the iOS/macOS bias and vary from the previous run so the matrix fills in.
 
 ## Full Acoustic Loop
 
 Field tests close the real audio loop **in both directions**:
 
-- **Outbound stimulus:** Cartesia TTS played through the Mac/host speakers into
-  the phone's microphone as genuine acoustic input — not a direct API call.
-- **Inbound capture:** the phone's spoken reply captured back through a
-  microphone and transcribed with **local STT**, so the agent asserts on the
-  *meaning* of what the product said, not just on log lines.
+- **Outbound stimulus:** Cartesia TTS played through the Mac/host speakers into the phone's microphone as genuine acoustic input — not a direct API call.
+- **Inbound capture:** the phone's spoken reply captured back through a microphone and transcribed with **local STT**, so the agent asserts on the *meaning* of what the product said, not just on log lines.
 
-Treat speaker-prompt audio as a real but lossy dependency. Do not put exact
-paths, filenames, people's names, or acceptance criteria into spoken audio. Put
-brittle details in a prepared `briefing.md` file and make the spoken prompt a
-short natural pointer, e.g. "In the home folder, open the folder named openbase
-field test and follow the briefing markdown file." Do not use meta-instructions
-like "the real instruction starts after this sentence." If the phone display
-dims or locks during a long run, pause and ask the user to keep the phone awake or
-set Auto-Lock to Never.
+Treat speaker-prompt audio as a real but lossy dependency. Do not put exact paths, filenames, people's names, or acceptance criteria into spoken audio. Put brittle details in a prepared `briefing.md` file and make the spoken prompt a short natural pointer, e.g. "In the home folder, open the folder named openbase field test and follow the briefing markdown file." Do not use meta-instructions like "the real instruction starts after this sentence." If the phone display dims or locks during a long run, pause and ask the user to keep the phone awake or set Auto-Lock to Never.
 
 ## Field-Test Mobile App Variants
 
@@ -207,29 +151,21 @@ This exercises real signup against the selected Cloud deployment, mandatory veri
 Before any field-test command, add a concise Markdown plan to the gitignored daily log at `.local/field-tests/<date>.md`. Do not open a separate RMOT or Typora window. The plan must include:
 
 - exact date/time and the requested test scope;
-- the **sampled parameters** for this run (host OS, mobile OS, connectivity,
-  branch, installation method) and the previous run's date;
+- the **sampled parameters** for this run (host OS, mobile OS, connectivity, branch, installation method) and the previous run's date;
 - the fresh field-test account identity and confirmation it matches `delivered+openbase-field-<slug>@resend.dev`, the recorded UTC start time, the Resend CLI profile being used (the active/default profile is acceptable; never record its credential), the planned real signup/message-retrieval/verification steps, and optional post-verification `--mock-payment`;
-- clean-room confirmation: which disposable VM (Tart macOS / Windows) and that
-  the developer's real install/account/services are untouched;
-- planned steps: install → smoke → targeted, with the specific targeted areas
-  derived from recent commits;
+- clean-room confirmation: which disposable VM (Tart macOS / Windows) and that the developer's real install/account/services are untouched;
+- planned steps: install → smoke → targeted, with the specific targeted areas derived from recent commits;
 - iOS/Android target: device/emulator, driver (XCUITest/UiAutomator2), field-test variant name, its distinct bundle/application id, app provenance, and confirmation the normal Openbase app will remain untouched;
-- local runtime target inside the VM: `electron-bundled`, `standalone`, or
-  `workspace`;
-- CLI/service details: runtime mode, package version, service status, coding
-  backend, and cloud web backend;
+- local runtime target inside the VM: `electron-bundled`, `standalone`, or `workspace`;
+- CLI/service details: runtime mode, package version, service status, coding backend, and cloud web backend;
 - exact cloud-target confirmation, normally staging for the dedicated mobile variants;
-- audio path: Cartesia model/voice, host speaker audio, phone mic, and local STT
-  for inbound capture;
-- audio-prompt reliability notes: prepared briefing file, minimal spoken
-  pointer, keep-phone-awake / disable Auto-Lock;
+- audio path: Cartesia model/voice, host speaker audio, phone mic, and local STT for inbound capture;
+- audio-prompt reliability notes: prepared briefing file, minimal spoken pointer, keep-phone-awake / disable Auto-Lock;
 - expected human actions and when `user say` will be used;
 - no-mock statement listing the real systems involved;
 - rollback/cleanup notes (VM deletion, `field_test_account --destroy`, ephemeral-password cleanup, field-test Appium session deletion, and field-test app cleanup without touching the normal app).
 
-Use repo-relative or `~`-relative paths in the run plan. Keep brittle scratch in
-`.local/` (gitignored) — never reference `.local/` files from committed docs.
+Use repo-relative or `~`-relative paths in the run plan. Keep brittle scratch in `.local/` (gitignored) — never reference `.local/` files from committed docs.
 
 ## Preflight Sequence
 
@@ -242,8 +178,7 @@ Use repo-relative or `~`-relative paths in the run plan. Keep brittle scratch in
    openbase-coder backend status
    ```
 
-   If the backend is not `openbase_cloud`, switch it with the packaged CLI and
-   restart services before the run.
+   If the backend is not `openbase_cloud`, switch it with the packaged CLI and restart services before the run.
 5. If the mobile target is a physical iPhone, confirm it is visible:
 
    ```bash
@@ -254,61 +189,33 @@ Use repo-relative or `~`-relative paths in the run plan. Keep brittle scratch in
 
 ## Direct Appium Interaction
 
-When you drive or inspect the phone yourself, use only the `appium` MCP server
-tools. If `mcp__appium__*` are deferred, load them via ToolSearch first. Typical
-iOS flow:
+When you drive or inspect the phone yourself, use only the `appium` MCP server tools. If `mcp__appium__*` are deferred, load them via ToolSearch first. Typical iOS flow:
 
 1. `select_device` — pick the target device.
-2. `appium_prepare_ios_real_device` — call once without
-   `provisioningProfileUuid` to list profiles, then again with the chosen UUID to
-   ready WebDriverAgent (iOS only; Android skips this).
+2. `appium_prepare_ios_real_device` — call once without `provisioningProfileUuid` to list profiles, then again with the chosen UUID to ready WebDriverAgent (iOS only; Android skips this).
 3. `appium_session_management` `action=create` against the installed field-test app id (`com.openbase.coder.field-test` on iOS; the distinct application id declared by the Android field-test variant), or `action=attach` to inspect an existing field-test session. Refuse the normal app ids.
-4. Interact with `appium_find_element`, `appium_gesture`, `appium_set_value`,
-   `appium_get_text`, `appium_get_page_source`, `appium_screenshot`,
-   `appium_alert`, `appium_app_lifecycle`.
+4. Interact with `appium_find_element`, `appium_gesture`, `appium_set_value`, `appium_get_text`, `appium_get_page_source`, `appium_screenshot`, `appium_alert`, `appium_app_lifecycle`.
 5. `appium_session_management` `action=delete` (or `detach`) when done.
 
-Android is the same MCP surface with the UiAutomator2 driver. Do not create an
-MCP session while a wdio spec is mid-run — a second session can steal the driver
-from the run; interact between runs, or attach rather than create.
+Android is the same MCP surface with the UiAutomator2 driver. Do not create an MCP session while a wdio spec is mid-run — a second session can steal the driver from the run; interact between runs, or attach rather than create.
 
 ## Handling Failures (every failure, three ways + maybe four)
 
 Rigorously test the running system. **Every** failure a field test finds gets:
 
 1. **Recorded** in the daily field-test log (see below).
-2. **Reported to Slack** — post a clearly-scoped message to the team **`#qa`**
-   channel via the `slack-mcp` skill / official Slack MCP. Include: what failed,
-   the sampled parameters, the branch/commit under test, and a link to the PR
-   once opened (or the "already fixed in `develop`" note per step 3).
-3. **Fixed as a READY PR into `develop`.** The field-testing agent, or a
-   dispatched fix agent, implements the fix on a branch against `develop`, with
-   tests, and opens a pull request. **Never merge.** Follow each touched repo's
-   `AGENTS.md`; keep diffs minimal and focused; run the affected tests.
+2. **Reported to Slack** — post a clearly-scoped message to the team **`#qa`** channel via the `slack-mcp` skill / official Slack MCP. Include: what failed, the sampled parameters, the branch/commit under test, and a link to the PR once opened (or the "already fixed in `develop`" note per step 3).
+3. **Fixed as a READY PR into `develop`.** The field-testing agent, or a dispatched fix agent, implements the fix on a branch against `develop`, with tests, and opens a pull request. **Never merge.** Follow each touched repo's `AGENTS.md`; keep diffs minimal and focused; run the affected tests.
 
-   **Exception — the failure was observed on a `main` or `staging` build.** When
-   this run's sampled **Branch** parameter is `main` or `staging`, the fix may
-   already be sitting in `develop`, unreleased. Before opening any PR, **first
-   check whether `develop` already contains the fix** for the affected area:
-   inspect `develop`'s history/diff around the affected code, and reproduce
-   against `develop` if that is quick. If the fix already exists in `develop`, do
-   **not** open a duplicate PR. Instead record the failure in the daily log and
-   the `#qa` Slack message as **"already fixed in `develop`, pending
-   promotion/release"**, so it reads as a **release-gap signal** (a promotion is
-   overdue), not a new bug. Only when `develop` does *not* already contain the
-   fix do you open a READY PR against `develop` as above.
+   **Exception — the failure was observed on a `main` or `staging` build.** When this run's sampled **Branch** parameter is `main` or `staging`, the fix may already be sitting in `develop`, unreleased. Before opening any PR, **first check whether `develop` already contains the fix** for the affected area: inspect `develop`'s history/diff around the affected code, and reproduce against `develop` if that is quick. If the fix already exists in `develop`, do **not** open a duplicate PR. Instead record the failure in the daily log and the `#qa` Slack message as **"already fixed in `develop`, pending promotion/release"**, so it reads as a **release-gap signal** (a promotion is overdue), not a new bug. Only when `develop` does *not* already contain the fix do you open a READY PR against `develop` as above.
 
 And, when appropriate:
 
-4. **Pin the reproduction as a scripted-E2E spec** in `e2e-scripted/` (tier 2).
-   That is tier-2's whole purpose — freezing a found bug so it cannot silently
-   return. Add one spec for the specific failure; keep the suite small.
+4. **Pin the reproduction as a scripted-E2E spec** in `e2e-scripted/` (tier 2). That is tier-2's whole purpose — freezing a found bug so it cannot silently return. Add one spec for the specific failure; keep the suite small.
 
 ## Daily Testing Log
 
-Every field-test session appends to a **gitignored** daily log at
-`.local/field-tests/<date>.md` at the workspace root (`.local/` is gitignored;
-verify with `git check-ignore .local/field-tests/x.md`). Each entry records:
+Every field-test session appends to a **gitignored** daily log at `.local/field-tests/<date>.md` at the workspace root (`.local/` is gitignored; verify with `git check-ignore .local/field-tests/x.md`). Each entry records:
 
 - the **parameters sampled** for the run;
 - **what was tested** (smoke + targeted areas, and why they were chosen);
@@ -317,39 +224,24 @@ verify with `git check-ignore .local/field-tests/x.md`). Each entry records:
 - **Slack messages sent** (channel + summary);
 - any scripted-E2E specs pinned as a result.
 
-Because the log is gitignored, it is safe to include machine-specific detail; do
-not reference it from committed docs.
+Because the log is gitignored, it is safe to include machine-specific detail; do not reference it from committed docs.
 
 ## Reporting
 
-After the run, report (and write a summary artifact per the
-`openbase-coder-reports` skill):
+After the run, report (and write a summary artifact per the `openbase-coder-reports` skill):
 
 - sampled parameters and the field-test account used;
 - clean-room confirmation (which VM; developer state untouched);
-- which surfaces were tested and whether the full acoustic loop was exercised
-  (outbound TTS + inbound STT);
+- which surfaces were tested and whether the full acoustic loop was exercised (outbound TTS + inbound STT);
 - exact cloud-target confirmation;
-- first failure with concise evidence, PRs opened, Slack messages sent, and any
-  scripted-E2E specs pinned;
+- first failure with concise evidence, PRs opened, Slack messages sent, and any scripted-E2E specs pinned;
 - VM/user teardown status.
 
-In this public workspace, the summary artifact stays workspace-local under
-`.reports/` or `.local/field-tests/`. Never force-add it, commit it, link a
-public GitHub blob for it, or copy operational test evidence into another
-tracked workspace file. If a versioned report is required, write it in the
-relevant private Openbase workspace and verify that repository's visibility
-before staging. Before any workspace commit, require
-`git ls-files -- .reports` to produce no output.
+In this public workspace, the summary artifact stays workspace-local under `.reports/` or `.local/field-tests/`. Never force-add it, commit it, link a public GitHub blob for it, or copy operational test evidence into another tracked workspace file. If a versioned report is required, write it in the relevant private Openbase workspace and verify that repository's visibility before staging. Before any workspace commit, require `git ls-files -- .reports` to produce no output.
 
 ## Scripted-E2E Annex (tier 2)
 
-The tier-2 **scripted-E2E** suite lives in `e2e-scripted/` and exists for
-regression pinning: deterministic wdio/Appium specs that freeze a
-previously-found bug. Its suite map, environment reference, and package
-script inventory are in `e2e-scripted/README.md`. The live-run gates above (run plan, exact cloud-target
-confirmation, audio handling, `user say` rules, Appium-via-MCP) apply to scripted
-runs too.
+The tier-2 **scripted-E2E** suite lives in `e2e-scripted/` and exists for regression pinning: deterministic wdio/Appium specs that freeze a previously-found bug. Its suite map, environment reference, and package script inventory are in `e2e-scripted/README.md`. The live-run gates above (run plan, exact cloud-target confirmation, audio handling, `user say` rules, Appium-via-MCP) apply to scripted runs too.
 
 Safe checks (no real Codex flows):
 
@@ -376,8 +268,4 @@ OPENBASE_E2E_CARTESIA_API_KEY="$CARTESIA_KEY" \
 
 Every live scripted spec must target the isolated field-test app variant under the same mobile-variant rules as tier 3. A doctor result naming the normal app bundle/application id is a failed preflight.
 
-`manual:e2e:ios:parallel-agents-truth` is the live share-readiness gate: it
-drives the phone, launches two Super Agents from a prepared `briefing.md`,
-verifies both Markdown reports exist, verifies the voice route transfers to the
-Bill Gates report agent, asks what happened, and returns the route to dispatch.
-Keep exact paths/names/topics out of spoken prompts and in the briefing file.
+`manual:e2e:ios:parallel-agents-truth` is the live share-readiness gate: it drives the phone, launches two Super Agents from a prepared `briefing.md`, verifies both Markdown reports exist, verifies the voice route transfers to the Bill Gates report agent, asks what happened, and returns the route to dispatch. Keep exact paths/names/topics out of spoken prompts and in the briefing file.
