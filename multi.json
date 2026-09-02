@@ -5,74 +5,104 @@
       "name": "allauth-client-swift",
       "url": "https://github.com/openbase-community/allauth-client-swift",
       "description": "SwiftUI client and views for Django AllAuth headless authentication",
-      "installSets": ["dev"]
+      "installSets": [
+        "internal"
+      ]
     },
     {
       "name": "openbase-agent-ui-swift",
       "url": "https://github.com/openbase-community/openbase-agent-ui-swift",
       "description": "Public Swift interfaces and session-facing state for embedding Openbase Agent UI in iOS apps",
-      "installSets": ["dev"]
+      "installSets": [
+        "internal"
+      ]
     },
     {
       "name": "allauth-client-kotlin",
       "url": "https://github.com/openbase-community/allauth-client-kotlin",
       "description": "Kotlin client and views for Django AllAuth headless authentication",
-      "installSets": ["dev"]
+      "installSets": [
+        "internal"
+      ]
     },
     {
       "name": "cli",
       "url": "https://github.com/openbase-community/openbase",
       "description": "CLI for Openbase Coder.  This runs a Django server that provides git diffs for repos across the file system.",
-      "installSets": ["default", "dev"]
+      "installSets": [
+        "default",
+        "internal"
+      ]
     },
     {
       "name": "console",
       "url": "https://github.com/openbase-community/openbase-coder-console",
       "description": "React frontend console for Openbase Coder",
-      "installSets": ["default", "dev"]
+      "installSets": [
+        "default",
+        "internal"
+      ]
     },
     {
       "name": "coder-react",
       "url": "https://github.com/openbase-community/openbase-coder-react",
       "description": "Shared React UI package for Openbase Coder components used by the console and desktop clients",
-      "installSets": ["default", "dev"]
+      "installSets": [
+        "default",
+        "internal"
+      ]
     },
     {
       "name": "desktop",
       "url": "https://github.com/openbase-community/openbase-coder-desktop",
       "description": "Electron desktop app for Openbase Coder",
-      "installSets": ["dev"]
+      "installSets": [
+        "default",
+        "internal"
+      ]
     },
     {
       "name": "ios",
       "url": "https://github.com/openbase-community/openbase-ios",
       "description": "Main Openbase iOS application using Tuist",
-      "installSets": ["dev"]
+      "installSets": [
+        "internal"
+      ]
     },
     {
       "name": "android",
       "url": "https://github.com/openbase-community/openbase-android",
       "description": "Main Openbase Android application using Kotlin and Jetpack Compose",
-      "installSets": ["dev"]
+      "installSets": [
+        "internal"
+      ]
     },
     {
       "name": "skills",
       "url": "https://github.com/openbase-community/openbase-coder-skills",
       "description": "Shared agent skills for Openbase Coder workflows.",
-      "installSets": ["default", "dev"]
+      "installSets": [
+        "default",
+        "internal"
+      ]
     },
     {
       "name": "netmesh-go",
       "fixedBranch": "main",
       "url": "https://github.com/openbase-community/netmesh-go",
       "description": "Shared gomobile Tailscale-engine bridge (NetmeshGo) consumed by the iOS packet-tunnel extension and the Android VpnService.",
-      "installSets": ["dev"]
+      "installSets": [
+        "internal"
+      ]
     },
     {
       "name": "super-agents",
       "url": "https://github.com/montaguegabe/super-agents",
       "description": "Python MCP wrapper for controlling Codex app-server threads, turns, compact status checks, and Super Agents coordination.",
-      "installSets": ["default", "dev"]
+      "installSets": [
+        "default",
+        "internal"
+      ]
     },
     {
       "name": "multi-react",
@@ -80,7 +110,10 @@
       "url": "https://github.com/montaguegabe/multi-react",
       "description": "Shared React diff viewer and related UI utilities used by Multi and Openbase Coder.",
       "allowSymlink": true,
-      "installSets": ["default", "dev"]
+      "installSets": [
+        "default",
+        "internal"
+      ]
     },
     {
       "name": "boilersync-react",
@@ -88,7 +121,10 @@
       "url": "https://github.com/montaguegabe/boilersync-react",
       "description": "Shared React components and utilities for BoilerSync template workflows.",
       "allowSymlink": true,
-      "installSets": ["default", "dev"]
+      "installSets": [
+        "default",
+        "internal"
+      ]
     }
   ]
 }

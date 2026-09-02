@@ -16,8 +16,8 @@ async function workspaceWith(config) {
 test("keeps a public checkout on the default install set", async (t) => {
   const root = await workspaceWith({
     repos: [
-      { name: "cli", installSets: ["default", "dev"] },
-      { name: "desktop", installSets: ["dev"] },
+      { name: "cli", installSets: ["default", "internal"] },
+      { name: "ios", installSets: ["internal"] },
     ],
   });
   t.after(() => rm(root, { force: true, recursive: true }));
@@ -25,15 +25,28 @@ test("keeps a public checkout on the default install set", async (t) => {
   assert.equal(detectInstallSet(root), "default");
 });
 
-test("preserves dev when a dev-only repo is already checked out", async (t) => {
+test("preserves internal when an internal-only repo is already checked out", async (t) => {
   const root = await workspaceWith({
     repos: [
-      { name: "cli", installSets: ["default", "dev"] },
-      { name: "desktop", installSets: ["dev"] },
+      { name: "cli", installSets: ["default", "internal"] },
+      { name: "ios", installSets: ["internal"] },
     ],
   });
   t.after(() => rm(root, { force: true, recursive: true }));
-  mkdirSync(path.join(root, "desktop"), { recursive: true });
-  writeFileSync(path.join(root, "desktop", ".git"), "gitdir: elsewhere\n");
-  assert.equal(detectInstallSet(root), "dev");
+  mkdirSync(path.join(root, "ios"), { recursive: true });
+  writeFileSync(path.join(root, "ios", ".git"), "gitdir: elsewhere\n");
+  assert.equal(detectInstallSet(root), "internal");
+});
+
+test("still detects internal from the legacy dev set name", async (t) => {
+  const root = await workspaceWith({
+    repos: [
+      { name: "cli", installSets: ["default", "dev"] },
+      { name: "ios", installSets: ["dev"] },
+    ],
+  });
+  t.after(() => rm(root, { force: true, recursive: true }));
+  mkdirSync(path.join(root, "ios"), { recursive: true });
+  writeFileSync(path.join(root, "ios", ".git"), "gitdir: elsewhere\n");
+  assert.equal(detectInstallSet(root), "internal");
 });
