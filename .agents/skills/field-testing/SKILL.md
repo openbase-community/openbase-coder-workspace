@@ -12,7 +12,7 @@ disposable, isolated environment, exercises it like a real user (driving the
 phone through the `appium` MCP server), notices what breaks, and turns every
 failure into a logged, Slack-reported, READY-PR fix.
 
-It applies whenever Gabe asks for a field test, live/full-system/no-mock test, or
+It applies whenever the user asks for a field test, live/full-system/no-mock test, or
 to install-and-exercise the product end to end. For the **tier-2 scripted-E2E
 regression suite** (deterministic wdio/Appium specs in `e2e-scripted/`), see the
 [Scripted-E2E annex](#scripted-e2e-annex-tier-2) at the bottom — it is the same
@@ -30,7 +30,7 @@ flow is gone. Field tests are clean-room by construction:
   install, launchd services, Tailscale routes, and ports 7999/7880 are never
   touched. The native-Windows pathway uses a Windows VM (later). Never install a
   field-test build onto the developer's own macOS session.
-- **Test the real user installation path.** For a full staging or production macOS field test, start from a bare VM and install the signed, notarized channel DMG through the normal download, Gatekeeper, Applications, prerequisite, and onboarding flow. Tart supplies disposable hardware isolation; Tart-only provisioning is not the installation under test. Use the pre-provisioned golden image, `run.sh`, or a local unsigned app only when the harness or a local build is explicitly the subject, or as a secondary diagnostic after the public path has been tested. Record every prerequisite encountered and whether the user-facing product or public documentation disclosed it before it was needed.
+- **Test the real user installation path.** For a full staging or production macOS field test, start from a bare VM and install the signed, notarized channel DMG through the normal download, Gatekeeper, Applications, prerequisite, and onboarding flow. Open `https://openbase.cloud/downloads?staging=true` in the VM for a staging build (omit `?staging=true` for production) and use the page's download control; do not start with the raw S3 release-bucket URL, because that bypasses the public CDN-backed download pathway under test and is not the user-facing installation flow. If Tart keyboard or clipboard forwarding prevents reliable navigation, or the user explicitly opts out of testing the marketing download page, stop fighting the guest UI: use SSH and the bare macOS VM's built-in `curl -fL` to download the exact signed channel DMG into `~/Downloads`, then resume the normal Finder, Gatekeeper, Applications, prerequisite, and onboarding flow. Bare macOS does not include `wget`; do not install it just for this fallback. Record the SSH download as an explicit exception and leave the marketing-download surface unclaimed. Tart supplies disposable hardware isolation; Tart-only provisioning is not the installation under test. Use the pre-provisioned golden image, `run.sh`, or a local unsigned app only when the harness or a local build is explicitly the subject, or as a secondary diagnostic after the public path has been tested. Record every prerequisite encountered and whether the user-facing product or public documentation disclosed it before it was needed.
 - **Accounts are dedicated field-test identities**, never the developer's real
   Openbase account. See [Field-test account lifecycle](#field-test-account-lifecycle).
 - **Phones run the field-test app variant**, never the developer's normal Openbase app. The field-test variant must have its own bundle/application id and storage so it can coexist with the normal app without replacing its binary, login, VPN state, notification registration, or local data. See [Field-test mobile app variants](#field-test-mobile-app-variants).
@@ -44,16 +44,15 @@ flow is gone. Field tests are clean-room by construction:
   Openbase Cloud, Appium, WebDriverAgent, the iOS/Android app, the desktop app,
   or phone interaction. A field test is real end-to-end or it is not a field
   test.
+- A direct user request to run or continue a full field test explicitly authorizes the expected clean-room installation sequence inside the disposable VM: open the verified signed channel DMG, drag Openbase into Applications, accept the ordinary macOS first-launch confirmation, and launch it. Do not interrupt that routine sequence for another install/run confirmation. Pause only if the UI requests an unexpected privilege, credential, security bypass, destructive action, or materially different software installation.
 - Dedicated field-test mobile variants target staging Openbase Cloud by default: `https://app-staging.openbase.cloud` for cloud/account APIs and `openbase_cloud` for the coding backend. Verify the desktop/VM uses the same cloud target before starting. A production field test requires an explicitly production-targeted field-test build; never substitute the normal app.
-- Before running a field test, write an RMOT plan to `.local/field-tests/` (or
-  `/tmp`) and open it in Typora. Do not skip this even if the command seems
-  obvious. See [Required RMOT](#required-rmot).
-- Use `openbase-coder user say "<agent name>" "<message>"` whenever Gabe needs to
+- Before running a field test, record a concise run plan in the gitignored daily field-test log. A separate RMOT or Typora window is not required. See [Required Run Plan](#required-run-plan).
+- Use `openbase-coder user say "<agent name>" "<message>"` whenever the user needs to
   do something off-chat (move the phone near the speaker, unlock it, trust the
   Mac, provide a missing credential). Keep spoken prompts short and natural.
 - When the phone app may be listening, do not use incidental `tts`/`user say` for
   status or completion updates. Speak only when the audio is an intentional test
-  stimulus or Gabe explicitly asks for an audible prompt.
+  stimulus or the user explicitly asks for an audible prompt.
 - Any time the agent interacts with Appium directly — driving the phone,
   screenshots, page source, alerts, app lifecycle — it must go through the
   `appium` MCP server (`mcp__appium__*` tools; registered as `appium`, command
@@ -97,7 +96,7 @@ what was covered, so this run targets new risk rather than repeating old ground.
 Each run samples a point in this space. Sampling is **stochastic but weighted**:
 prioritize **iOS and macOS**, sampling the others less often, so coverage spreads
 over time without abandoning the most-used surfaces. Record the sampled values in
-the RMOT and the daily log.
+the daily log.
 
 | Parameter | Options |
 | --- | --- |
@@ -108,7 +107,7 @@ the RMOT and the daily log.
 | Branch | `main` · `staging` · `develop` |
 | Installation method | normal user install · developer install (`./scripts/setup`) |
 
-Pick a concrete value for each before writing the RMOT. If the sampler is
+Pick a concrete value for each before starting the run. If the sampler is
 unavailable, choose by hand but keep the iOS/macOS bias and vary from the
 previous run so the matrix fills in.
 
@@ -128,12 +127,12 @@ brittle details in a prepared `briefing.md` file and make the spoken prompt a
 short natural pointer, e.g. "In the home folder, open the folder named openbase
 field test and follow the briefing markdown file." Do not use meta-instructions
 like "the real instruction starts after this sentence." If the phone display
-dims or locks during a long run, pause and ask Gabe to keep the phone awake or
+dims or locks during a long run, pause and ask the user to keep the phone awake or
 set Auto-Lock to Never.
 
 ## Field-Test Mobile App Variants
 
-Always build, install, and launch the platform's dedicated field-test variant. The normal Openbase app must remain installed, signed in, and otherwise untouched so Gabe can continue using it while the field test runs.
+Always build, install, and launch the platform's dedicated field-test variant. The normal Openbase app must remain installed, signed in, and otherwise untouched so the user can continue using it while the field test runs.
 
 - **iOS:** generate the project and build the `OpenbaseFieldTest` scheme. Its bundle id is `com.openbase.coder.field-test`, its authentication URL scheme is `openbase-field-test`, and its app group/VPN extension are distinct from the normal app. It targets `https://app-staging.openbase.cloud`. Install and launch the resulting artifact, then create the Appium MCP session against `com.openbase.coder.field-test`.
 - **Android:** run `./gradlew :app:assembleFieldTest`, install and launch the resulting field-test APK, and create the UiAutomator2 session against `com.openbase.android.fieldtest`. The variant has separate storage and the `openbase-field-test` authentication URL scheme, targets `https://app-staging.openbase.cloud`, and can coexist with `com.openbase.android`. Never substitute, reset, or uninstall the normal app.
@@ -172,12 +171,12 @@ The cloud API's `field_test_account` Django management command deliberately cann
 The lifecycle across one core product field test:
 
 1. Generate an opaque run slug and choose `delivered+openbase-field-<slug>@resend.dev`. Confirm it matches the reserved pattern exactly; do not use `test@…`, `@example.com`, another Resend test outcome, or a personal-provider plus-address.
-2. Record the UTC run start time. Run `field_test_account --destroy <email>` so a reused address starts clean; an idempotent `not_found` result is acceptable.
+2. Record the UTC run start time. Run `openbase run --memory 1024 -a <app> python manage.py field_test_account --destroy <email>` so a reused address starts clean; an idempotent `not_found` result is acceptable. The composed staging app's default 256 MiB one-off task can be OOM-killed with exit 137, so every `field_test_account` invocation must set `--memory 1024`.
 3. Generate a strong ephemeral password locally without printing it, drive the field-test app's normal signup UI, and require the expected unverified/"Verify Your Email" state.
 4. Use an authenticated Resend CLI profile to poll sent-email metadata. The active/default profile is acceptable; a separate field-test profile is not required. Select only a message addressed to the exact field-test address and created after the recorded start time, then retrieve that message by id. Never pass an API key with `--api-key` or source a broad environment file.
-5. Read the returned HTML/text, find the real confirmation URL, and follow it through the tested phone/browser surface. Verification URLs are bearer credentials: never put one in a shell command, RMOT, report, Slack message, screenshot caption, or durable log.
-6. Confirm the product reports the email verified and the account can sign in. If paid features are in scope, run `field_test_account --mock-payment <email>` only now.
-7. After the run, always run `field_test_account --destroy <email>` and remove any ephemeral local credential material.
+5. Read the returned HTML/text, find the real confirmation URL, and follow it through the tested phone/browser surface. Verification URLs are bearer credentials: never put one in a shell command, run plan, report, Slack message, screenshot caption, or durable log.
+6. Confirm the product reports the email verified and the account can sign in. If paid features are in scope, run `openbase run --memory 1024 -a <app> python manage.py field_test_account --mock-payment <email>` only now.
+7. After the run, always run `openbase run --memory 1024 -a <app> python manage.py field_test_account --destroy <email>` and remove any ephemeral local credential material.
 
 Resend CLI retrieval uses the active authenticated profile, whose credential remains in secure CLI storage. Use `--profile <name>` only when an explicit non-active profile is needed:
 
@@ -186,23 +185,22 @@ resend emails list --limit 100 --json
 resend emails get <message-id> --json
 ```
 
-Inspect list results before `get`: the recipient must exactly equal the selected address, `created_at` must be after the recorded run start, and the message must be the expected verification message. If the dedicated profile is unavailable, the exact message does not arrive, or the provider reports a non-delivered outcome, stop and record the blocker. Never fall back to Gabe's inbox, another person's inbox, Slack, an arbitrary admin-mail endpoint, or direct database verification.
+Inspect list results before `get`: the recipient must exactly equal the selected address, `created_at` must be after the recorded run start, and the message must be the expected verification message. If the authenticated profile is unavailable, the exact message does not arrive, or the provider reports a non-delivered outcome, stop and record the blocker. Never fall back to a personal inbox, another person's inbox, Slack, an arbitrary admin-mail endpoint, or direct database verification.
 
 Cloud lifecycle invocations contain no credential:
 
 ```bash
-openbase run -a <app> python manage.py field_test_account \
+openbase run --memory 1024 -a <app> python manage.py field_test_account \
   --mock-payment delivered+openbase-field-20260901-a7f3@resend.dev
-openbase run -a <app> python manage.py field_test_account \
+openbase run --memory 1024 -a <app> python manage.py field_test_account \
   --destroy delivered+openbase-field-20260901-a7f3@resend.dev
 ```
 
 This exercises real signup against the selected Cloud deployment, mandatory verification, template rendering, Resend submission, message retrieval, and allauth confirmation. Resend's delivered-test recipient simulates the mailbox end without sending to a person. A separate scheduled delivery canary may test receipt by a real mailbox provider; it never uses a personal inbox.
 
-## Required RMOT
+## Required Run Plan
 
-Before any field-test command, create a Markdown RMOT (open it in Typora). It
-must include:
+Before any field-test command, add a concise Markdown plan to the gitignored daily log at `.local/field-tests/<date>.md`. Do not open a separate RMOT or Typora window. The plan must include:
 
 - exact date/time and the requested test scope;
 - the **sampled parameters** for this run (host OS, mobile OS, connectivity,
@@ -226,14 +224,14 @@ must include:
 - no-mock statement listing the real systems involved;
 - rollback/cleanup notes (VM deletion, `field_test_account --destroy`, ephemeral-password cleanup, field-test Appium session deletion, and field-test app cleanup without touching the normal app).
 
-Use repo-relative or `~`-relative paths in the RMOT. Keep brittle scratch in
+Use repo-relative or `~`-relative paths in the run plan. Keep brittle scratch in
 `.local/` (gitignored) — never reference `.local/` files from committed docs.
 
 ## Preflight Sequence
 
 1. Confirm the disposable VM path is ready (macOS): see `install-tests/electron-macos/README.md`. For a full installation field test, use `manual-vm.sh` to start a bare VM and download the real signed channel DMG inside it. Reserve the pre-provisioned `openbase-golden` image and `run.sh` for harness-specific testing or secondary diagnostics.
 2. Build/install the platform's field-test mobile variant and verify its distinct bundle/application id. If only the normal app is available, stop.
-3. Confirm the fresh address matches the reserved Resend field-test pattern, confirm the active authenticated Resend CLI profile can list sent-message metadata without exposing its credential, record the UTC start time, and run `field_test_account --destroy <email>`. A separate field-test profile is not required. Never substitute a personal inbox.
+3. Confirm the fresh address matches the reserved Resend field-test pattern, confirm the active authenticated Resend CLI profile can list sent-message metadata without exposing its credential, record the UTC start time, and run `openbase run --memory 1024 -a <app> python manage.py field_test_account --destroy <email>`. A separate field-test profile is not required. Never substitute a personal inbox.
 4. Inside the VM, confirm the Cloud target matches the mobile field-test build (staging by default):
 
    ```bash
@@ -345,7 +343,7 @@ before staging. Before any workspace commit, require
 The tier-2 **scripted-E2E** suite lives in `e2e-scripted/` and exists for
 regression pinning: deterministic wdio/Appium specs that freeze a
 previously-found bug. Its suite map, environment reference, and package
-script inventory are in `e2e-scripted/README.md`. The live-run gates above (RMOT, exact cloud-target
+script inventory are in `e2e-scripted/README.md`. The live-run gates above (run plan, exact cloud-target
 confirmation, audio handling, `user say` rules, Appium-via-MCP) apply to scripted
 runs too.
 
@@ -361,7 +359,7 @@ OPENBASE_IOS_BUNDLE_ID=com.openbase.coder.field-test \
   pnpm --dir e2e-scripted e2e:ios:doctor
 ```
 
-Live manual specs (only after the RMOT is open and the doctor passes):
+Live manual specs (only after the run plan is recorded and the doctor passes):
 
 ```bash
 OPENBASE_E2E_EXPECT_RUNTIME=electron-bundled \
