@@ -15,7 +15,7 @@
 # standalone release (auto-release.yml), the desktop AppImage to S3
 # (electron-rebuild.yml), and the ios App Store upload. A cli push whose
 # head commit says [skip release] cuts no release and never cancels an
-# in-flight release build (conditional cancel-in-progress; AUTO_UPDATE.md).
+# in-flight release build (conditional cancel-in-progress; dev-docs/AUTO_UPDATE.md).
 # multi-react and boilersync-react are external symlinks — promote them in
 # their own workspaces (~/Projects/multi, ~/Projects/boilersync) first if
 # they changed.
@@ -36,11 +36,12 @@ REPOS=(super-agents skills coder-react console cli desktop allauth-client-swift 
 
 EXTERNAL_NOTE="multi-react, boilersync-react, and netmesh-go are external trunk-based projects pinned to main (multi.json fixedBranch; CI checks them out at main)"
 
-# Pre-release checks run before a production promotion (TO is main/master),
-# unless --skip-checks. Format: "label|repo dir|command|severity" where
+# These are the authoritative pre-release gates for production promotions
+# (TO is main/master), unless --skip-checks. Format:
+# "label|repo dir|command|severity" where
 # severity is `fatal` (failure aborts the whole promotion) or `warn` (failure
-# only prints a warning). These mirror the deploy skill's Section 0
-# preconditions; edit this list to change what a production promotion gates on.
+# only prints a warning). Edit this list to change what a production promotion
+# gates on.
 # Context column: `committed` checks run in a temporary assembly built from
 # the origin/FROM refs, so another agent's dirty/untracked working-tree files
 # can never fail (or pass) a promotion gate — tsc compiles everything under
@@ -71,8 +72,8 @@ Examples:
   $(basename "$0") develop staging
   $(basename "$0") feature/my-feature staging
 
-Before promoting into main/master, the deploy skill's pre-release checks run
-automatically (cli test suite, console/desktop typecheck; desktop mac-release
+Before promoting into main/master, pre-release checks run automatically (cli
+test suite, console/desktop typecheck; desktop mac-release
 prereqs as a non-blocking warning). A failing fatal check aborts before any
 push. Other targets skip the checks.
 
@@ -198,8 +199,8 @@ build_precheck_assembly() {
     }
 }
 
-# Run the deploy skill's pre-release checks before a production promotion.
-# Only gates when promoting into main/master; other targets (develop->staging,
+# Run the pre-release checks before a production promotion. Only gates when
+# promoting into main/master; other targets (develop->staging,
 # feature->staging) skip the heavy suite. --skip-checks bypasses entirely. A
 # fatal check that fails aborts before anything is pushed.
 run_prechecks() {

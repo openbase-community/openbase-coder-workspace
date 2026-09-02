@@ -96,6 +96,44 @@ at https://login.tailscale.com/admin/settings/keys and pass it:
 The key can also be supplied via the `TS_AUTHKEY` env var. Ephemeral nodes
 auto-remove from your tailnet when the clone is deleted.
 
+## Semantic guest control (pure images, runtime injection)
+
+Images stay **pure** — nothing automation-related is baked into the bare base
+image, and the long-term direction is to thin the golden VM the same way (the
+Node/Playwright/Tailscale it currently carries exist only for `run.sh`'s
+in-guest driver, which is being replaced by the host-side CDP driver below).
+All automation lives on the **host** or is injected into the **disposable
+clone** at run time:
+
+```bash
+# One-time on the host (installs the driver's playwright dep locally):
+cd install-tests/electron-macos/driver && npm install --no-audit
+
+# Pin the guest keyboard layout (hygiene; new processes/login pick it up)
+./guest-automate.sh pin-layout openbase-manual
+
+# Guest web forms: enable built-in safaridriver, tunnel it, drive semantically
+./guest-automate.sh enable-safaridriver openbase-manual
+./guest-automate.sh safari-tunnel openbase-manual &          # leaves a tunnel up
+node driver/host-drive.mjs --wd http://127.0.0.1:4444 goto "https://example.com"
+printf '%s' "user@example.com" | node driver/host-drive.mjs --wd http://127.0.0.1:4444 fill 'input[type=email]'
+
+# Installed Electron app: launch with a CDP port, tunnel, drive semantically
+./guest-automate.sh app-cdp openbase-manual &                # leaves a tunnel up
+node driver/host-drive.mjs --cdp http://127.0.0.1:9222 snapshot
+node driver/host-drive.mjs --cdp http://127.0.0.1:9222 click "Let's get you set up"
+```
+
+**Never enter text through the Tart window.** Keystroke forwarding corrupts
+shifted/option characters even with matching host/guest layouts
+([openai/tart#1167](https://github.com/openai/tart/issues/1167)), and
+host↔guest clipboard depends on the guest agent + macOS version. Window
+interaction is fine for *clicks* on large static targets (Gatekeeper dialogs,
+Finder drags, System Settings); all *text* goes through the endpoints above
+(or the Appium MCP for phones). The `--remote-debugging-port` launch is a
+debug-only deviation from a Finder double-click — keep one pure launch in a
+run's smoke pass and record the flag as a known deviation in the field log.
+
 ## Clicking through it yourself (fresh bare Mac, choose the channel)
 
 To get a completely fresh, **visible**, **bare** macOS VM and do the whole
@@ -166,9 +204,11 @@ electron-macos/
   build-app.sh                 # host: build the bundled dev .app
   run.sh                       # orchestrator: clone -> tailnet -> install -> drive -> verify -> delete
   manual-vm.sh                 # fresh VISIBLE VM w/ app installed, for clicking through by hand
+  guest-automate.sh            # host-side semantic control of any clone (tunnels, injection)
   driver/
     package.json               # playwright dependency (prewarmed in the golden VM)
-    onboard-and-verify.mjs     # Playwright-Electron clickthrough + verification
+    onboard-and-verify.mjs     # Playwright-Electron clickthrough + verification (in-guest; legacy)
+    host-drive.mjs             # host-side semantic driver over forwarded CDP/WebDriver
   vm/                          # scripts that run INSIDE the VM
     ts-connect.sh              # join the tailnet headlessly with an auth key
     run-driver.sh              # clean state, install app, launch driver in the GUI session

@@ -68,7 +68,7 @@ NODE
 
 if [ ! -d "$ROOT_DIR/desktop" ]; then
   echo "The desktop repo is not present. Contributors with access can run:" >&2
-  echo "  multi sync --install-set dev" >&2
+  echo "  multi sync --install-set internal" >&2
   exit 1
 fi
 
