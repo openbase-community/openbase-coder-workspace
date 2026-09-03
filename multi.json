@@ -104,6 +104,15 @@
       ]
     },
     {
+      "name": "netmesh-macos",
+      "fixedBranch": "main",
+      "url": "https://github.com/openbase-community/netmesh-macos",
+      "description": "Openbase Netmesh macOS menu-bar VPN app, helper, and desktop companion (closed source; desktop builds fall back to the signed prebuilt artifact)",
+      "installSets": [
+        "internal"
+      ]
+    },
+    {
       "name": "super-agents",
       "url": "https://github.com/montaguegabe/super-agents",
       "description": "Python MCP wrapper for controlling Codex app-server threads, turns, compact status checks, and Super Agents coordination.",
