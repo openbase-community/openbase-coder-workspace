@@ -117,6 +117,16 @@ A from-scratch run stalls here if it just speaks and reads logs. The concrete me
   ```
 
   A pass is a correct, substantive `text_excerpt` with `backend_auth_failure=False` — e.g. asking "what is seven times six?" and getting "Seven times six is 42." with `voice_delivery_audio_delivered delivered=True`.
+- **When the dispatcher runs cloud-side there is no local `livekit-agent.log` to read** — a *managed* Cloud backend (openbase_cloud / openbase_cloud_codex, the fresh-install default) runs the dispatcher in Openbase Cloud, and a Mac paired via the **desktop app** doesn't write that log locally. In that case you cannot read the answer from a VM log; capture it acoustically instead with the bundled probe, which speaks the stimulus and transcribes the room (so the transcript holds *both* your question and the product's spoken reply):
+
+  ```bash
+  export ASSEMBLYAI_API_KEY=…   # product-parity STT; --stt mlx falls back to local whisper
+  scripts/acoustic-probe.py "What is seven times six?" --seconds 16
+  ```
+
+  Two host-side gotchas, both one-time and both silent-failing:
+  - **Microphone permission.** The recorder is `ffmpeg -f avfoundation`; the terminal/app running it needs Privacy & Security → Microphone. Without it macOS returns *digital silence* (a wav whose `volumedetect` mean/max is ~-91 dB) — the `say` still plays, so it *sounds* fine while capturing nothing. Verify capture with `ffmpeg -i out.wav -af volumedetect -f null -` before trusting a transcript.
+  - **Pick the built-in mic, not Continuity.** `ffmpeg -f avfoundation -list_devices true -i ""` often lists the user's iPhone (Continuity) as audio device `:0`; that mic isn't in the room with the test phone. Use the MacBook mic index (`--device 1` here) so it actually hears the phone's speaker.
 - **`appium_screenshot` returns oversized inline base64** (it errors on token size); it also saves a PNG to a temp path in its result — read that file instead of the inline payload.
 - **If you restart the livekit-agent (e.g. to load a patch), the live call's agent is gone** and the phone shows "The agent left the call. End the call and try again." — appium-tap `call.end` then `call.start` for a fresh room. A normal run that isn't restarting services rarely sees this; the pool self-heal watchdog (`livekit_pool_watchdog`, see `dev-docs/TROUBLESHOOTING.md`) only bounces the agent on the WebRTC-timeout failure signature, with an active-call guard.
 
@@ -235,6 +245,7 @@ Use repo-relative or `~`-relative paths in the run plan. Keep brittle scratch in
    ```
 
    200 means the proxy + machine token authenticate for that model; a 403 naming the model is the finding (open finding FT-DISPATCH-012: managed/trial `openbase_cloud` installs should default to a plan-available model, not inherit the personal-login `opus`). If the dispatcher answers turns with a spoken auth/proxy error, this and the netmesh check above are the first two suspects.
+4.7. **Confirm the Mac's coder backend is actually RUNNING before you pair the phone — netmesh reachability is not backend readiness.** A fresh **desktop-app** install brings up only the Electron shell and its control server (`~/.openbase/desktop-control.json`, port 49154); it does **not** start the coder runtime (Django API on 7999, LiveKit, tunneld) until the app is *signed in* and started. The phone's pairing flow only checks that the netmesh resolves the Mac's host and reports "paired and ready" — it does **not** verify the backend answers, so an unsigned-in Mac yields a phone that pairs cleanly, connects a call, and then shows "**Can't reach the Openbase backend**" (its `/api/status/` poll 404s through tunneld's unauth fallback). Before pairing, confirm on the Mac that the backend serves: `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:7999/api/health/` returns 200 and `lsof -nP -iTCP -sTCP:LISTEN | grep -E ':(7999|18080)'` shows listeners — *only* 49154 means the app is idle/not-signed-in. Signing the desktop app into the field-test account is a **human step** (browser OAuth / entering credentials — the agent must not authenticate on the user's behalf); do it, then re-confirm the backend is up. (Open observation: onboarding should probe backend health before declaring "paired and ready," and the "Can't reach backend" banner is indistinguishable from the earlier iOS confusion where the *transport* was healthy but the *backend/auth* was not.)
 
 5. If the mobile target is a physical iPhone, confirm it is visible:
 
