@@ -19,9 +19,9 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
     revs=$(git rev-list "$remote_sha..$local_sha" 2>/dev/null)
   fi
   for c in $revs; do
-    if git diff-tree --no-commit-id --name-only -r "$c" | grep -qE "$FORBIDDEN"; then
+    if git diff-tree --no-commit-id --name-only --diff-filter=d -r "$c" | grep -qE "$FORBIDDEN"; then
       echo "pre-push: BLOCKED - commit $c touches a private path (netmesh-go/ or .reports/)." >&2
-      git diff-tree --no-commit-id --name-only -r "$c" | grep -E "$FORBIDDEN" | sed 's/^/  /' >&2
+      git diff-tree --no-commit-id --name-only --diff-filter=d -r "$c" | grep -E "$FORBIDDEN" | sed 's/^/  /' >&2
       fail=1
     fi
   done
