@@ -14,6 +14,7 @@
     }
   },
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
     "build": "pnpm --recursive --if-present build",
     "test": "pnpm --recursive --if-present test",
     "check:public-hygiene": "node scripts/check-public-hygiene.mjs",

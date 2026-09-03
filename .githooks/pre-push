@@ -1,0 +1,33 @@
+#!/bin/sh
+# Block pushes that would put private material into this public repository's
+# history. Tip-level checks (check-public-hygiene.mjs) miss content that was
+# committed and later removed; this checks every commit in the pushed range.
+#
+# Installed via `git config core.hooksPath .githooks` (run by `pnpm install`
+# through the package.json "prepare" script).
+
+FORBIDDEN='^(netmesh-go|\.reports)/'
+ZERO=0000000000000000000000000000000000000000
+
+fail=0
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+  [ "$local_sha" = "$ZERO" ] && continue # branch deletion
+  if [ "$remote_sha" = "$ZERO" ]; then
+    # New branch: check commits not already on any remote-tracking ref.
+    revs=$(git rev-list "$local_sha" --not --remotes 2>/dev/null)
+  else
+    revs=$(git rev-list "$remote_sha..$local_sha" 2>/dev/null)
+  fi
+  for c in $revs; do
+    if git diff-tree --no-commit-id --name-only -r "$c" | grep -qE "$FORBIDDEN"; then
+      echo "pre-push: BLOCKED - commit $c touches a private path (netmesh-go/ or .reports/)." >&2
+      git diff-tree --no-commit-id --name-only -r "$c" | grep -E "$FORBIDDEN" | sed 's/^/  /' >&2
+      fail=1
+    fi
+  done
+done
+
+if [ "$fail" = 1 ]; then
+  echo "Remove these paths from the commits (rebase/amend) before pushing to this public repo." >&2
+fi
+exit $fail
