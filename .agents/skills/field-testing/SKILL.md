@@ -135,6 +135,52 @@ A from-scratch run stalls here if it just speaks and reads logs. The concrete me
 
 Treat speaker-prompt audio as a real but lossy dependency. Do not put exact paths, filenames, people's names, or acceptance criteria into spoken audio. Put brittle details in a prepared `briefing.md` file and make the spoken prompt a short natural pointer, e.g. "In the home folder, open the folder named openbase field test and follow the briefing markdown file." Do not use meta-instructions like "the real instruction starts after this sentence." If the phone display dims or locks during a long run, pause and ask the user to keep the phone awake or set Auto-Lock to Never.
 
+## Driving the desktop onboarding in the Tart VM (verified 2026-09-04)
+
+The macOS desktop onboarding is fully agent-drivable over SSH-forwarded CDP — no
+Tart-window typing. Relaunch the installed app with a debug port and drive it by
+button text with the `install-tests/electron-macos` host driver:
+
+```bash
+cd install-tests/electron-macos
+# the installed app is /Applications/Openbase.app (NOT "Openbase Coder.app" —
+# pass the path explicitly or app-cdp fails on CFBundleExecutable)
+./guest-automate.sh app-cdp <clone> "/Applications/Openbase.app" &   # tunnels CDP :9222
+D() { node driver/host-drive.mjs --cdp http://127.0.0.1:9222 "$@"; }   # (inline, not a var, in zsh)
+D snapshot            # lists buttons; D text dumps body innerText; D shot x.png screenshots
+```
+
+`click` matches `getByRole("button", {name: RegExp(target,'i')})`, so the target
+is a **regex** — pick a clean unique substring, never one with `()`/`—` (e.g.
+`recommended`, `^No$`, `I understand, run setup`). The clickthrough that worked:
+Overview `Let's get you set up` → Prerequisites: click `recommended` (Openbase
+VPN), `Check prerequisites` → Setup: answer `^No$` (no existing Codex/Claude CLI
+to import), `Run setup`, then the confirm dialog `I understand, run setup` → poll
+`curl 127.0.0.1:7999/api/health/` until 200 (setup installs the 5 launchd
+services and binds 7999; ~60–90 s) → `^Continue$` → Agent-sign-in and Voice
+auto-pass → **Sign in** step (`Run login`) opens browser OAuth; drive it with
+`safari-tunnel` + `host-drive.mjs --wd`, verifying the origin is
+`app-staging.openbase.cloud` before filling the field-test creds. The setup
+command it runs is `openbase-coder setup --backend openbase-cloud
+--audio-provider openbase-cloud --tailnet-provider netmesh` (Cloud audio, as
+required).
+
+**The one un-SSH-able step — the Openbase VPN background-item consent.** Choosing
+Openbase VPN registers the `cloud.openbase.netmesh.helper` daemon via
+SMAppService; until it is approved (System Settings → General → Login Items &
+Extensions → **Allow in the Background**) `sfltool dumpbtm` shows NetmeshHelper
+`disallowed`, the companion can't hold the tailnet (node flaps offline), and the
+onboarding's `Run login` stays gated. This consent CANNOT be scripted over SSH
+(`launchctl asuser`/osascript GUI scripting fails `Could not switch to audit
+session … Operation not permitted`) and CANNOT be forced with sudo (the daemon
+uses a bundle-relative `BundleProgram`, so a manual `launchctl bootstrap` fails
+`5: Input/output error`; the BTM db is SIP-protected). The supported automation
+is **Computer Use clicking the Tart window** — which needs the Computer Use
+plugin attached to the session (console → Settings → Coding backend (Claude Code)
+→ Computer Use; if `mcp__(openbase-)computer-use__*` tools aren't present it's
+off). TODO: bake this approval into the SIP golden once, so future clones skip
+it entirely.
+
 ## Field-Test Mobile App Variants
 
 Always build, install, and launch the platform's dedicated field-test variant. The normal Openbase app must remain installed, signed in, and otherwise untouched so the user can continue using it while the field test runs.
