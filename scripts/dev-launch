@@ -150,6 +150,43 @@ if [ "$LAUNCH_ELECTRON" = true ]; then
     echo "Building the dashboard renderer…"
     pnpm --dir "$DESKTOP_DIR" build
   fi
-  echo "Launching Electron in developer dashboard-only mode (setup is disabled)."
-  exec pnpm --dir "$DESKTOP_DIR" start
+  # Maintain a thin launcher bundle in /Applications so the dashboard is
+  # Spotlight-launchable with the proper name and icon. It contains no
+  # runtime: its executable execs the workspace Electron, so the single
+  # source of truth stays the checkout. A real packaged install is never
+  # replaced unless explicitly requested.
+  APP_DIR="/Applications/Openbase.app"
+  MARKER="$APP_DIR/Contents/Resources/.openbase-dev-launcher"
+  if [ -e "$APP_DIR" ] && [ ! -f "$MARKER" ] && [ "${OPENBASE_DEV_DASHBOARD_REPLACE_APP:-0}" != "1" ]; then
+    echo "A packaged app already occupies $APP_DIR; launching the dashboard directly."
+    echo "(Set OPENBASE_DEV_DASHBOARD_REPLACE_APP=1 to replace it with the dev launcher.)"
+    echo "Launching Electron in developer dashboard-only mode (setup is disabled)."
+    exec pnpm --dir "$DESKTOP_DIR" start
+  fi
+  rm -rf "$APP_DIR"
+  mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
+  cp "$DESKTOP_DIR/assets/openbase-coder-icon.icns" "$APP_DIR/Contents/Resources/openbase.icns"
+  cat > "$APP_DIR/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleName</key><string>Openbase</string>
+  <key>CFBundleDisplayName</key><string>Openbase</string>
+  <key>CFBundleIdentifier</key><string>cloud.openbase.coder.dev-dashboard</string>
+  <key>CFBundleExecutable</key><string>Openbase</string>
+  <key>CFBundleIconFile</key><string>openbase</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>dev</string>
+</dict></plist>
+PLIST
+  cat > "$APP_DIR/Contents/MacOS/Openbase" <<LAUNCH
+#!/bin/bash
+export OPENBASE_DESKTOP_DEV_DASHBOARD_ONLY=1
+exec "$DESKTOP_DIR/node_modules/.bin/electron" "$DESKTOP_DIR"
+LAUNCH
+  chmod +x "$APP_DIR/Contents/MacOS/Openbase"
+  touch "$MARKER"
+  codesign --force --sign - "$APP_DIR" >/dev/null 2>&1 || true
+  echo "Launching the Openbase dev dashboard (setup is disabled)."
+  exec open "$APP_DIR"
 fi
