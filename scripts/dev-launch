@@ -182,16 +182,9 @@ PLIST
   cat > "$APP_DIR/Contents/MacOS/Openbase" <<LAUNCH
 #!/bin/bash
 export OPENBASE_DESKTOP_DEV_DASHBOARD_ONLY=1
-# Bring the Swift status menu-bar UI along when a build exists (internal
-# install set); public checkouts without it just get the dashboard.
-for MENU_BAR_APP in \
-  "$ROOT_DIR/netmesh-macos/DerivedData/Build/Products/Release/OpenbaseNetmesh.app" \
-  "$ROOT_DIR/netmesh-macos/DerivedData/Build/Products/Debug/OpenbaseNetmesh.app"; do
-  if [ -d "\$MENU_BAR_APP" ]; then
-    pgrep -f "Products/(Debug|Release)/OpenbaseNetmesh.app" >/dev/null 2>&1 || open -g "\$MENU_BAR_APP"
-    break
-  fi
-done
+# The Electron main process itself ensures the Swift status menu-bar UI is
+# running (ensureDevMenuBarApp in desktop/electron/main.cjs), so the launcher
+# only needs to start Electron.
 exec "$DESKTOP_DIR/node_modules/.bin/electron" "$DESKTOP_DIR"
 LAUNCH
   chmod +x "$APP_DIR/Contents/MacOS/Openbase"
