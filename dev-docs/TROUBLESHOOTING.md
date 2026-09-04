@@ -211,6 +211,26 @@ rm ~/.openbase/bin/livekit-server
 
 Also check the livekit-agent: while the server was down it may have exhausted its reconnect attempts ("failed to connect to livekit, retrying" then "Error in _connection_task" in `livekit-agent.log`) and, on installs predating cli `6dd3386`, it then lingers forever without re-registering — restart it. Newer installs exit and relaunch via the worker watchdog automatically.
 
+## Everything That Asks The Netmesh Helper Hangs (Helper Crash-Loops With EX_CONFIG)
+
+### Symptoms Seen
+
+`netmesh-ctl status` hangs indefinitely instead of erroring; the console shows the critical warning "This device's registration has no Tailscale identity"; `livekit-server.log` fills with `LIVEKIT_NODE_IP is required for Tailscale LiveKit signaling and media` and the service crash-loops (no listener on 7880, iOS calls can't connect); `openbase-coder setup` reports "The netmesh companion did not become ready: timed out" and `serve-set`/`status` netmesh-ctl invocations time out. Meanwhile the VPN data plane still works — the previously started root `tailscaled` keeps forwarding, so tailnet ping/SSH succeed, which makes the control-plane hang easy to misread.
+
+### Diagnosis
+
+```sh
+launchctl print system/cloud.openbase.netmesh.helper | grep -E 'state|last exit|runs'
+```
+
+The tell is `last exit code = 78: EX_CONFIG` with a climbing `runs` count and `state = spawn scheduled`: launchd cannot spawn the registered SMAppService helper, typically because the `OpenbaseNetmeshCompanion.app` bundle it points into (`desktop/companion-build/`) was replaced or re-signed underneath the registration (e.g. by a concurrent desktop/companion rebuild). launchd keeps the Mach endpoint alive while spawns fail, so every XPC client — `netmesh-ctl`, the companion, and `tailscale_ip()` (LiveKit's node-IP lookup) — blocks forever instead of failing fast. A running `livekit-server` survives (it resolved its IP at startup); any restart while the helper is wedged puts it into the crash loop above.
+
+`helper_launchd_health()` in `openbase_coder_cli/services/netmesh_companion.py` automates this probe, and `openbase-coder setup` runs it before the services phase so a wedged helper fails setup loudly instead of silently taking LiveKit down.
+
+### Fix
+
+Re-register the helper against the current bundle once whatever was rebuilding the companion has finished: open the Openbase desktop app (its companion manager replaces the helper), or drive the companion's `/replace-helper` control path. Then confirm `launchctl print system/cloud.openbase.netmesh.helper` shows `state = running`, and restart `livekit-server` + `livekit-agent` if they were crash-looping. If LiveKit must come back before the helper can be fixed, pin `LIVEKIT_NODE_IP=<tailnet IPv4>` in `~/.openbase/.env` as a stopgap — and remove the pin afterwards (a pinned IP goes stale if the transport changes).
+
 ## Dispatcher Amnesia ("I didn't start that agent") On The Claude Backend
 
 ### Symptom

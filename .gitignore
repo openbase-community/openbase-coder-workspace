@@ -67,3 +67,5 @@ install-tests/electron-macos/last-result.json
 !.claude/skills/**
 !.agents/skills/
 !.agents/skills/**
+/netmesh-macos/
+/netmesh-macos
