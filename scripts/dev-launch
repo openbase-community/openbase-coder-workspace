@@ -188,12 +188,11 @@ PLIST
 export OPENBASE_DESKTOP_DEV_DASHBOARD_ONLY=1
 # The Electron main process itself ensures the Swift status menu-bar UI is
 # running (ensureDevMenuBarApp in desktop/electron/main.cjs), so the launcher
-# only needs to start Electron. Spawn it detached and exit so exactly one Dock
-# icon (Electron's) ever exists; a second launch defers to the running
-# instance via Electron's single-instance lock.
-"$DESKTOP_DIR/node_modules/.bin/electron" "$DESKTOP_DIR" >/dev/null 2>&1 &
-disown
-exit 0
+# only needs to start Electron. It must exec (stay the app process): if the
+# launcher exits, RunningBoard tears down the coalition and kills a detached
+# child seconds after boot. LSUIElement above keeps this stub bounce-free;
+# Electron provides the one real Dock icon.
+exec "$DESKTOP_DIR/node_modules/.bin/electron" "$DESKTOP_DIR"
 LAUNCH
   chmod +x "$APP_DIR/Contents/MacOS/Openbase"
   touch "$MARKER"
