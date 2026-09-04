@@ -1,0 +1,33 @@
+name: Public hygiene
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The script verifies the pre-push guard is installed locally; satisfy
+      # that in CI so the tracked-path checks run.
+      - name: Install hooks path
+        run: git config core.hooksPath .githooks
+
+      - name: Tip checks (tracked private paths)
+        run: node scripts/check-public-hygiene.mjs
+
+      # The pre-push hook guards pushes from configured clones; this catches
+      # anything that slipped through (unhooked clones, web edits, force
+      # pushes) anywhere in the branch's history.
+      - name: No private paths in branch history
+        run: |
+          hits=$(git log --name-only --diff-filter=d --format= | grep -E '^(netmesh-go|\.reports)/' | sort -u || true)
+          if [ -n "$hits" ]; then
+            echo "Private paths present in this branch's history:" >&2
+            echo "$hits" >&2
+            exit 1
+          fi

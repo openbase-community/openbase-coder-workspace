@@ -175,6 +175,18 @@ Only `super-agents` publishes to PyPI (on tag pushes via GitHub Actions **truste
 
 Gotcha (super-agents): tags created *by* a workflow (via `GITHUB_TOKEN`) do not trigger `publish-pypi.yml` — GitHub suppresses token-initiated events. Push tags directly to publish to PyPI.
 
+Current state (2026-09-04): PyPI holds `super-agents` 0.1.13 while the repo is
+at 0.1.14, and the planned rename to `superagents` is **postponed
+indefinitely** (the name is blocked by PyPI's similarity check; a support
+request is required and has not been prioritized — do not wait on it or
+reference the new name in code). Consequence: the internal release chain is
+unaffected (release packages build super-agents from the sibling checkout,
+never PyPI), but the **standalone develop-channel install is broken** — it
+resolves the cli's `super-agents[claude]>=0.1.14` floor from PyPI, which
+cannot be satisfied. Unblock by either publishing 0.1.14 under the existing
+`super-agents` name, or teaching that install path to source super-agents
+from git like every other channel.
+
 From-source version integrity: staging tags end in `.dev0` because setuptools-scm/hatch-vcs hard-fails computing a version for any commit past a `.devN` (N != 0) tag. If a from-source cli build fails with "choosing custom numbers for the `.devX` distance is not supported", a retired timestamp-style dev tag (e.g. `v0.31.0.dev20260812215118`) is still in that clone — delete it locally (`git tag -d <tag>`) or refetch with `git fetch --prune-tags`.
 
 ## Invariants checklist for changes in this area
