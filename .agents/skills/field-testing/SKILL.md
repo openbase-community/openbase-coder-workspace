@@ -178,8 +178,13 @@ uses a bundle-relative `BundleProgram`, so a manual `launchctl bootstrap` fails
 is **Computer Use clicking the Tart window** — which needs the Computer Use
 plugin attached to the session (console → Settings → Coding backend (Claude Code)
 → Computer Use; if `mcp__(openbase-)computer-use__*` tools aren't present it's
-off). TODO: bake this approval into the SIP golden once, so future clones skip
-it entirely.
+off). This consent is a **real user-facing part of setup** — approve it fresh
+each run via Computer Use, and record whether onboarding/docs disclosed it before
+macOS blocked progress. Do NOT pre-bake this approval into the golden: that would
+hide the exact OS-prerequisite friction the field test exists to surface. (SIP
+itself is different — it is on by default for real users, so a SIP-on golden is
+faithful; this VPN background-item consent is a per-run setup step, not baseline
+image state.)
 
 ## Field-Test Mobile App Variants
 
