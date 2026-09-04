@@ -177,6 +177,10 @@ if [ "$LAUNCH_ELECTRON" = true ]; then
   <key>CFBundleIconFile</key><string>openbase</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>dev</string>
+  <!-- The launcher is a stub: Electron provides the real Dock presence.
+       Without this, the stub's own Dock icon bounces forever because its
+       process never finishes launching as this bundle. -->
+  <key>LSUIElement</key><true/>
 </dict></plist>
 PLIST
   cat > "$APP_DIR/Contents/MacOS/Openbase" <<LAUNCH
@@ -184,8 +188,12 @@ PLIST
 export OPENBASE_DESKTOP_DEV_DASHBOARD_ONLY=1
 # The Electron main process itself ensures the Swift status menu-bar UI is
 # running (ensureDevMenuBarApp in desktop/electron/main.cjs), so the launcher
-# only needs to start Electron.
-exec "$DESKTOP_DIR/node_modules/.bin/electron" "$DESKTOP_DIR"
+# only needs to start Electron. Spawn it detached and exit so exactly one Dock
+# icon (Electron's) ever exists; a second launch defers to the running
+# instance via Electron's single-instance lock.
+"$DESKTOP_DIR/node_modules/.bin/electron" "$DESKTOP_DIR" >/dev/null 2>&1 &
+disown
+exit 0
 LAUNCH
   chmod +x "$APP_DIR/Contents/MacOS/Openbase"
   touch "$MARKER"
