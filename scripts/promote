@@ -289,8 +289,21 @@ for repo in "${REPOS[@]}"; do
         continue
     fi
     if ! git -C "$dir" merge-base --is-ancestor "$to_sha" "$from_sha"; then
-        PLAN_REPO+=("$label"); PLAN_ACTION+=(FAIL); PLAN_DETAIL+=("diverged — cannot fast-forward")
-        FAILED=1
+        # Linear-history targets (staging/main reject merge commits) can never
+        # fast-forward once the source branch carries merges. When the trees
+        # already match, a prior exact-tree promote made the branches
+        # content-even; otherwise promote by exact-tree commit (single-parent
+        # child of TO carrying FROM's tree) — the standing convention.
+        if [[ "$(git -C "$dir" rev-parse "${from_sha}^{tree}")" == "$(git -C "$dir" rev-parse "${to_sha}^{tree}")" ]]; then
+            PLAN_REPO+=("$label"); PLAN_ACTION+=(skip); PLAN_DETAIL+=("diverged but trees match — content-even")
+            continue
+        fi
+        if ! check_branch_refs "$dir" "$from_sha"; then
+            PLAN_REPO+=("$label"); PLAN_ACTION+=(FAIL); PLAN_DETAIL+=("pins a sibling repo to a less-stable branch ref (lines above) — fix the pin before promoting to ${TO}")
+            FAILED=1
+            continue
+        fi
+        PLAN_REPO+=("$label"); PLAN_ACTION+=(tree); PLAN_DETAIL+=("exact-tree promote: $(git -C "$dir" log --oneline -1 "$from_sha")")
         continue
     fi
     if ! check_branch_refs "$dir" "$from_sha"; then
@@ -305,7 +318,7 @@ done
 PUSH_COUNT=0
 for i in "${!PLAN_REPO[@]}"; do
     printf '  %-22s %-5s %s\n' "${PLAN_REPO[$i]}" "${PLAN_ACTION[$i]}" "${PLAN_DETAIL[$i]}"
-    [[ "${PLAN_ACTION[$i]}" == "push" ]] && PUSH_COUNT=$((PUSH_COUNT + 1))
+    [[ "${PLAN_ACTION[$i]}" == "push" || "${PLAN_ACTION[$i]}" == "tree" ]] && PUSH_COUNT=$((PUSH_COUNT + 1))
 done
 
 if [[ "$FAILED" == "1" ]]; then
@@ -333,12 +346,20 @@ if [[ "$ASSUME_YES" != "1" ]]; then
 fi
 
 for i in "${!PLAN_REPO[@]}"; do
-    [[ "${PLAN_ACTION[$i]}" != "push" ]] && continue
+    [[ "${PLAN_ACTION[$i]}" != "push" && "${PLAN_ACTION[$i]}" != "tree" ]] && continue
     label="${PLAN_REPO[$i]}"
     repo="${REPOS[$i]}"
     dir="${ROOT_DIR}/${repo}"
-    echo "Pushing ${label}: origin/${FROM} -> ${TO}"
-    git -C "$dir" push origin "origin/${FROM}:refs/heads/${TO}"
+    if [[ "${PLAN_ACTION[$i]}" == "tree" ]]; then
+        from_sha="$(git -C "$dir" rev-parse "origin/${FROM}")"
+        to_sha="$(git -C "$dir" rev-parse "origin/${TO}")"
+        new_commit="$(git -C "$dir" commit-tree "${from_sha}^{tree}" -p "$to_sha" -m "Promote ${FROM} tree to ${TO} (exact-tree)")"
+        echo "Pushing ${label}: exact-tree ${new_commit} (${FROM} tree) -> ${TO}"
+        git -C "$dir" push origin "${new_commit}:refs/heads/${TO}"
+    else
+        echo "Pushing ${label}: origin/${FROM} -> ${TO}"
+        git -C "$dir" push origin "origin/${FROM}:refs/heads/${TO}"
+    fi
     [[ "$repo" == "android" ]] && ANDROID_PROMOTED=1
     # Keep the local TO ref current; best-effort (a checked-out TO in another
     # worktree, or a dirty tree, just leaves the local ref behind).
