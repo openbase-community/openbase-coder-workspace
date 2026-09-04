@@ -183,6 +183,20 @@ Connected to LiveKit room
 dispatch_timing stage=agent_session_start_complete
 ```
 
+## Call Goes Silent Mid-Conversation, User Mic Shows Muted (Intended Mute, Slow Backend Turn)
+
+### Symptoms Seen
+
+The user speaks, hears nothing back for a long stretch, and the server log shows the phone sent `mute: {muted: true}` a few seconds after they finished talking; `livekit-agent.log` shows `voice_delivery_utterance_accepted` and `tts_stream_start` with no `tts_stream_flush`/`tts_stream_first_audio` following, plus `AssemblyAI no messages received for Ns` warnings while the mic is muted.
+
+### This Mute Is Intended — Do Not Report It As A Bug
+
+The client muting its microphone here is the designed voice-delivery flow, not a stuck state: after the user goes quiet and their utterance is accepted, the agent emits `safe_to_mute_user` (see the voice lifecycle packet entry in `GLOSSARY.md` and the `voice_delivery.py` module docstring), the client mutes, and the mic reopens on `safe_to_unmute` after the agent's spoken reply. A slow coding-backend turn stretches that muted window for the turn's full duration — 2026-09-04 field example: a wedged first model call took 148s, the mic stayed muted throughout, then the reply played and the mic reopened correctly. Confirmed intended behavior; do not add unmute watchdogs or "fix" the sustained mute.
+
+### What To Actually Investigate
+
+The delay itself. Read the thread's rollout under `~/.codex/sessions/` (or `super_agents_progress` for the turn) and compare `task_started` → first `AgentMessage` timestamps. A single multi-minute gap with no tool calls or retries, followed by fast subsequent turns, is a stalled model API request (seen after the app-server sits idle for hours — dead keep-alive socket signature), not a voice-pipeline problem: once text arrives, TTS flush→first-audio runs in under a second.
+
 ## livekit-server Crash-Loops With No Log Output (Code Signature Invalid)
 
 ### Symptoms Seen
