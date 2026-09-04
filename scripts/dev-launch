@@ -135,6 +135,16 @@ if [ "$LAUNCH_ELECTRON" = true ]; then
   # process: no dev server, no file watchers. Rebuild only when the renderer
   # sources are newer than the last build.
   DESKTOP_DIR="$ROOT_DIR/desktop"
+  # Unpackaged runs read the menu-bar app name from Electron's own bundle
+  # before any of our code executes; brand the dev bundle once per install.
+  ELECTRON_PLIST="$DESKTOP_DIR/node_modules/electron/dist/Electron.app/Contents/Info.plist"
+  if [ -f "$ELECTRON_PLIST" ] && [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$ELECTRON_PLIST" 2>/dev/null)" != "Openbase" ]; then
+    /usr/libexec/PlistBuddy -c 'Set :CFBundleName Openbase' "$ELECTRON_PLIST"
+    /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName Openbase' "$ELECTRON_PLIST" 2>/dev/null || \
+      /usr/libexec/PlistBuddy -c 'Add :CFBundleDisplayName string Openbase' "$ELECTRON_PLIST"
+    codesign --force --sign - "$DESKTOP_DIR/node_modules/electron/dist/Electron.app" >/dev/null 2>&1 || true
+    echo "Branded the dev Electron bundle as Openbase."
+  fi
   DIST_INDEX="$DESKTOP_DIR/dist/index.html"
   if [ ! -f "$DIST_INDEX" ] || [ -n "$(find "$DESKTOP_DIR/src" "$DESKTOP_DIR/index.html" "$DESKTOP_DIR/vite.config"* -newer "$DIST_INDEX" -print -quit 2>/dev/null)" ]; then
     echo "Building the dashboard renderer…"
