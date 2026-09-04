@@ -183,16 +183,31 @@ if [ "$LAUNCH_ELECTRON" = true ]; then
   <key>LSUIElement</key><true/>
 </dict></plist>
 PLIST
+  ELECTRON_APP="$(cd "$DESKTOP_DIR/node_modules/electron/dist/Electron.app" && pwd -P)"
   cat > "$APP_DIR/Contents/MacOS/Openbase" <<LAUNCH
 #!/bin/bash
-export OPENBASE_DESKTOP_DEV_DASHBOARD_ONLY=1
-# The Electron main process itself ensures the Swift status menu-bar UI is
-# running (ensureDevMenuBarApp in desktop/electron/main.cjs), so the launcher
-# only needs to start Electron. It must exec (stay the app process): if the
-# launcher exits, RunningBoard tears down the coalition and kills a detached
-# child seconds after boot. LSUIElement above keeps this stub bounce-free;
-# Electron provides the one real Dock icon.
-exec "$DESKTOP_DIR/node_modules/.bin/electron" "$DESKTOP_DIR"
+# Run-and-exit launcher. Staying alive is a trap either way: exec'ing Electron
+# keeps this LSUIElement identity, which swallows Finder/Spotlight reopens;
+# leaving a plain child behind gets it reaped with the stub's coalition by
+# RunningBoard. So each open either focuses the live dashboard through its
+# control server, or starts Electron via LaunchServices as its own instance
+# (own coalition), then exits. The Electron main process ensures the Swift
+# status menu-bar UI (ensureDevMenuBarApp in desktop/electron/main.cjs).
+CONTROL_FILE="\$HOME/.openbase/desktop-control.json"
+if [ -f "\$CONTROL_FILE" ]; then
+  PORT=\$(/usr/bin/python3 -c "import json;print(json.load(open('\$CONTROL_FILE'))['port'])" 2>/dev/null)
+  SECRET=\$(/usr/bin/python3 -c "import json;print(json.load(open('\$CONTROL_FILE'))['secret'])" 2>/dev/null)
+  if [ -n "\$PORT" ] && [ -n "\$SECRET" ] \\
+    && curl -s -m 2 -X POST -H "x-openbase-desktop-secret: \$SECRET" \\
+         "http://127.0.0.1:\$PORT/focus" | grep -q '"ok":true'; then
+    exit 0
+  fi
+fi
+# Plain child, not exec: exec'ing open makes it inherit this stub's
+# LaunchServices identity, leaving a stale "running" record that swallows
+# subsequent double-clicks for minutes.
+open -n -a "$ELECTRON_APP" --args "$DESKTOP_DIR" --openbase-dev-dashboard
+exit 0
 LAUNCH
   chmod +x "$APP_DIR/Contents/MacOS/Openbase"
   touch "$MARKER"
