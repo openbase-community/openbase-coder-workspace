@@ -10,10 +10,13 @@ LAUNCH_MENU_BAR=false
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/dev-launch [--all | --electron | --menu-bar]
+Usage: ./scripts/dev-launch [--all | --electron | --electron-dev | --menu-bar]
 
 Launch optional visual surfaces for an existing development installation.
 Electron runs dashboard/status-only: it cannot invoke the bundled setup flow.
+--electron builds the renderer once and runs Electron alone (no vite dev
+server); --electron-dev runs the vite dev server + HMR for working on the
+dashboard UI itself.
 EOF
 }
 
@@ -30,6 +33,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --electron)
       LAUNCH_ELECTRON=true
+      ;;
+    --electron-dev)
+      LAUNCH_ELECTRON=true
+      ELECTRON_DEV_SERVER=true
       ;;
     --menu-bar)
       LAUNCH_MENU_BAR=true
@@ -84,7 +91,12 @@ launch_menu_bar() {
     fi
   done
 
-  local project_dir="$ROOT_DIR/desktop/netmesh-macos"
+  local project_dir="$ROOT_DIR/netmesh-macos"
+  if [ ! -d "$project_dir" ]; then
+    echo "The netmesh-macos repo is not present (private, internal install set)." >&2
+    echo "Contributors with access can run: multi sync --install-set internal" >&2
+    exit 1
+  fi
   local vendor_dir="$project_dir/vendor/tailscale-bin"
   if [ ! -x "$vendor_dir/tailscaled" ] || [ ! -x "$vendor_dir/tailscale" ]; then
     if ! command -v go >/dev/null 2>&1; then
@@ -114,7 +126,20 @@ if [ "$LAUNCH_MENU_BAR" = true ]; then
 fi
 
 if [ "$LAUNCH_ELECTRON" = true ]; then
-  echo "Launching Electron in developer dashboard-only mode (setup is disabled)."
   export OPENBASE_DESKTOP_DEV_DASHBOARD_ONLY=1
-  exec pnpm --dir "$ROOT_DIR/desktop" dev
+  if [ "${ELECTRON_DEV_SERVER:-false}" = true ]; then
+    echo "Launching Electron with the vite dev server (dashboard-UI development)."
+    exec pnpm --dir "$ROOT_DIR/desktop" dev
+  fi
+  # Dashboard consumers get a one-shot renderer build and a lone Electron
+  # process: no dev server, no file watchers. Rebuild only when the renderer
+  # sources are newer than the last build.
+  DESKTOP_DIR="$ROOT_DIR/desktop"
+  DIST_INDEX="$DESKTOP_DIR/dist/index.html"
+  if [ ! -f "$DIST_INDEX" ] || [ -n "$(find "$DESKTOP_DIR/src" "$DESKTOP_DIR/index.html" "$DESKTOP_DIR/vite.config"* -newer "$DIST_INDEX" -print -quit 2>/dev/null)" ]; then
+    echo "Building the dashboard renderer…"
+    pnpm --dir "$DESKTOP_DIR" build
+  fi
+  echo "Launching Electron in developer dashboard-only mode (setup is disabled)."
+  exec pnpm --dir "$DESKTOP_DIR" start
 fi
