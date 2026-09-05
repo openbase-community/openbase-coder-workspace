@@ -32,9 +32,76 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 # Dependency order: providers before consumers; workspace root last.
-REPOS=(super-agents skills coder-react console cli desktop allauth-client-swift openbase-agent-ui-swift ios allauth-client-kotlin android .)
+REPOS=(super-agents skills coder-react console cli desktop allauth-client-swift openbase-agent-ui-swift ios allauth-client-kotlin openbase-agent-ui-kotlin android .)
 
-EXTERNAL_NOTE="multi-react, boilersync-react, and netmesh-go are external trunk-based projects pinned to main (multi.json fixedBranch; CI checks them out at main)"
+# --- multi.json coverage gate + pinned-repo verification --------------------
+# Everything in multi.json is part of a deploy even when it never receives a
+# FROM->TO push. Unpinned repos must appear in REPOS (ordering is curated, so
+# a new repo forces a deliberate placement here), and fixedBranch repos are
+# verified below so unpushed trunk work cannot silently miss a release bake.
+MULTI_UNPINNED=()
+MULTI_PINNED=()
+while IFS=: read -r mj_name mj_branch; do
+    if [[ -z "$mj_branch" ]]; then
+        MULTI_UNPINNED+=("$mj_name")
+    else
+        MULTI_PINNED+=("${mj_name}:${mj_branch}")
+    fi
+done < <(python3 -c '
+import json, sys
+for repo in json.load(open(sys.argv[1]))["repos"]:
+    print(f"{repo["name"]}:{repo.get("fixedBranch", "")}")
+' "${ROOT_DIR}/multi.json")
+
+for mj_name in ${MULTI_UNPINNED[@]+"${MULTI_UNPINNED[@]}"}; do
+    mj_found=0
+    for repo in "${REPOS[@]}"; do
+        [[ "$repo" == "$mj_name" ]] && mj_found=1 && break
+    done
+    if [[ "$mj_found" == 0 ]]; then
+        echo "multi.json repo '${mj_name}' is not covered by this script's REPOS list." >&2
+        echo "Add it at a deliberate position in $(basename "$0") — push order matters." >&2
+        exit 1
+    fi
+done
+
+EXTERNAL_NOTE=""
+if [[ ${#MULTI_PINNED[@]} -gt 0 ]]; then
+    EXTERNAL_NOTE="pinned to their multi.json fixedBranch (verified below, never pushed by promote):"
+    for mj_entry in "${MULTI_PINNED[@]}"; do
+        EXTERNAL_NOTE+=" ${mj_entry%%:*}@${mj_entry##*:}"
+    done
+fi
+
+plan_pinned_repos() {
+    local entry name branch label dir local_sha origin_sha dirty detail
+    for entry in ${MULTI_PINNED[@]+"${MULTI_PINNED[@]}"}; do
+        name="${entry%%:*}"; branch="${entry##*:}"
+        label="${name}"
+        dir="${ROOT_DIR}/${name}"
+        if [[ ! -e "${dir}/.git" ]]; then
+            PLAN_REPO+=("$label"); PLAN_ACTION+=(skip)
+            PLAN_DETAIL+=("pinned @${branch}; not checked out here — origin/${branch} ships")
+            continue
+        fi
+        git -C "$dir" fetch origin --quiet "$branch" || true
+        local_sha="$(git -C "$dir" rev-parse --verify --quiet "refs/heads/${branch}" || true)"
+        origin_sha="$(git -C "$dir" rev-parse --verify --quiet "origin/${branch}" || true)"
+        dirty="$(git -C "$dir" status --porcelain 2>/dev/null | grep -cv 'sync-conflict' || true)"
+        if [[ -n "$local_sha" && -n "$origin_sha" ]]             && ! git -C "$dir" merge-base --is-ancestor "$local_sha" "$origin_sha"; then
+            PLAN_REPO+=("$label"); PLAN_ACTION+=(FAIL)
+            PLAN_DETAIL+=("pinned @${branch} has unpushed local commits — the release bakes origin/${branch}; push or drop them")
+            FAILED=1
+            continue
+        fi
+        detail="pinned @${branch}; origin $(git -C "$dir" rev-parse --short "origin/${branch}" 2>/dev/null || echo '?') ships"
+        if [[ "$dirty" != "0" ]]; then
+            detail+=" (local tree dirty — not shipped)"
+        fi
+        PLAN_REPO+=("$label"); PLAN_ACTION+=(skip); PLAN_DETAIL+=("$detail")
+    done
+}
+
 
 # These are the authoritative pre-release gates for production promotions
 # (TO is main/master), unless --skip-checks. Format:
@@ -314,6 +381,8 @@ for repo in "${REPOS[@]}"; do
     count="$(git -C "$dir" rev-list --count "${to_sha}..${from_sha}")"
     PLAN_REPO+=("$label"); PLAN_ACTION+=(push); PLAN_DETAIL+=("${count} commit(s): $(git -C "$dir" log --oneline -1 "$from_sha")")
 done
+
+plan_pinned_repos
 
 PUSH_COUNT=0
 for i in "${!PLAN_REPO[@]}"; do
