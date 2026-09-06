@@ -152,12 +152,15 @@ Options:
                      release, e.g. --exclude desktop while the cli release
                      publishes, then re-run to promote desktop alone.
   -y, --yes          Push without the confirmation prompt.
+  --no-wait-ci       Do not sequence desktop behind the cli auto-release and
+                     do not watch the desktop rebuild (fire-and-forget).
   -h, --help         Show this help text.
 EOF
 }
 
 DRY_RUN=0
 ASSUME_YES=0
+WAIT_CI=1
 SKIP_CHECKS=0
 declare -a EXCLUDE=()
 FROM=""
@@ -174,6 +177,7 @@ while [[ $# -gt 0 ]]; do
             EXCLUDE+=("${_ex[@]}")
             ;;
         -y|--yes) ASSUME_YES=1 ;;
+        --no-wait-ci) WAIT_CI=0 ;;
         -h|--help) usage; exit 0 ;;
         -*) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
         *)
@@ -414,8 +418,14 @@ if [[ "$ASSUME_YES" != "1" ]]; then
     fi
 fi
 
-for i in "${!PLAN_REPO[@]}"; do
-    [[ "${PLAN_ACTION[$i]}" != "push" && "${PLAN_ACTION[$i]}" != "tree" ]] && continue
+repo_slug() {
+    git -C "$1" remote get-url origin \
+        | sed -E 's#^(git@github\.com:|https://github\.com/)##; s#\.git$##'
+}
+
+LAST_PUSHED_SHA=""
+push_plan_index() {
+    local i="$1" label repo dir from_sha to_sha new_commit
     label="${PLAN_REPO[$i]}"
     repo="${REPOS[$i]}"
     dir="${ROOT_DIR}/${repo}"
@@ -425,9 +435,11 @@ for i in "${!PLAN_REPO[@]}"; do
         new_commit="$(git -C "$dir" commit-tree "${from_sha}^{tree}" -p "$to_sha" -m "Promote ${FROM} tree to ${TO} (exact-tree)")"
         echo "Pushing ${label}: exact-tree ${new_commit} (${FROM} tree) -> ${TO}"
         git -C "$dir" push origin "${new_commit}:refs/heads/${TO}"
+        LAST_PUSHED_SHA="$new_commit"
     else
         echo "Pushing ${label}: origin/${FROM} -> ${TO}"
         git -C "$dir" push origin "origin/${FROM}:refs/heads/${TO}"
+        LAST_PUSHED_SHA="$(git -C "$dir" rev-parse "origin/${FROM}")"
     fi
     [[ "$repo" == "android" ]] && ANDROID_PROMOTED=1
     # Keep the local TO ref current; best-effort (a checked-out TO in another
@@ -437,7 +449,126 @@ for i in "${!PLAN_REPO[@]}"; do
     else
         git -C "$dir" fetch origin --quiet "${TO}:${TO}" || true
     fi
+    return 0
+}
+
+# The desktop build downloads the newest CLI release of its channel as the
+# bundled first-install seed, and a fresh install runs its whole setup flow
+# on that seed before any self-update. Pushing desktop before the cli
+# auto-release finishes therefore ships a one-release-stale seed — a real
+# compatibility break whenever the new desktop needs the new CLI contract.
+# So on auto-release branches the desktop push waits for the cli release,
+# and the rebuild is watched to completion with its staged seed verified.
+await_cli_release() { # $1 = pushed cli sha; sets AWAITED_CLI_TAG
+    local slug sha run_id tag manifest_ok want_prerelease
+    slug="$(repo_slug "${ROOT_DIR}/cli")"
+    sha="$1"
+    AWAITED_CLI_TAG=""
+    echo "Waiting for the cli auto-release of ${sha:0:8} on ${TO} ..."
+    run_id=""
+    for _ in $(seq 1 60); do
+        run_id="$(gh run list -R "$slug" --workflow auto-release.yml --branch "$TO" --limit 10 \
+            --json databaseId,headSha -q "[.[] | select(.headSha == \"$sha\")][0].databaseId" 2>/dev/null || true)"
+        [[ -n "$run_id" && "$run_id" != "null" ]] && break
+        sleep 5
+    done
+    if [[ -z "$run_id" || "$run_id" == "null" ]]; then
+        echo "ERROR: no auto-release run appeared for cli@${sha:0:8} on ${TO}." >&2
+        return 1
+    fi
+    echo "  auto-release run ${run_id}: watching ..."
+    if ! gh run watch "$run_id" -R "$slug" --exit-status >/dev/null; then
+        echo "ERROR: cli auto-release run ${run_id} FAILED — desktop push withheld." >&2
+        echo "  Fix or rerun the release, then re-run this promotion (already-even repos skip)." >&2
+        return 1
+    fi
+    # A release only counts once its signed manifest asset is attached.
+    want_prerelease="false"
+    [[ "$TO" == "staging" ]] && want_prerelease="true"
+    for _ in $(seq 1 60); do
+        tag="$(gh release list -R "$slug" --limit 10 --json tagName,isPrerelease \
+            -q "[.[] | select(.isPrerelease == ${want_prerelease})][0].tagName" 2>/dev/null || true)"
+        if [[ -n "$tag" && "$tag" != "null" ]]; then
+            manifest_ok="$(gh release view "$tag" -R "$slug" --json assets \
+                -q '[.assets[].name] | contains(["update-manifest.json"])' 2>/dev/null || echo false)"
+            if [[ "$manifest_ok" == "true" ]]; then
+                AWAITED_CLI_TAG="$tag"
+                echo "  cli release ${tag} is live with its update manifest."
+                return 0
+            fi
+        fi
+        sleep 5
+    done
+    echo "ERROR: the cli release for run ${run_id} never exposed update-manifest.json." >&2
+    return 1
+}
+
+watch_desktop_rebuild() { # $1 = pushed desktop sha, $2 = expected cli tag ('' = report only)
+    local slug sha run_id staged expected
+    slug="$(repo_slug "${ROOT_DIR}/desktop")"
+    sha="$1"
+    expected="${2#v}"
+    echo "Watching the desktop rebuild of ${sha:0:8} on ${TO} ..."
+    run_id=""
+    for _ in $(seq 1 60); do
+        run_id="$(gh run list -R "$slug" --workflow electron-rebuild.yml --branch "$TO" --limit 10 \
+            --json databaseId,headSha -q "[.[] | select(.headSha == \"$sha\")][0].databaseId" 2>/dev/null || true)"
+        [[ -n "$run_id" && "$run_id" != "null" ]] && break
+        sleep 5
+    done
+    if [[ -z "$run_id" || "$run_id" == "null" ]]; then
+        echo "ERROR: no electron-rebuild run appeared for desktop@${sha:0:8} on ${TO}." >&2
+        return 1
+    fi
+    echo "  electron-rebuild run ${run_id}: watching (~20-35 min) ..."
+    if ! gh run watch "$run_id" -R "$slug" --exit-status >/dev/null; then
+        echo "ERROR: desktop rebuild run ${run_id} FAILED; the ${TO} feed was not (fully) updated." >&2
+        echo "  Diagnose: gh run view ${run_id} -R ${slug}" >&2
+        return 1
+    fi
+    staged="$(gh run view "$run_id" -R "$slug" --log 2>/dev/null \
+        | grep -m1 -oE 'Staged Openbase Coder CLI [0-9][^ ]*' | awk '{print $5}' || true)"
+    if [[ -n "$expected" && -n "$staged" && "$staged" != "$expected" ]]; then
+        echo "ERROR: desktop bundled CLI seed ${staged} != released ${expected}." >&2
+        echo "  Re-dispatch: gh workflow run electron-rebuild.yml -R ${slug} --ref ${TO}" >&2
+        return 1
+    fi
+    echo "  desktop rebuild succeeded (bundled CLI seed: ${staged:-unknown})."
+    return 0
+}
+
+DESKTOP_PLANNED=0
+for i in "${!PLAN_REPO[@]}"; do
+    [[ "${PLAN_ACTION[$i]}" != "push" && "${PLAN_ACTION[$i]}" != "tree" ]] && continue
+    [[ "${REPOS[$i]:-}" == "desktop" ]] && DESKTOP_PLANNED=1
 done
+SEQUENCE_CI=0
+if [[ "$WAIT_CI" == "1" && "$DESKTOP_PLANNED" == "1" ]] \
+    && [[ "$TO" == "main" || "$TO" == "master" || "$TO" == "staging" ]]; then
+    SEQUENCE_CI=1
+fi
+
+CLI_PUSHED_SHA=""
+DESKTOP_INDEX=""
+for i in "${!PLAN_REPO[@]}"; do
+    [[ "${PLAN_ACTION[$i]}" != "push" && "${PLAN_ACTION[$i]}" != "tree" ]] && continue
+    if [[ "${REPOS[$i]:-}" == "desktop" && "$SEQUENCE_CI" == "1" ]]; then
+        DESKTOP_INDEX="$i"
+        echo "Deferring desktop: its rebuild must seed the cli release cut by this promotion."
+        continue
+    fi
+    push_plan_index "$i"
+    [[ "${REPOS[$i]:-}" == "cli" ]] && CLI_PUSHED_SHA="$LAST_PUSHED_SHA"
+done
+
+if [[ -n "$DESKTOP_INDEX" ]]; then
+    AWAITED_CLI_TAG=""
+    if [[ -n "$CLI_PUSHED_SHA" ]]; then
+        await_cli_release "$CLI_PUSHED_SHA"
+    fi
+    push_plan_index "$DESKTOP_INDEX"
+    watch_desktop_rebuild "$LAST_PUSHED_SHA" "${AWAITED_CLI_TAG:-}"
+fi
 
 echo "Promoted ${PUSH_COUNT} repo(s) ${FROM} -> ${TO}."
 
