@@ -2221,7 +2221,6 @@ requires-dist = [
     { name = "livekit-plugins-deepgram", specifier = "==1.5.4" },
     { name = "livekit-plugins-noise-cancellation", specifier = ">=0.2.5" },
     { name = "mlx-whisper", marker = "extra == 'local-audio'", specifier = ">=0.4.3" },
-    { name = "multi-workspace", specifier = ">=3.2.3" },
     { name = "multi-workspace", specifier = ">=3.2.18" },
     { name = "numpy", specifier = ">=2.3.0" },
     { name = "psutil", specifier = ">=6.1.0" },
