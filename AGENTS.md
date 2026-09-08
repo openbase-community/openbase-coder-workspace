@@ -19,6 +19,7 @@ The sibling workspace `../openbase-cloud-workspace` contains the cloud product (
 - `skills`: shared agent skills bundled with Openbase Coder
 - `super-agents`: standalone MIT Python MCP server/library for Codex app-server threads, turns, and Super Agents coordination. Keep it usable outside Openbase Coder: generic coordination primitives may live there; Openbase product-domain features belong in Openbase Coder repos or an adapter layer.
 - `netmesh-go`: shared gomobile Tailscale-engine bridge (NetmeshGo) consumed by the iOS packet-tunnel extension and the Android VpnService (private, fixed to `main`, internal install set only)
+- `netmesh-macos`: private macOS netmesh companion, helper, control tool, and pinned Tailscale engine build consumed by desktop internal builds (private, fixed to `main`, internal install set only)
 - `multi-react`: shared React diff viewer used by Multi and Openbase Coder
 - `boilersync-react`: shared React components for BoilerSync workflows
 - `allauth-client-swift` / `allauth-client-kotlin`: SwiftUI / Kotlin clients for Django AllAuth headless authentication
