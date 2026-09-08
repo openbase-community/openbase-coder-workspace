@@ -432,7 +432,16 @@ push_plan_index() {
     if [[ "${PLAN_ACTION[$i]}" == "tree" ]]; then
         from_sha="$(git -C "$dir" rev-parse "origin/${FROM}")"
         to_sha="$(git -C "$dir" rev-parse "origin/${TO}")"
-        new_commit="$(git -C "$dir" commit-tree "${from_sha}^{tree}" -p "$to_sha" -m "Promote ${FROM} tree to ${TO} (exact-tree)")"
+        # PaaS deploy attribution reads the Agent-Thread-Id trailer from the
+        # pushed head commit only, so the synthetic promote commit must carry
+        # it itself. AGENT_SESSION_ID is exported into agent sessions by the
+        # inject-session-id hook; absent (human terminal) means no trailer,
+        # which the server correctly attributes to a human.
+        local msg_args=(-m "Promote ${FROM} tree to ${TO} (exact-tree)")
+        if [[ -n "${AGENT_SESSION_ID:-}" ]]; then
+            msg_args+=(-m "Agent-Thread-Id: ${AGENT_SESSION_ID}")
+        fi
+        new_commit="$(git -C "$dir" commit-tree "${from_sha}^{tree}" -p "$to_sha" "${msg_args[@]}")"
         echo "Pushing ${label}: exact-tree ${new_commit} (${FROM} tree) -> ${TO}"
         git -C "$dir" push origin "${new_commit}:refs/heads/${TO}"
         LAST_PUSHED_SHA="$new_commit"
