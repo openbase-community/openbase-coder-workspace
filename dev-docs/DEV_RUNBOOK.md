@@ -58,6 +58,7 @@ Then pick the surface you're testing:
 ## 5. Iterating
 
 - **cli (Python):** the workspace venv's editable install picks changes up immediately for new invocations; running services need `openbase-coder restart` (or `services restart <name>` — `livekit-agent` for voice-session code, `django-cli` for API/console-serving code).
+- **LiveKit engine:** after pulling a change to `livekit_version.py`, a full `openbase-coder restart` or `openbase-coder restart --service livekit-server` downloads and verifies the pinned engine before scheduling the restart. If preparation fails, services remain running and the command reports the error. Setup also downloads the engine, but warns and permits a fallback if that download fails. Restarting only the agent or launching the developer dashboard does not refresh the engine.
 - **console / coder-react:** `cd console && pnpm run build` — django serves `console/dist` directly, so a rebuild + browser refresh is enough. For hot reload use `pnpm dev` in `console/` (Vite dev server).
 - **desktop:** `./scripts/dev-launch --electron` from the workspace root.
 - **Tests:** `cd cli && uv sync --extra dev && uv run pytest` (the venv lives at the workspace root — uv workspace); `cd super-agents && uv run pytest`; frontend typechecks via `npx tsc -p tsconfig.app.json --noEmit` in `console/` and `desktop/`.

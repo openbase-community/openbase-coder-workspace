@@ -19,7 +19,7 @@ Each component owns its own update; nothing installs into another component.
 Rules that must not regress:
 
 - The CLI package bundled inside the desktop DMG is a **first-install seed only**. After activation, the GitHub release feed is the sole authority; the desktop app triggers CLI updates through the local API (`POST /api/update/apply`), it never installs the CLI itself.
-- **Dev-workspace installs never auto-update.** `self-update` refuses when the CLI is not running from a standalone runtime package; dev checkouts are git-managed.
+- **Dev-workspace installs never auto-update.** `self-update` refuses when the CLI is not running from a standalone runtime package; dev checkouts are git-managed. After a source update, a restart that includes `livekit-server` prepares the checkout's pinned engine before scheduling service restarts. A failed download leaves running services untouched and fails the restart request; packaged installs keep their bundled engine.
 - **Self-update must never depend on the desktop app.** The CLI and its routines service apply updates on their own; the desktop app only *triggers* an update through the local API, it is never required for one to complete (auto-update runs from the routines service with the app closed).
 
 ## Release artifacts and the update manifest
