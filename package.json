@@ -2,17 +2,6 @@
   "name": "openbase-coder-workspace",
   "private": true,
   "packageManager": "pnpm@10.18.0",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "electron"
-    ],
-    "overrides": {
-      "@types/react": "^18.3.3",
-      "@types/react-dom": "^18.3.0",
-      "deepmerge-ts": ">=8.0.0",
-      "nanoid@<3.3.18": "^3.3.18"
-    }
-  },
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
     "build": "pnpm --recursive --if-present build",
