@@ -157,9 +157,9 @@ Options:
   --agent-thread-id ID
                      Stamp synthesized exact-tree commits with this
                      Agent-Thread-Id trailer for deploy attribution. Defaults
-                     to \$AGENT_SESSION_ID (exported by the inject-session-id
-                     hook in Claude Code sessions); agents on backends without
-                     env injection (e.g. Codex) must pass it explicitly.
+                     to \$AGENT_SESSION_ID (Claude Code inject-session-id
+                     hook), then \$CODEX_THREAD_ID (exported natively by
+                     Codex shells). The flag is an explicit override.
   -h, --help         Show this help text.
 EOF
 }
@@ -168,7 +168,7 @@ DRY_RUN=0
 ASSUME_YES=0
 WAIT_CI=1
 SKIP_CHECKS=0
-AGENT_THREAD_ID="${AGENT_SESSION_ID:-}"
+AGENT_THREAD_ID="${AGENT_SESSION_ID:-${CODEX_THREAD_ID:-}}"
 declare -a EXCLUDE=()
 FROM=""
 TO=""
@@ -446,10 +446,11 @@ push_plan_index() {
         to_sha="$(git -C "$dir" rev-parse "origin/${TO}")"
         # PaaS deploy attribution reads the Agent-Thread-Id trailer from the
         # pushed head commit only, so the synthetic promote commit must carry
-        # it itself. Sourced from --agent-thread-id or $AGENT_SESSION_ID (the
-        # inject-session-id hook exports it in Claude Code sessions; Codex
-        # sessions have no env injection and must pass the flag). Absent
-        # (human terminal) means no trailer — correctly attributed to a human.
+        # it itself. Sourced from --agent-thread-id, $AGENT_SESSION_ID (Claude
+        # Code inject-session-id hook), or $CODEX_THREAD_ID (native Codex
+        # shell export) — the same chain the openbase CLI uses for mutation
+        # attribution. Absent (human terminal) means no trailer — correctly
+        # attributed to a human.
         local msg_args=(-m "Promote ${FROM} tree to ${TO} (exact-tree)")
         if [[ -n "$AGENT_THREAD_ID" ]]; then
             msg_args+=(-m "Agent-Thread-Id: ${AGENT_THREAD_ID}")
