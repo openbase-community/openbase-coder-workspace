@@ -127,6 +127,8 @@ Every Openbase-owned state file carries a `schema_version` (all currently 1):
 - `~/.openbase/dispatcher-config.json`
 - `~/.openbase/plugins/plugins.json`
 
+Private service publication additionally uses `published-service-transaction.json` beside the publication registry (`schema_version` 1). It journals the operation, previous registry, exact service target, DNS-release ownership, and helper-planned allowable route hashes before mutation. New CLI versions refuse unknown journal schemas; `service recover` removes an interrupted publication without overwriting unknown VPN routes. The publication registry remains version 5; this journal is independent of installation/update state.
+
 The rules (this is the lesson of the pre-1.0 legacy purge — no silent fallback reads, ever):
 
 - Readers **refuse** files with a `schema_version` greater than they understand ("written by a newer version — update the CLI").
