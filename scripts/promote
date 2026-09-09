@@ -168,7 +168,7 @@ DRY_RUN=0
 ASSUME_YES=0
 WAIT_CI=1
 SKIP_CHECKS=0
-AGENT_THREAD_ID="${AGENT_SESSION_ID:-}"
+AGENT_THREAD_ID="${AGENT_SESSION_ID:-${CODEX_THREAD_ID:-}}"
 declare -a EXCLUDE=()
 FROM=""
 TO=""
@@ -447,10 +447,11 @@ push_plan_index() {
         # PaaS deploy attribution reads the Agent-Thread-Id trailer from the
         # pushed head commit only, so the synthetic promote commit must carry
         # it itself. Sourced from --agent-thread-id or $AGENT_SESSION_ID, the
-        # single vendor-neutral session variable agent runtimes export into
-        # agent shells (Claude Code via the inject-session-id hook, Codex via
-        # super-agents' per-thread shell_environment_policy). Absent (human
-        # terminal) means no trailer — correctly attributed to a human.
+        # vendor-neutral session variable agent runtimes export into agent
+        # shells (Claude Code via the inject-session-id hook, Codex via
+        # super-agents' per-thread shell_environment_policy), with codex's
+        # native $CODEX_THREAD_ID as a backwards-compat fallback. Absent
+        # (human terminal) means no trailer — correctly attributed to a human.
         local msg_args=(-m "Promote ${FROM} tree to ${TO} (exact-tree)")
         if [[ -n "$AGENT_THREAD_ID" ]]; then
             msg_args+=(-m "Agent-Thread-Id: ${AGENT_THREAD_ID}")
