@@ -267,7 +267,7 @@ Before any field-test command, add a concise Markdown plan to the gitignored dai
 - local runtime target inside the VM: `electron-bundled`, `standalone`, or `workspace`;
 - CLI/service details: runtime mode, package version, service status, coding backend, and cloud web backend;
 - exact cloud-target confirmation, normally staging for the dedicated mobile variants;
-- audio path: Cartesia model/voice, host speaker audio, phone mic, and local STT for inbound capture;
+- audio path: product Openbase Cloud TTS/STT, host speaker stimulus, phone mic, and host-side AssemblyAI or MLX transcription for inbound capture;
 - audio-prompt reliability notes: prepared briefing file, minimal spoken pointer, keep-phone-awake / disable Auto-Lock;
 - expected human actions and when `user say` will be used;
 - no-mock statement listing the real systems involved;
