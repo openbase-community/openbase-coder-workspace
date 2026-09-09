@@ -28,6 +28,7 @@ Pick one per deploy and apply it consistently across both workspaces. The comman
 - Both workspaces committed and pushed on the FROM branch you're promoting (usually `develop`); no parallel agent mid-commit in these repos.
 - Run both promotion scripts with their default checks. Do not use `--skip-checks` unless intentionally overriding a diagnosed failure.
 - Run any Cloud-specific tests required by the Cloud workspace before its promotion.
+- **SSH-blocked networks:** some networks block outbound SSH to github.com on ports 22 AND 443 while HTTPS works, which hangs the SSH-remote subrepos (console, allauth-client-swift, multi-react). Run the promote with a per-process, **org-scoped** rewrite — `GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=url.https://github.com/openbase-community/.insteadOf GIT_CONFIG_VALUE_0=git@github.com:openbase-community/ GIT_CONFIG_KEY_1=url.https://github.com/montaguegabe/.insteadOf GIT_CONFIG_VALUE_1=git@github.com:montaguegabe/` — and never a blanket `github.com` rewrite: that leaks into the cli pytest gate the promote runs and fails tests that assert literal `git@github.com:` fixture URLs. Do not rewrite the shared checkouts' remotes.
 
 A coordinated deploy does not require or wait for a PyPI release. If the standalone Super Agents package should also be released, use the PyPI instructions in `dev-docs/AUTO_UPDATE.md` rather than copying those instructions into this runbook.
 
@@ -41,6 +42,8 @@ cd ../openbase-cloud-workspace
 ```
 
 When Cloud API or web inputs change, `scripts/promote` waits for the final PaaS releases and verifies the backend's live ECS rollout before returning. Treat a successful script exit as the Cloud deployment gate; do not duplicate its monitoring procedure here in this skill.
+
+**Known false failure — the release watcher can lose a supersession race.** A multi-repo burst cuts one PaaS release per pushed repo on "Openbase Cloud API", and the platform supersedes them by *creation order*, which does not always match which release actually rolls out. The script's watcher (and `openbase releases wait` on the survivor) can then report "rolled back"/"superseded"/"overtaken" even though the burst deployed fine. Before re-running anything after a non-zero exit where every push already landed: `openbase releases -a "Openbase Cloud API" --json`, find the release whose `commit_sha` is the promoted **api** repo's new main sha, poll it to `succeeded`, and confirm `https://app.openbase.cloud/api/health` returns 200. A "failed" badge left on the app by a losing release clears on the next deploy. (Both false-failure shapes occurred on 2026-09-08.)
 
 ## 2. Promote openbase-coder-workspace → main
 
@@ -58,6 +61,8 @@ Mobile artifacts ride this same promote: the ios push triggers the App Store upl
 ## 3. CLI auto-release
 
 Pushing cli main runs `auto-release.yml` (minor bump by default; `[release patch]`/`[release major]`/`[skip release]` head-commit overrides).
+
+If the release build fails with `ERR_PNPM_OUTDATED_LOCKFILE`, a frontend member repo changed npm deps without regenerating both the root and the pinned release-workspace lockfiles — see the lockfile bullet under "Auto-release from main and staging" in `dev-docs/AUTO_UPDATE.md`.
 
 ```bash
 gh run list --repo openbase-community/openbase --workflow auto-release.yml --limit 1
