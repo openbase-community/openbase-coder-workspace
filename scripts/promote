@@ -154,6 +154,12 @@ Options:
   -y, --yes          Push without the confirmation prompt.
   --no-wait-ci       Do not sequence desktop behind the cli auto-release and
                      do not watch the desktop rebuild (fire-and-forget).
+  --agent-thread-id ID
+                     Stamp synthesized exact-tree commits with this
+                     Agent-Thread-Id trailer for deploy attribution. Defaults
+                     to \$AGENT_SESSION_ID (exported by the inject-session-id
+                     hook in Claude Code sessions); agents on backends without
+                     env injection (e.g. Codex) must pass it explicitly.
   -h, --help         Show this help text.
 EOF
 }
@@ -162,6 +168,7 @@ DRY_RUN=0
 ASSUME_YES=0
 WAIT_CI=1
 SKIP_CHECKS=0
+AGENT_THREAD_ID="${AGENT_SESSION_ID:-}"
 declare -a EXCLUDE=()
 FROM=""
 TO=""
@@ -170,6 +177,11 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --dry-run) DRY_RUN=1 ;;
         --skip-checks) SKIP_CHECKS=1 ;;
+        --agent-thread-id)
+            shift
+            [[ $# -gt 0 ]] || { echo "--agent-thread-id needs a value" >&2; usage >&2; exit 2; }
+            AGENT_THREAD_ID="$1"
+            ;;
         --exclude)
             shift
             [[ $# -gt 0 ]] || { echo "--exclude needs a repo name" >&2; usage >&2; exit 2; }
@@ -434,12 +446,13 @@ push_plan_index() {
         to_sha="$(git -C "$dir" rev-parse "origin/${TO}")"
         # PaaS deploy attribution reads the Agent-Thread-Id trailer from the
         # pushed head commit only, so the synthetic promote commit must carry
-        # it itself. AGENT_SESSION_ID is exported into agent sessions by the
-        # inject-session-id hook; absent (human terminal) means no trailer,
-        # which the server correctly attributes to a human.
+        # it itself. Sourced from --agent-thread-id or $AGENT_SESSION_ID (the
+        # inject-session-id hook exports it in Claude Code sessions; Codex
+        # sessions have no env injection and must pass the flag). Absent
+        # (human terminal) means no trailer — correctly attributed to a human.
         local msg_args=(-m "Promote ${FROM} tree to ${TO} (exact-tree)")
-        if [[ -n "${AGENT_SESSION_ID:-}" ]]; then
-            msg_args+=(-m "Agent-Thread-Id: ${AGENT_SESSION_ID}")
+        if [[ -n "$AGENT_THREAD_ID" ]]; then
+            msg_args+=(-m "Agent-Thread-Id: ${AGENT_THREAD_ID}")
         fi
         new_commit="$(git -C "$dir" commit-tree "${from_sha}^{tree}" -p "$to_sha" "${msg_args[@]}")"
         echo "Pushing ${label}: exact-tree ${new_commit} (${FROM} tree) -> ${TO}"
