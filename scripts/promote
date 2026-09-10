@@ -15,7 +15,7 @@
 # standalone release (auto-release.yml), the desktop AppImage to S3
 # (electron-rebuild.yml), and the ios App Store upload. A cli push whose
 # head commit says [skip release] cuts no release and never cancels an
-# in-flight release build (conditional cancel-in-progress; AUTO_UPDATE.md).
+# in-flight release build (conditional cancel-in-progress; dev-docs/AUTO_UPDATE.md).
 # multi-react and boilersync-react are external symlinks — promote them in
 # their own workspaces (~/Projects/multi, ~/Projects/boilersync) first if
 # they changed.
@@ -32,15 +32,83 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 # Dependency order: providers before consumers; workspace root last.
-REPOS=(super-agents skills coder-react console cli desktop allauth-client-swift openbase-agent-ui-swift ios allauth-client-kotlin android .)
+REPOS=(super-agents skills coder-react console cli desktop allauth-client-swift openbase-agent-ui-swift ios allauth-client-kotlin openbase-agent-ui-kotlin android .)
 
-EXTERNAL_NOTE="multi-react, boilersync-react, and netmesh-go are external trunk-based projects pinned to main (multi.json fixedBranch; CI checks them out at main)"
+# --- multi.json coverage gate + pinned-repo verification --------------------
+# Everything in multi.json is part of a deploy even when it never receives a
+# FROM->TO push. Unpinned repos must appear in REPOS (ordering is curated, so
+# a new repo forces a deliberate placement here), and fixedBranch repos are
+# verified below so unpushed trunk work cannot silently miss a release bake.
+MULTI_UNPINNED=()
+MULTI_PINNED=()
+while IFS=: read -r mj_name mj_branch; do
+    if [[ -z "$mj_branch" ]]; then
+        MULTI_UNPINNED+=("$mj_name")
+    else
+        MULTI_PINNED+=("${mj_name}:${mj_branch}")
+    fi
+done < <(python3 -c '
+import json, sys
+for repo in json.load(open(sys.argv[1]))["repos"]:
+    print(f"{repo["name"]}:{repo.get("fixedBranch", "")}")
+' "${ROOT_DIR}/multi.json")
 
-# Pre-release checks run before a production promotion (TO is main/master),
-# unless --skip-checks. Format: "label|repo dir|command|severity" where
+for mj_name in ${MULTI_UNPINNED[@]+"${MULTI_UNPINNED[@]}"}; do
+    mj_found=0
+    for repo in "${REPOS[@]}"; do
+        [[ "$repo" == "$mj_name" ]] && mj_found=1 && break
+    done
+    if [[ "$mj_found" == 0 ]]; then
+        echo "multi.json repo '${mj_name}' is not covered by this script's REPOS list." >&2
+        echo "Add it at a deliberate position in $(basename "$0") — push order matters." >&2
+        exit 1
+    fi
+done
+
+EXTERNAL_NOTE=""
+if [[ ${#MULTI_PINNED[@]} -gt 0 ]]; then
+    EXTERNAL_NOTE="pinned to their multi.json fixedBranch (verified below, never pushed by promote):"
+    for mj_entry in "${MULTI_PINNED[@]}"; do
+        EXTERNAL_NOTE+=" ${mj_entry%%:*}@${mj_entry##*:}"
+    done
+fi
+
+plan_pinned_repos() {
+    local entry name branch label dir local_sha origin_sha dirty detail
+    for entry in ${MULTI_PINNED[@]+"${MULTI_PINNED[@]}"}; do
+        name="${entry%%:*}"; branch="${entry##*:}"
+        label="${name}"
+        dir="${ROOT_DIR}/${name}"
+        if [[ ! -e "${dir}/.git" ]]; then
+            PLAN_REPO+=("$label"); PLAN_ACTION+=(skip)
+            PLAN_DETAIL+=("pinned @${branch}; not checked out here — origin/${branch} ships")
+            continue
+        fi
+        git -C "$dir" fetch origin --quiet "$branch" || true
+        local_sha="$(git -C "$dir" rev-parse --verify --quiet "refs/heads/${branch}" || true)"
+        origin_sha="$(git -C "$dir" rev-parse --verify --quiet "origin/${branch}" || true)"
+        dirty="$(git -C "$dir" status --porcelain 2>/dev/null | grep -cv 'sync-conflict' || true)"
+        if [[ -n "$local_sha" && -n "$origin_sha" ]]             && ! git -C "$dir" merge-base --is-ancestor "$local_sha" "$origin_sha"; then
+            PLAN_REPO+=("$label"); PLAN_ACTION+=(FAIL)
+            PLAN_DETAIL+=("pinned @${branch} has unpushed local commits — the release bakes origin/${branch}; push or drop them")
+            FAILED=1
+            continue
+        fi
+        detail="pinned @${branch}; origin $(git -C "$dir" rev-parse --short "origin/${branch}" 2>/dev/null || echo '?') ships"
+        if [[ "$dirty" != "0" ]]; then
+            detail+=" (local tree dirty — not shipped)"
+        fi
+        PLAN_REPO+=("$label"); PLAN_ACTION+=(skip); PLAN_DETAIL+=("$detail")
+    done
+}
+
+
+# These are the authoritative pre-release gates for production promotions
+# (TO is main/master), unless --skip-checks. Format:
+# "label|repo dir|command|severity" where
 # severity is `fatal` (failure aborts the whole promotion) or `warn` (failure
-# only prints a warning). These mirror the deploy skill's Section 0
-# preconditions; edit this list to change what a production promotion gates on.
+# only prints a warning). Edit this list to change what a production promotion
+# gates on.
 # Context column: `committed` checks run in a temporary assembly built from
 # the origin/FROM refs, so another agent's dirty/untracked working-tree files
 # can never fail (or pass) a promotion gate — tsc compiles everything under
@@ -71,8 +139,8 @@ Examples:
   $(basename "$0") develop staging
   $(basename "$0") feature/my-feature staging
 
-Before promoting into main/master, the deploy skill's pre-release checks run
-automatically (cli test suite, console/desktop typecheck; desktop mac-release
+Before promoting into main/master, pre-release checks run automatically (cli
+test suite, console/desktop typecheck; desktop mac-release
 prereqs as a non-blocking warning). A failing fatal check aborts before any
 push. Other targets skip the checks.
 
@@ -84,13 +152,23 @@ Options:
                      release, e.g. --exclude desktop while the cli release
                      publishes, then re-run to promote desktop alone.
   -y, --yes          Push without the confirmation prompt.
+  --no-wait-ci       Do not sequence desktop behind the cli auto-release and
+                     do not watch the desktop rebuild (fire-and-forget).
+  --agent-thread-id ID
+                     Stamp synthesized exact-tree commits with this
+                     Agent-Thread-Id trailer for deploy attribution. Defaults
+                     to \$AGENT_SESSION_ID, which agent runtimes export
+                     into agent shells on every backend. The flag is an
+                     explicit override.
   -h, --help         Show this help text.
 EOF
 }
 
 DRY_RUN=0
 ASSUME_YES=0
+WAIT_CI=1
 SKIP_CHECKS=0
+AGENT_THREAD_ID="${AGENT_SESSION_ID:-${CODEX_THREAD_ID:-}}"
 declare -a EXCLUDE=()
 FROM=""
 TO=""
@@ -99,6 +177,11 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --dry-run) DRY_RUN=1 ;;
         --skip-checks) SKIP_CHECKS=1 ;;
+        --agent-thread-id)
+            shift
+            [[ $# -gt 0 ]] || { echo "--agent-thread-id needs a value" >&2; usage >&2; exit 2; }
+            AGENT_THREAD_ID="$1"
+            ;;
         --exclude)
             shift
             [[ $# -gt 0 ]] || { echo "--exclude needs a repo name" >&2; usage >&2; exit 2; }
@@ -106,6 +189,7 @@ while [[ $# -gt 0 ]]; do
             EXCLUDE+=("${_ex[@]}")
             ;;
         -y|--yes) ASSUME_YES=1 ;;
+        --no-wait-ci) WAIT_CI=0 ;;
         -h|--help) usage; exit 0 ;;
         -*) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
         *)
@@ -198,8 +282,8 @@ build_precheck_assembly() {
     }
 }
 
-# Run the deploy skill's pre-release checks before a production promotion.
-# Only gates when promoting into main/master; other targets (develop->staging,
+# Run the pre-release checks before a production promotion. Only gates when
+# promoting into main/master; other targets (develop->staging,
 # feature->staging) skip the heavy suite. --skip-checks bypasses entirely. A
 # fatal check that fails aborts before anything is pushed.
 run_prechecks() {
@@ -288,8 +372,21 @@ for repo in "${REPOS[@]}"; do
         continue
     fi
     if ! git -C "$dir" merge-base --is-ancestor "$to_sha" "$from_sha"; then
-        PLAN_REPO+=("$label"); PLAN_ACTION+=(FAIL); PLAN_DETAIL+=("diverged — cannot fast-forward")
-        FAILED=1
+        # Linear-history targets (staging/main reject merge commits) can never
+        # fast-forward once the source branch carries merges. When the trees
+        # already match, a prior exact-tree promote made the branches
+        # content-even; otherwise promote by exact-tree commit (single-parent
+        # child of TO carrying FROM's tree) — the standing convention.
+        if [[ "$(git -C "$dir" rev-parse "${from_sha}^{tree}")" == "$(git -C "$dir" rev-parse "${to_sha}^{tree}")" ]]; then
+            PLAN_REPO+=("$label"); PLAN_ACTION+=(skip); PLAN_DETAIL+=("diverged but trees match — content-even")
+            continue
+        fi
+        if ! check_branch_refs "$dir" "$from_sha"; then
+            PLAN_REPO+=("$label"); PLAN_ACTION+=(FAIL); PLAN_DETAIL+=("pins a sibling repo to a less-stable branch ref (lines above) — fix the pin before promoting to ${TO}")
+            FAILED=1
+            continue
+        fi
+        PLAN_REPO+=("$label"); PLAN_ACTION+=(tree); PLAN_DETAIL+=("exact-tree promote: $(git -C "$dir" log --oneline -1 "$from_sha")")
         continue
     fi
     if ! check_branch_refs "$dir" "$from_sha"; then
@@ -301,10 +398,12 @@ for repo in "${REPOS[@]}"; do
     PLAN_REPO+=("$label"); PLAN_ACTION+=(push); PLAN_DETAIL+=("${count} commit(s): $(git -C "$dir" log --oneline -1 "$from_sha")")
 done
 
+plan_pinned_repos
+
 PUSH_COUNT=0
 for i in "${!PLAN_REPO[@]}"; do
     printf '  %-22s %-5s %s\n' "${PLAN_REPO[$i]}" "${PLAN_ACTION[$i]}" "${PLAN_DETAIL[$i]}"
-    [[ "${PLAN_ACTION[$i]}" == "push" ]] && PUSH_COUNT=$((PUSH_COUNT + 1))
+    [[ "${PLAN_ACTION[$i]}" == "push" || "${PLAN_ACTION[$i]}" == "tree" ]] && PUSH_COUNT=$((PUSH_COUNT + 1))
 done
 
 if [[ "$FAILED" == "1" ]]; then
@@ -331,13 +430,41 @@ if [[ "$ASSUME_YES" != "1" ]]; then
     fi
 fi
 
-for i in "${!PLAN_REPO[@]}"; do
-    [[ "${PLAN_ACTION[$i]}" != "push" ]] && continue
+repo_slug() {
+    git -C "$1" remote get-url origin \
+        | sed -E 's#^(git@github\.com:|https://github\.com/)##; s#\.git$##'
+}
+
+LAST_PUSHED_SHA=""
+push_plan_index() {
+    local i="$1" label repo dir from_sha to_sha new_commit
     label="${PLAN_REPO[$i]}"
     repo="${REPOS[$i]}"
     dir="${ROOT_DIR}/${repo}"
-    echo "Pushing ${label}: origin/${FROM} -> ${TO}"
-    git -C "$dir" push origin "origin/${FROM}:refs/heads/${TO}"
+    if [[ "${PLAN_ACTION[$i]}" == "tree" ]]; then
+        from_sha="$(git -C "$dir" rev-parse "origin/${FROM}")"
+        to_sha="$(git -C "$dir" rev-parse "origin/${TO}")"
+        # PaaS deploy attribution reads the Agent-Thread-Id trailer from the
+        # pushed head commit only, so the synthetic promote commit must carry
+        # it itself. Sourced from --agent-thread-id or $AGENT_SESSION_ID, the
+        # vendor-neutral session variable agent runtimes export into agent
+        # shells (Claude Code via the inject-session-id hook, Codex via
+        # super-agents' per-thread shell_environment_policy), with codex's
+        # native $CODEX_THREAD_ID as a backwards-compat fallback. Absent
+        # (human terminal) means no trailer — correctly attributed to a human.
+        local msg_args=(-m "Promote ${FROM} tree to ${TO} (exact-tree)")
+        if [[ -n "$AGENT_THREAD_ID" ]]; then
+            msg_args+=(-m "Agent-Thread-Id: ${AGENT_THREAD_ID}")
+        fi
+        new_commit="$(git -C "$dir" commit-tree "${from_sha}^{tree}" -p "$to_sha" "${msg_args[@]}")"
+        echo "Pushing ${label}: exact-tree ${new_commit} (${FROM} tree) -> ${TO}"
+        git -C "$dir" push origin "${new_commit}:refs/heads/${TO}"
+        LAST_PUSHED_SHA="$new_commit"
+    else
+        echo "Pushing ${label}: origin/${FROM} -> ${TO}"
+        git -C "$dir" push origin "origin/${FROM}:refs/heads/${TO}"
+        LAST_PUSHED_SHA="$(git -C "$dir" rev-parse "origin/${FROM}")"
+    fi
     [[ "$repo" == "android" ]] && ANDROID_PROMOTED=1
     # Keep the local TO ref current; best-effort (a checked-out TO in another
     # worktree, or a dirty tree, just leaves the local ref behind).
@@ -346,7 +473,126 @@ for i in "${!PLAN_REPO[@]}"; do
     else
         git -C "$dir" fetch origin --quiet "${TO}:${TO}" || true
     fi
+    return 0
+}
+
+# The desktop build downloads the newest CLI release of its channel as the
+# bundled first-install seed, and a fresh install runs its whole setup flow
+# on that seed before any self-update. Pushing desktop before the cli
+# auto-release finishes therefore ships a one-release-stale seed — a real
+# compatibility break whenever the new desktop needs the new CLI contract.
+# So on auto-release branches the desktop push waits for the cli release,
+# and the rebuild is watched to completion with its staged seed verified.
+await_cli_release() { # $1 = pushed cli sha; sets AWAITED_CLI_TAG
+    local slug sha run_id tag manifest_ok want_prerelease
+    slug="$(repo_slug "${ROOT_DIR}/cli")"
+    sha="$1"
+    AWAITED_CLI_TAG=""
+    echo "Waiting for the cli auto-release of ${sha:0:8} on ${TO} ..."
+    run_id=""
+    for _ in $(seq 1 60); do
+        run_id="$(gh run list -R "$slug" --workflow auto-release.yml --branch "$TO" --limit 10 \
+            --json databaseId,headSha -q "[.[] | select(.headSha == \"$sha\")][0].databaseId" 2>/dev/null || true)"
+        [[ -n "$run_id" && "$run_id" != "null" ]] && break
+        sleep 5
+    done
+    if [[ -z "$run_id" || "$run_id" == "null" ]]; then
+        echo "ERROR: no auto-release run appeared for cli@${sha:0:8} on ${TO}." >&2
+        return 1
+    fi
+    echo "  auto-release run ${run_id}: watching ..."
+    if ! gh run watch "$run_id" -R "$slug" --exit-status >/dev/null; then
+        echo "ERROR: cli auto-release run ${run_id} FAILED — desktop push withheld." >&2
+        echo "  Fix or rerun the release, then re-run this promotion (already-even repos skip)." >&2
+        return 1
+    fi
+    # A release only counts once its signed manifest asset is attached.
+    want_prerelease="false"
+    [[ "$TO" == "staging" ]] && want_prerelease="true"
+    for _ in $(seq 1 60); do
+        tag="$(gh release list -R "$slug" --limit 10 --json tagName,isPrerelease \
+            -q "[.[] | select(.isPrerelease == ${want_prerelease})][0].tagName" 2>/dev/null || true)"
+        if [[ -n "$tag" && "$tag" != "null" ]]; then
+            manifest_ok="$(gh release view "$tag" -R "$slug" --json assets \
+                -q '[.assets[].name] | contains(["update-manifest.json"])' 2>/dev/null || echo false)"
+            if [[ "$manifest_ok" == "true" ]]; then
+                AWAITED_CLI_TAG="$tag"
+                echo "  cli release ${tag} is live with its update manifest."
+                return 0
+            fi
+        fi
+        sleep 5
+    done
+    echo "ERROR: the cli release for run ${run_id} never exposed update-manifest.json." >&2
+    return 1
+}
+
+watch_desktop_rebuild() { # $1 = pushed desktop sha, $2 = expected cli tag ('' = report only)
+    local slug sha run_id staged expected
+    slug="$(repo_slug "${ROOT_DIR}/desktop")"
+    sha="$1"
+    expected="${2#v}"
+    echo "Watching the desktop rebuild of ${sha:0:8} on ${TO} ..."
+    run_id=""
+    for _ in $(seq 1 60); do
+        run_id="$(gh run list -R "$slug" --workflow electron-rebuild.yml --branch "$TO" --limit 10 \
+            --json databaseId,headSha -q "[.[] | select(.headSha == \"$sha\")][0].databaseId" 2>/dev/null || true)"
+        [[ -n "$run_id" && "$run_id" != "null" ]] && break
+        sleep 5
+    done
+    if [[ -z "$run_id" || "$run_id" == "null" ]]; then
+        echo "ERROR: no electron-rebuild run appeared for desktop@${sha:0:8} on ${TO}." >&2
+        return 1
+    fi
+    echo "  electron-rebuild run ${run_id}: watching (~20-35 min) ..."
+    if ! gh run watch "$run_id" -R "$slug" --exit-status >/dev/null; then
+        echo "ERROR: desktop rebuild run ${run_id} FAILED; the ${TO} feed was not (fully) updated." >&2
+        echo "  Diagnose: gh run view ${run_id} -R ${slug}" >&2
+        return 1
+    fi
+    staged="$(gh run view "$run_id" -R "$slug" --log 2>/dev/null \
+        | grep -m1 -oE 'Staged Openbase Coder CLI [0-9][^ ]*' | awk '{print $5}' || true)"
+    if [[ -n "$expected" && -n "$staged" && "$staged" != "$expected" ]]; then
+        echo "ERROR: desktop bundled CLI seed ${staged} != released ${expected}." >&2
+        echo "  Re-dispatch: gh workflow run electron-rebuild.yml -R ${slug} --ref ${TO}" >&2
+        return 1
+    fi
+    echo "  desktop rebuild succeeded (bundled CLI seed: ${staged:-unknown})."
+    return 0
+}
+
+DESKTOP_PLANNED=0
+for i in "${!PLAN_REPO[@]}"; do
+    [[ "${PLAN_ACTION[$i]}" != "push" && "${PLAN_ACTION[$i]}" != "tree" ]] && continue
+    [[ "${REPOS[$i]:-}" == "desktop" ]] && DESKTOP_PLANNED=1
 done
+SEQUENCE_CI=0
+if [[ "$WAIT_CI" == "1" && "$DESKTOP_PLANNED" == "1" ]] \
+    && [[ "$TO" == "main" || "$TO" == "master" || "$TO" == "staging" ]]; then
+    SEQUENCE_CI=1
+fi
+
+CLI_PUSHED_SHA=""
+DESKTOP_INDEX=""
+for i in "${!PLAN_REPO[@]}"; do
+    [[ "${PLAN_ACTION[$i]}" != "push" && "${PLAN_ACTION[$i]}" != "tree" ]] && continue
+    if [[ "${REPOS[$i]:-}" == "desktop" && "$SEQUENCE_CI" == "1" ]]; then
+        DESKTOP_INDEX="$i"
+        echo "Deferring desktop: its rebuild must seed the cli release cut by this promotion."
+        continue
+    fi
+    push_plan_index "$i"
+    [[ "${REPOS[$i]:-}" == "cli" ]] && CLI_PUSHED_SHA="$LAST_PUSHED_SHA"
+done
+
+if [[ -n "$DESKTOP_INDEX" ]]; then
+    AWAITED_CLI_TAG=""
+    if [[ -n "$CLI_PUSHED_SHA" ]]; then
+        await_cli_release "$CLI_PUSHED_SHA"
+    fi
+    push_plan_index "$DESKTOP_INDEX"
+    watch_desktop_rebuild "$LAST_PUSHED_SHA" "${AWAITED_CLI_TAG:-}"
+fi
 
 echo "Promoted ${PUSH_COUNT} repo(s) ${FROM} -> ${TO}."
 

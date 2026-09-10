@@ -8,15 +8,18 @@ export function detectInstallSet(workspaceRoot) {
   const config = JSON.parse(
     readFileSync(path.join(workspaceRoot, "multi.json"), "utf8"),
   );
-  const hasCheckedOutDevOnlyRepo = config.repos.some((repo) => {
+  // "internal" is the members-only install set (formerly named "dev");
+  // accept the legacy name so a stale multi.json still detects correctly.
+  const hasCheckedOutInternalOnlyRepo = config.repos.some((repo) => {
     const sets = Array.isArray(repo.installSets) ? repo.installSets : [];
-    if (!sets.includes("dev") || sets.includes("default")) {
+    const internal = sets.includes("internal") || sets.includes("dev");
+    if (!internal || sets.includes("default")) {
       return false;
     }
     const repoRoot = path.join(workspaceRoot, repo.name);
     return existsSync(path.join(repoRoot, ".git"));
   });
-  return hasCheckedOutDevOnlyRepo ? "dev" : "default";
+  return hasCheckedOutInternalOnlyRepo ? "internal" : "default";
 }
 
 const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : "";

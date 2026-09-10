@@ -2,23 +2,11 @@ import { randomBytes } from "node:crypto";
 import { $, browser } from "@wdio/globals";
 import type { DeviceEnv } from "./deviceEnv.js";
 
-// Signup/email-delivery testing is separate from core field testing and must be
-// explicitly pointed at isolated test-recipient infrastructure. It must never
-// fall back to a person's mailbox or use plus-addressing.
-const personalEmailDomains = new Set([
-  "aol.com",
-  "fastmail.com",
-  "gmail.com",
-  "googlemail.com",
-  "hotmail.com",
-  "icloud.com",
-  "live.com",
-  "me.com",
-  "outlook.com",
-  "proton.me",
-  "protonmail.com",
-  "yahoo.com",
-]);
+// Field tests use Resend's official delivered+<label>@resend.dev recipient so
+// signup, rendering, provider submission, and allauth verification remain real
+// without involving a person's mailbox. Restrict the helper to Openbase's
+// reserved per-run namespace; each run may generate a fresh opaque label.
+const resendFieldTestEmailPattern = /^delivered\+openbase-field-[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?@resend\.dev$/;
 
 const freshStartArgument = "--openbase-fresh-start";
 
@@ -82,23 +70,12 @@ export type SignupOutcome =
   | { kind: "timeout"; texts: string[] };
 
 export function assertApprovedSignupEmail(email: string): void {
-  const approvedDomain = process.env.OPENBASE_E2E_APPROVED_EMAIL_DOMAIN?.trim().toLowerCase();
   const normalized = email.trim().toLowerCase();
-  const [localPart, domain, extra] = normalized.split("@");
-  if (
-    !approvedDomain
-    || extra !== undefined
-    || !localPart?.startsWith("openbase-email-test-")
-    || localPart.includes("+")
-    || !domain
-    || personalEmailDomains.has(domain)
-    || domain !== approvedDomain
-  ) {
+  if (!resendFieldTestEmailPattern.test(normalized)) {
     throw new Error(
       `Refusing to sign up with ${email}: set OPENBASE_E2E_SIGNUP_EMAIL to an `
-        + "openbase-email-test-<slug> identity and OPENBASE_E2E_APPROVED_EMAIL_DOMAIN "
-        + "to its explicitly authorized isolated recipient domain. Personal/provider "
-        + "domains and plus-addressing are forbidden.",
+        + "exact delivered+openbase-field-<opaque-run-slug>@resend.dev recipient and "
+        + "Personal inboxes and other plus-addresses are forbidden.",
     );
   }
 }

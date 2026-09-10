@@ -2,20 +2,11 @@
   "name": "openbase-coder-workspace",
   "private": true,
   "packageManager": "pnpm@10.18.0",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "electron"
-    ],
-    "overrides": {
-      "@types/react": "^18.3.3",
-      "@types/react-dom": "^18.3.0",
-      "deepmerge-ts": ">=8.0.0",
-      "nanoid@<3.3.18": "^3.3.18"
-    }
-  },
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
     "build": "pnpm --recursive --if-present build",
     "test": "pnpm --recursive --if-present test",
+    "check:public-hygiene": "node scripts/check-public-hygiene.mjs",
     "e2e:ios:doctor": "pnpm --dir e2e-scripted e2e:ios:doctor",
     "manual:e2e:ios:basic-call-response": "pnpm --dir e2e-scripted manual:e2e:ios:basic-call-response",
     "manual:e2e:ios:superagent-own-name": "pnpm --dir e2e-scripted manual:e2e:ios:superagent-own-name",

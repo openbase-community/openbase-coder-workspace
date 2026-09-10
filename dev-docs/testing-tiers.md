@@ -52,8 +52,8 @@ readiness gate, orphaned-answer recovery, and others) each pin a specific past
 failure mode.
 
 Scripted E2E is manual-to-launch because it spends real API credits, speaks
-audio, and creates real agent work. See `e2e-scripted/README.md` and
-`LIVE_E2E_TESTING.md` for the suite map, environment knobs, and run commands.
+audio, and creates real agent work. See `e2e-scripted/README.md` for the suite
+map, environment knobs, and run commands.
 
 ## Tier 3 — Field tests
 
@@ -158,14 +158,8 @@ never has to be found twice.
   loop, sampling, logging, Slack, PRs): the workspace-local `field-testing`
   skill, `.agents/skills/field-testing/SKILL.md`.
 - Scripted-E2E suite map, environment reference, and run commands:
-  `LIVE_E2E_TESTING.md` and `e2e-scripted/README.md`.
+  `e2e-scripted/README.md`.
 - Disposable macOS VM harness used for clean-room installs:
   `install-tests/electron-macos/`.
-- Core field-test account provisioning (a reserved non-delivery identity from
-  the exact `FIELD_TEST_ALLOWED_EMAILS` allowlist, provisioned verified without
-  signup/email/provider calls; optional local mocked entitlement; canonical
-  teardown): the `field_test_account` management command in
-  openbase-drf-api-core. Personal inboxes, plus-addressing, and ordinary email
-  domains are forbidden even if allowlisted. Email-delivery/onboarding-email
-  testing is separately authorized and uses isolated recipient infrastructure.
+- Core field-test account lifecycle: real product signup with a fresh `delivered+openbase-field-<opaque-run-slug>@resend.dev` address in Openbase's reserved Resend testing namespace, real allauth message rendering and Resend submission through the selected Cloud deployment, retrieval through an authenticated Resend CLI profile in secure storage, real confirmation through the tested product, optional post-verification local entitlement, and canonical teardown. A separate field-test-specific Resend profile and per-address deployment allowlist are not required. The `field_test_account` command in openbase-drf-api-core can destroy or grant entitlement but cannot create or verify users. Personal inboxes are forbidden.
 - Terminology: `GLOSSARY.md` ("field test", "scripted E2E", "Live E2E test").

@@ -10,10 +10,13 @@ LAUNCH_MENU_BAR=false
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/dev-launch [--all | --electron | --menu-bar]
+Usage: ./scripts/dev-launch [--all | --electron | --electron-dev | --menu-bar]
 
 Launch optional visual surfaces for an existing development installation.
 Electron runs dashboard/status-only: it cannot invoke the bundled setup flow.
+--electron builds the renderer once and runs Electron alone (no vite dev
+server); --electron-dev runs the vite dev server + HMR for working on the
+dashboard UI itself.
 EOF
 }
 
@@ -30,6 +33,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --electron)
       LAUNCH_ELECTRON=true
+      ;;
+    --electron-dev)
+      LAUNCH_ELECTRON=true
+      ELECTRON_DEV_SERVER=true
       ;;
     --menu-bar)
       LAUNCH_MENU_BAR=true
@@ -68,7 +75,7 @@ NODE
 
 if [ ! -d "$ROOT_DIR/desktop" ]; then
   echo "The desktop repo is not present. Contributors with access can run:" >&2
-  echo "  multi sync --install-set dev" >&2
+  echo "  multi sync --install-set internal" >&2
   exit 1
 fi
 
@@ -84,7 +91,12 @@ launch_menu_bar() {
     fi
   done
 
-  local project_dir="$ROOT_DIR/desktop/netmesh-macos"
+  local project_dir="$ROOT_DIR/netmesh-macos"
+  if [ ! -d "$project_dir" ]; then
+    echo "The netmesh-macos repo is not present (private, internal install set)." >&2
+    echo "Contributors with access can run: multi sync --install-set internal" >&2
+    exit 1
+  fi
   local vendor_dir="$project_dir/vendor/tailscale-bin"
   if [ ! -x "$vendor_dir/tailscaled" ] || [ ! -x "$vendor_dir/tailscale" ]; then
     if ! command -v go >/dev/null 2>&1; then
@@ -114,7 +126,92 @@ if [ "$LAUNCH_MENU_BAR" = true ]; then
 fi
 
 if [ "$LAUNCH_ELECTRON" = true ]; then
-  echo "Launching Electron in developer dashboard-only mode (setup is disabled)."
   export OPENBASE_DESKTOP_DEV_DASHBOARD_ONLY=1
-  exec pnpm --dir "$ROOT_DIR/desktop" dev
+  if [ "${ELECTRON_DEV_SERVER:-false}" = true ]; then
+    echo "Launching Electron with the vite dev server (dashboard-UI development)."
+    exec pnpm --dir "$ROOT_DIR/desktop" dev
+  fi
+  # Dashboard consumers get a one-shot renderer build and a lone Electron
+  # process: no dev server, no file watchers. Rebuild only when the renderer
+  # sources are newer than the last build.
+  DESKTOP_DIR="$ROOT_DIR/desktop"
+  # Unpackaged runs read the menu-bar app name from Electron's own bundle
+  # before any of our code executes; brand the dev bundle once per install.
+  ELECTRON_PLIST="$DESKTOP_DIR/node_modules/electron/dist/Electron.app/Contents/Info.plist"
+  if [ -f "$ELECTRON_PLIST" ] && [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$ELECTRON_PLIST" 2>/dev/null)" != "Openbase" ]; then
+    /usr/libexec/PlistBuddy -c 'Set :CFBundleName Openbase' "$ELECTRON_PLIST"
+    /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName Openbase' "$ELECTRON_PLIST" 2>/dev/null || \
+      /usr/libexec/PlistBuddy -c 'Add :CFBundleDisplayName string Openbase' "$ELECTRON_PLIST"
+    codesign --force --sign - "$DESKTOP_DIR/node_modules/electron/dist/Electron.app" >/dev/null 2>&1 || true
+    echo "Branded the dev Electron bundle as Openbase."
+  fi
+  DIST_INDEX="$DESKTOP_DIR/dist/index.html"
+  if [ ! -f "$DIST_INDEX" ] || [ -n "$(find "$DESKTOP_DIR/src" "$DESKTOP_DIR/index.html" "$DESKTOP_DIR/vite.config"* -newer "$DIST_INDEX" -print -quit 2>/dev/null)" ]; then
+    echo "Building the dashboard renderer…"
+    pnpm --dir "$DESKTOP_DIR" build
+  fi
+  # Maintain a thin launcher bundle in /Applications so the dashboard is
+  # Spotlight-launchable with the proper name and icon. It contains no
+  # runtime: its executable execs the workspace Electron, so the single
+  # source of truth stays the checkout. A real packaged install is never
+  # replaced unless explicitly requested.
+  APP_DIR="/Applications/Openbase.app"
+  MARKER="$APP_DIR/Contents/Resources/.openbase-dev-launcher"
+  if [ -e "$APP_DIR" ] && [ ! -f "$MARKER" ] && [ "${OPENBASE_DEV_DASHBOARD_REPLACE_APP:-0}" != "1" ]; then
+    echo "A packaged app already occupies $APP_DIR; launching the dashboard directly."
+    echo "(Set OPENBASE_DEV_DASHBOARD_REPLACE_APP=1 to replace it with the dev launcher.)"
+    echo "Launching Electron in developer dashboard-only mode (setup is disabled)."
+    exec pnpm --dir "$DESKTOP_DIR" start
+  fi
+  rm -rf "$APP_DIR"
+  mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
+  cp "$DESKTOP_DIR/assets/openbase-coder-icon.icns" "$APP_DIR/Contents/Resources/openbase.icns"
+  cat > "$APP_DIR/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleName</key><string>Openbase</string>
+  <key>CFBundleDisplayName</key><string>Openbase</string>
+  <key>CFBundleIdentifier</key><string>cloud.openbase.coder.dev-dashboard</string>
+  <key>CFBundleExecutable</key><string>Openbase</string>
+  <key>CFBundleIconFile</key><string>openbase</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>dev</string>
+  <!-- The launcher is a stub: Electron provides the real Dock presence.
+       Without this, the stub's own Dock icon bounces forever because its
+       process never finishes launching as this bundle. -->
+  <key>LSUIElement</key><true/>
+</dict></plist>
+PLIST
+  ELECTRON_APP="$(cd "$DESKTOP_DIR/node_modules/electron/dist/Electron.app" && pwd -P)"
+  cat > "$APP_DIR/Contents/MacOS/Openbase" <<LAUNCH
+#!/bin/bash
+# Run-and-exit launcher. Staying alive is a trap either way: exec'ing Electron
+# keeps this LSUIElement identity, which swallows Finder/Spotlight reopens;
+# leaving a plain child behind gets it reaped with the stub's coalition by
+# RunningBoard. So each open either focuses the live dashboard through its
+# control server, or starts Electron via LaunchServices as its own instance
+# (own coalition), then exits. The Electron main process ensures the Swift
+# status menu-bar UI (ensureDevMenuBarApp in desktop/electron/main.cjs).
+CONTROL_FILE="\$HOME/.openbase/desktop-control.json"
+if [ -f "\$CONTROL_FILE" ]; then
+  PORT=\$(/usr/bin/python3 -c "import json;print(json.load(open('\$CONTROL_FILE'))['port'])" 2>/dev/null)
+  SECRET=\$(/usr/bin/python3 -c "import json;print(json.load(open('\$CONTROL_FILE'))['secret'])" 2>/dev/null)
+  if [ -n "\$PORT" ] && [ -n "\$SECRET" ] \\
+    && curl -s -m 2 -X POST -H "x-openbase-desktop-secret: \$SECRET" \\
+         "http://127.0.0.1:\$PORT/focus" | grep -q '"ok":true'; then
+    exit 0
+  fi
+fi
+# Plain child, not exec: exec'ing open makes it inherit this stub's
+# LaunchServices identity, leaving a stale "running" record that swallows
+# subsequent double-clicks for minutes.
+open -n -a "$ELECTRON_APP" --args "$DESKTOP_DIR" --openbase-dev-dashboard
+exit 0
+LAUNCH
+  chmod +x "$APP_DIR/Contents/MacOS/Openbase"
+  touch "$MARKER"
+  codesign --force --sign - "$APP_DIR" >/dev/null 2>&1 || true
+  echo "Launching the Openbase dev dashboard (setup is disabled)."
+  exec open "$APP_DIR"
 fi
