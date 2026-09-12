@@ -70,6 +70,8 @@ This glossary defines Openbase Coder workspace terms as they appear in docs, ins
 
 **Reports CLI**: The `openbase-coder reports` command surface for listing, filtering, showing metadata for, and reading reports through the same discovery and metadata layer used by the console Reports page.
 
+**Report sharing**: Cloud-mediated, account-gated sharing of a report with other Openbase accounts. The owning runtime publishes the report (and referenced images) outbound to the Openbase Cloud `sharing` app as an explicit share; access is granted per email (no public links), recipients read it at app.openbase.cloud under "Shared with me", and the local file remains the source of truth — edits republish while the share is active.
+
 **Tags**: Local Openbase Coder labels applied to threads or reports to organize work across the console and Super Agents tooling.
 
 ## Agent Capabilities
