@@ -1,4 +1,9 @@
-# Electron app install-flow test (macOS, Tart VM)
+# macOS Electron installation tests (Tart VM)
+
+There are two distinct tracks:
+
+- This file documents the developer/local-build harness that automatically verifies Prerequisites → Setup in a disposable VM.
+- [NON_DEVELOPER_FIELD_TEST.md](NON_DEVELOPER_FIELD_TEST.md) documents the signed-DMG, clean-room field test through OAuth, Openbase VPN, physical-iPhone pairing, acoustic dispatcher response, Desktop permission, and a real Super Agent.
 
 Tests the **macOS Electron app installation flow** — build the real bundled
 `Openbase Coder.app`, install it to `/Applications`, launch it, click through
@@ -29,9 +34,7 @@ In scope (the install flow): Prerequisites → **Setup** (activates the bundled
 CLI package into `~/.openbase/packages/standalone` and runs `openbase-coder
 setup`), then verification of the resulting install.
 
-Out of scope: the **Login** (browser OAuth) and **Pairing** (a physical phone)
-onboarding steps — they need a real cloud account and device and cannot be
-automated. Those remain the domain of live no-mock E2E.
+Out of scope for this automated developer harness: **Login** (browser OAuth), **Pairing** (a physical phone), and the full acoustic loop. Those are explicitly covered by the non-developer field-test runbook linked above.
 
 ## Prerequisites
 
@@ -124,15 +127,7 @@ node driver/host-drive.mjs --cdp http://127.0.0.1:9222 snapshot
 node driver/host-drive.mjs --cdp http://127.0.0.1:9222 click "Let's get you set up"
 ```
 
-**Never enter text through the Tart window.** Keystroke forwarding corrupts
-shifted/option characters even with matching host/guest layouts
-([openai/tart#1167](https://github.com/openai/tart/issues/1167)), and
-host↔guest clipboard depends on the guest agent + macOS version. Window
-interaction is fine for *clicks* on large static targets (Gatekeeper dialogs,
-Finder drags, System Settings); all *text* goes through the endpoints above
-(or the Appium MCP for phones). The `--remote-debugging-port` launch is a
-debug-only deviation from a Finder double-click — keep one pure launch in a
-run's smoke pass and record the flag as a known deviation in the field log.
+**Do not paste text through the Tart window.** Command-V can insert only a literal `v`, and shifted/option characters can be corrupted ([openai/tart#1167](https://github.com/openai/tart/issues/1167)). Use the semantic endpoints above. If a release build has CDP fused off and Tart text entry is unavoidable, clear or select all, then keystroke the complete value again and inspect it; never append a correction to malformed input. Window interaction remains appropriate for clicks on Gatekeeper and System Settings. The `--remote-debugging-port` launch is a debug-only deviation from a Finder double-click, so keep one pure launch in a run's smoke pass and record the flag in the field log.
 
 ## Clicking through it yourself (fresh bare Mac, choose the channel)
 
@@ -140,7 +135,7 @@ To get a completely fresh, **visible**, **bare** macOS VM and do the whole
 install by hand — including choosing which channel to test:
 
 ```bash
-./install-tests/electron-macos/manual-vm.sh
+./install-tests/electron-macos/manual-vm.sh --display 1920x1200pt
 ```
 
 This clones the **clean base macOS image** (NOT the provisioned golden VM): no
@@ -155,14 +150,12 @@ curl -L -o ~/Downloads/Openbase.dmg "https://openbase-coder-desktop-releases-632
 curl -L -o ~/Downloads/Openbase.dmg "https://openbase-coder-desktop-releases-632795836081-us-east-1.s3.amazonaws.com/mac-staging/Openbase-Coder-latest-arm64.dmg"
 ```
 
-Those are signed + notarized, so Gatekeeper behaves normally: open the DMG, drag
-to `/Applications`, run onboarding (it prompts you to install Tailscale
-yourself). Log in as `admin` / `admin`; `tart delete openbase-manual` when done.
+Those are signed + notarized, so Gatekeeper behaves normally: open the DMG, drag to `/Applications`, and run onboarding. A signed non-developer build offers Openbase VPN and Openbase Direct; seeing a standalone Tailscale option is a release defect. Log in as `admin` / `admin`; `tart delete openbase-manual` when done.
 
 Options: `--app PATH` also drops a **local** unsigned dev build in `~/Downloads`
 (for testing a local build instead of a channel; right-click → Open to bypass
 Gatekeeper). `--source <ref>` clones a different image (e.g. a barer
-`macos-sequoia-vanilla`).
+`macos-sequoia-vanilla`). `--display <WxH>` controls the fixed guest resolution and defaults to `1920x1200pt`; use the larger default instead of relying on Tart scrolling or window-resize tricks.
 
 `run.sh` orchestrates, all on disposable state:
 
@@ -200,6 +193,7 @@ Inside the VM, after setup fully completes:
 ```
 electron-macos/
   README.md
+  NON_DEVELOPER_FIELD_TEST.md  # signed-DMG + physical-phone field-test track
   bootstrap-golden.sh          # one-time: install Tart + bake the golden VM (headless)
   build-app.sh                 # host: build the bundled dev .app
   run.sh                       # orchestrator: clone -> tailnet -> install -> drive -> verify -> delete
@@ -209,6 +203,7 @@ electron-macos/
     package.json               # playwright dependency (prewarmed in the golden VM)
     onboard-and-verify.mjs     # Playwright-Electron clickthrough + verification (in-guest; legacy)
     host-drive.mjs             # host-side semantic driver over forwarded CDP/WebDriver
+  images/                      # screenshots used by the non-developer runbook
   vm/                          # scripts that run INSIDE the VM
     ts-connect.sh              # join the tailnet headlessly with an auth key
     run-driver.sh              # clean state, install app, launch driver in the GUI session
@@ -222,9 +217,7 @@ electron-macos/
   `data-testid`s). If onboarding copy changes, update the patterns in
   `driver/onboard-and-verify.mjs` (`ADVANCE` / `SETUP_TRIGGER` / `CONFIRM`). The
   driver logs the visible buttons when it stalls, so mismatches are easy to spot.
-- **Login** (OAuth) and **Pairing** (a physical phone) onboarding steps are out
-  of scope — they need a real account and device; this verifies the install, not
-  a fully paired end state.
+- **Login**, **Pairing**, and acoustic validation are out of scope only for this automated developer harness; use [NON_DEVELOPER_FIELD_TEST.md](NON_DEVELOPER_FIELD_TEST.md) for the full signed-DMG path.
 - tart's default DHCP-lease IP resolver can go stale mid-run; the harness uses
   `tart ip --resolver arp`.
 - Apple allows at most **2** concurrently-running macOS VMs per host.
