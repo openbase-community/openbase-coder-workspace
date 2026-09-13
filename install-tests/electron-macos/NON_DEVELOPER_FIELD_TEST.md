@@ -130,7 +130,7 @@ Use the field-test iPhone app to link the account, accept its VPN configuration 
 
 Speaker mode is a hard precondition. Connect the call, explicitly enable speaker, and verify the speaker control is visibly active. A tap alone is not proof. Do not emit any host speech until speaker state is proven.
 
-In a noisy room, keep the phone muted while preparing. Immediately before playback, verify speaker mode again and tap Unmute. Immediately after the complete stimulus finishes, tap Mute.
+In a noisy room, keep the phone muted while preparing and turn Auto-unmute off so the microphone stays closed after the response. Immediately before playback, verify speaker mode again and tap Unmute. Auto-mute may close the microphone when dispatcher audio begins; otherwise tap Mute immediately after the complete stimulus finishes. If the call is interrupted or hung up during playback, discard that attempt and start a fresh call rather than diagnosing it as a product failure.
 
 Use Cartesia, not a macOS system voice, for the host stimulus. Extract only its API key from `~/Developer/.env` and pass it to the probe for that command:
 
@@ -140,7 +140,17 @@ CARTESIA_API_KEY="$(awk -F= '$1 == "CARTESIA_API_KEY" {sub(/^[^=]*=/, ""); print
   "What is seven times six?" --stt mlx --seconds 25
 ```
 
-Set and verify host output volume before playback. Confirm the physical phone audibly speaks the correct answer in the dispatcher's configured voice. Then corroborate the turn with a narrowly bounded log query:
+Set and verify host output volume and route before playback. Bluetooth headphones can silently consume the stimulus while the phone hears nothing, so the default output must be the Mac's built-in speakers; seeing only the requested numeric volume is insufficient. Stop before unmuting if the route is not built-in.
+
+```bash
+osascript -e 'set volume output volume 65'
+system_profiler SPAudioDataType |
+  sed -n '/Default Output Device: Yes/,+8p'
+```
+
+When room noise or setup latency makes one-shot synthesis unreliable, render the Cartesia stimulus while the phone remains muted, start the recorder, and unmute only immediately before playing that prepared audio through the verified built-in route. Never fall back to an AirPods or Bluetooth route merely because it is the current system default.
+
+Confirm the physical phone audibly speaks the correct answer in the dispatcher's configured voice. Then corroborate the turn with a narrowly bounded log query:
 
 ```bash
 tail -n 500 ~/.openbase/logs/livekit-agent.log |
