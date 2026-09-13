@@ -47,6 +47,8 @@ Inside the VM, open `https://openbase.cloud/downloads?staging=true` for staging 
 
 If Tart input prevents testing the marketing page, record that surface as untested and use the VM's built-in `curl -fL` over the documented one-line SSH path to place the exact channel DMG in `~/Downloads`; then resume Finder, Gatekeeper, Applications, and onboarding normally. Do not install extra download tools into the clean VM.
 
+Keep the DMG in `~/Downloads`, not `/tmp`; macOS may clear `/tmp` across a VM reboot. When replacing an artifact during a staging retry, mount and verify the new DMG before moving the installed app, keep the previous app as a recoverable backup, and let Openbase reconcile its registered helper before removing that backup. A registered macOS background helper can continue resolving through the moved bundle until replacement finishes.
+
 Verify the installed app is running from `/Applications` and is not app-translocated. Record its version, signature/notarization result, channel, and bundled CLI version in the field-test log.
 
 ## 4. Prepare Safari control before OAuth
@@ -97,6 +99,17 @@ Selecting Openbase VPN installs the signed `OpenbaseNetmesh` background item. Op
 ![Authorization sheet for changing Login Items](images/authorize-login-items-change.png)
 
 Wait for the VM to join the intended Openbase network and confirm direct reachability to the phone. If repeated polling creates duplicate companion processes or `Address already in use`, record the failure; do not normalize a relaunch race as expected setup behavior.
+
+Record the embedded Netmesh app build numbers so a stale prebuilt is visible in the field-test evidence:
+
+```bash
+/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' \
+  /Applications/Openbase.app/Contents/Resources/OpenbaseNetmeshCompanion.app/Contents/Info.plist
+/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' \
+  /Applications/Openbase.app/Contents/Resources/OpenbaseNetmesh.app/Contents/Info.plist
+```
+
+After the first successful connection, reboot the disposable VM once and verify Openbase VPN resumes without rerunning setup or `tailnet set-provider`. Pass only when the Netmesh status command returns promptly, the same private identity is present, and local LiveKit is listening again. A configured provider with an empty status response or a crash-loop reporting `LIVEKIT_NODE_IP is required` is a release defect.
 
 ## 8. Link, pair, and select the correct backend
 
