@@ -113,6 +113,13 @@ For a staging DMG, confirm both apps came from the staging prebuilt channel and 
 
 When testing an app upgrade, launch the replacement app and compare `netmesh-ctl version` with the embedded companion build before rebooting. The already-onboarded desktop must reconcile the registered privileged helper at launch; if the old helper remains active, record a release defect and do not use `tailnet set-provider` to make the reboot gate pass.
 
+If reconciliation fails, inspect only bounded log tails. Repeated `Operation not permitted` registration lines after a pending replacement mean continuation reused the companion process that performed the unregister; the desktop must recycle that control process before registration. Do not normalize a second app launch as the upgrade procedure.
+
+```bash
+tail -n 200 ~/.openbase/logs/electron-main.log | grep 'netmesh-helper-launch' | tail -n 10
+tail -n 200 ~/Library/Logs/OpenbaseNetmesh/companion.log | grep -E 'replace-helper|register:' | tail -n 20
+```
+
 After the first successful connection, reboot the disposable VM once and verify Openbase VPN resumes without rerunning setup or `tailnet set-provider`. Pass only when the Netmesh status command returns promptly, the same private identity is present, and local LiveKit is listening again. A configured provider with an empty status response or a crash-loop reporting `LIVEKIT_NODE_IP is required` is a release defect.
 
 ## 8. Link, pair, and select the correct backend
