@@ -140,15 +140,15 @@ CARTESIA_API_KEY="$(awk -F= '$1 == "CARTESIA_API_KEY" {sub(/^[^=]*=/, ""); print
   "What is seven times six?" --stt mlx --seconds 25
 ```
 
-Set and verify host output volume and route before playback. Bluetooth headphones can silently consume the stimulus while the phone hears nothing, so the default output must be the Mac's built-in speakers; seeing only the requested numeric volume is insufficient. Stop before unmuting if the route is not built-in.
+Set host output volume before playback:
 
 ```bash
 osascript -e 'set volume output volume 65'
-system_profiler SPAudioDataType |
-  sed -n '/Default Output Device: Yes/,+8p'
 ```
 
-When room noise or setup latency makes one-shot synthesis unreliable, render the Cartesia stimulus while the phone remains muted, start the recorder, and unmute only immediately before playing that prepared audio through the verified built-in route. Never fall back to an AirPods or Bluetooth route merely because it is the current system default.
+When room noise or setup latency makes one-shot synthesis unreliable, render the Cartesia stimulus while the phone remains muted, start the recorder, and unmute only immediately before playing that prepared audio.
+
+Troubleshooting only: if the phone does not react to an otherwise audible probe, confirm macOS did not route the stimulus to Bluetooth headphones with `system_profiler SPAudioDataType`. Switch to the built-in speakers and retry; this is not a routine preflight requirement.
 
 Confirm the physical phone audibly speaks the correct answer in the dispatcher's configured voice. Then corroborate the turn with a narrowly bounded log query:
 
