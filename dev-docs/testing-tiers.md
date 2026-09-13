@@ -79,6 +79,13 @@ Three properties define a field test and separate it from tier 2:
    developer's real account. A field test must be able to run without disturbing
    any live developer state.
 
+   "Fresh" is per-run, not per-VM-name: the run must begin by cloning a golden
+   image, and the results only count if the environment was created by that
+   run. Resuming a warm VM left over from an earlier session — already
+   provisioned, signed in, or hand-patched — is *debugging*, and its results
+   must never be reported as field-test results; the field-testing skill's
+   "Hard Boundary Zero" section is authoritative on this.
+
 3. **Full acoustic loop.** Field tests close the real audio loop in both
    directions. Cartesia TTS is played through speakers into the phone's
    microphone as genuine acoustic stimulus, and the phone's spoken reply is

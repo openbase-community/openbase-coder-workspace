@@ -9,6 +9,15 @@ This workspace-local skill is the operating procedure for **field tests** — ti
 
 It applies whenever the user asks for a field test, live/full-system/no-mock test, or to install-and-exercise the product end to end. For the **tier-2 scripted-E2E regression suite** (deterministic wdio/Appium specs in `e2e-scripted/`), see the [Scripted-E2E annex](#scripted-e2e-annex-tier-2) at the bottom — it is the same live-run gates, applied to frozen specs instead of agent-driven exploration.
 
+## Hard Boundary Zero: A Field Test Starts From A Fresh Clone, Every Time
+
+**A run only counts as a field test if it begins with `tart clone` of a golden image in that same run.** A VM that already exists — left over from a prior session, already provisioned, already signed in, already paired — is **contaminated evidence**. Continuing on one and reporting the results as a "field test" is a process failure, not a judgment call (real incident, 2026-09-13: an agent resumed a warm previous-session VM whose checkout was on `staging` with hand-copied patches, ran the acoustic loop on it, and reported the developer-install "field test" phase complete — it had tested nothing about installation, setup, onboarding, or first-run state, which is most of what field tests exist to catch).
+
+- **Fresh clone or it isn't a field test.** Before claiming any field-test result, verify the VM was created by this run (`tart list` timestamps; the run plan in the daily log must name the newly cloned VM). If you inherit a session mid-run (compaction, resume, model handoff), re-verify the provenance of the VM you're driving instead of trusting the prior transcript's framing.
+- **Warm VMs are for debugging only.** Reusing an existing VM to reproduce a bug, iterate on a fix, or inspect state is fine and often right — but the output of that work is labeled *debugging / fix verification*, never *field test passed*. The fix's validation is a **new clean-room run from a fresh clone** that receives the fixed build through the real pathway (new staging release, or the real setup flow pulling the updated branch).
+- **No hand-deployed patches in a run you'll report on.** `scp`-ing edited files into an install and bouncing services is a debugging technique; it turns the install into something no user ever has. Any run containing a hand-patch is disqualified as a field test from that point on.
+- **One run, one fresh VM, one account, one log entry.** The daily-log run plan records the freshly cloned VM name, the field-test account (fresh, or reuse explicitly justified), the branch/channel under test, and the install pathway — before the run starts. If the answer to any of those is "whatever was already there," stop and re-plan.
+
 ## The One Hard Boundary: Never Touch The Developer's State
 
 **A field test never touches the developer's active user, machine, or local installation.** There is no "uninstall your active install first" step — that old flow is gone. Field tests are clean-room by construction:
