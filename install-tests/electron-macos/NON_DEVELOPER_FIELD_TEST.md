@@ -171,7 +171,7 @@ tccutil reset SystemPolicyDesktopFolder
 
 Speak only: “Start a coding session in the Desktop folder <folder name> and follow the briefing.” Do not ask the agent to introduce itself.
 
-The first Desktop access must produce the product's spoken blocked-turn hint and this macOS prompt. The testing agent must click Allow directly in the Tart window; do not ask the user or bypass the alert through an API:
+The first Desktop access must produce the product's spoken blocked-turn hint and a real macOS Desktop-folder prompt. macOS may label the requester `Openbase` or the packaged runtime child `python3.12`; record the exact attribution shown during the sampled turn. The testing agent must click Allow directly in the Tart window; do not ask the user or bypass the alert through an API:
 
 ![Openbase requesting access to the Desktop folder](images/allow-openbase-desktop-folder.png)
 

@@ -54,7 +54,7 @@ The dispatcher answering a question ("what is seven times six?") only proves the
 
 1. Create a new folder and a `briefing.md` that asks for a small exact file-backed task. On macOS/Tart, put the folder on the VM Desktop and reset only Desktop-folder TCC in the disposable guest before the attempt. Do not accept an earlier grant from onboarding or another test in the same VM as coverage of this gate.
 2. By voice, tell the dispatcher to start a coding session in that folder and follow the briefing. Keep brittle specifics in the briefing and do not tell the Super Agent to introduce itself; the announcement must be unsolicited.
-3. On macOS/Tart, wait for the real `“Openbase” would like to access files in your Desktop folder` alert and click **Allow manually in the Tart window**. The field-testing agent performs this click; do not ask the user, bypass the alert with an API, or treat a log message as permission evidence. If the prompt does not appear because access is already granted, reset Desktop-folder TCC and repeat with a fresh Desktop folder.
+3. On macOS/Tart, wait for the real Desktop-folder access alert and click **Allow manually in the Tart window**. macOS may attribute the request to `Openbase` or to the packaged runtime child such as `python3.12`; either is valid only when it appears during the sampled Super Agent turn. The field-testing agent performs this click; do not ask the user, bypass the alert with an API, or treat a log message as permission evidence. If the prompt does not appear because access is already granted, reset Desktop-folder TCC and repeat with a fresh Desktop folder.
 4. Confirm a **Super Agent thread is actually started** — not just a spoken dispatcher reply. Check the store and the log:
 
    ```bash
