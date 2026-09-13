@@ -14,11 +14,9 @@ The run passes only when all of these are true:
 - `~/.openbase/logs/livekit-agent.log` contains a matching `voice_turn_result` with `status=completed` and `backend_auth_failure=False`.
 - The mandatory Super Agent gate starts a non-dispatcher agent in a fresh Desktop folder, surfaces the real Desktop-access alert, has the testing agent click Allow directly in Tart, completes the briefing's real task, and plays an unsolicited introduction. The spoken prompt must not ask the agent to introduce itself.
 
-## 1. Front-load the only human actions
+## 1. Assert Appium control before any VM work
 
-Before touching the VM, ask the user to unlock the physical phone, keep it beside the Mac's speakers, and be ready for the platform's trust or VPN prompts. On iOS, also set Auto-Lock to Never and expect one or two device-passcode prompts for VPN configuration and Mac trust. On Android, connect USB debugging and have the user accept the on-device computer-trust prompt immediately. Establish Appium control at once and drive the phone's user-gated chain far enough to surface those prompts; do not merely announce the actions and postpone them until after VM provisioning. Keep that Appium session attached through the final acoustic work and user-facing handoff so a follow-up does not find the phone unexpectedly outside automation. The agent drives every Tart/VM action, including the VM's own admin-password sheets. The agent never learns or enters a physical-device passcode.
-
-Use only the field-test mobile variant: `com.openbase.coder.field-test` on iOS or `com.openbase.android.fieldtest` on Android. Never launch, reset, uninstall, or automate either normal app, because doing so can replace the user's normal VPN state.
+Execute [Preflight Sequence step 0](../../.agents/skills/field-testing/SKILL.md#preflight-sequence) from the shared `field-testing` skill before continuing. That is the single source of truth for the one-minute Appium-control deadline, the separate earliest-valid Openbase VPN passcode prompt, field-test mobile variants, and session-lifetime rules across both developer-flow and signed-DMG field tests. Do not duplicate those instructions in an install-track runbook.
 
 ## 2. Start a clean, usable VM
 

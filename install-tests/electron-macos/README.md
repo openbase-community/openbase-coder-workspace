@@ -34,7 +34,7 @@ In scope (the install flow): Prerequisites → **Setup** (activates the bundled
 CLI package into `~/.openbase/packages/standalone` and runs `openbase-coder
 setup`), then verification of the resulting install.
 
-Out of scope for this automated developer harness: **Login** (browser OAuth), **Pairing** (a physical phone), and the full acoustic loop. Those are explicitly covered by the non-developer field-test runbook linked above.
+Out of scope for this automated developer harness: **Login** (browser OAuth), **Pairing** (a physical phone), and the full acoustic loop. A full field test using either the developer-flow install or the signed-DMG install follows the shared `.agents/skills/field-testing/SKILL.md` procedure; [NON_DEVELOPER_FIELD_TEST.md](NON_DEVELOPER_FIELD_TEST.md) adds only the signed-DMG track details.
 
 ## Prerequisites
 
@@ -193,7 +193,7 @@ Inside the VM, after setup fully completes:
 ```
 electron-macos/
   README.md
-  NON_DEVELOPER_FIELD_TEST.md  # signed-DMG + physical-phone field-test track
+  NON_DEVELOPER_FIELD_TEST.md  # signed-DMG-specific additions to the shared field-test procedure
   bootstrap-golden.sh          # one-time: install Tart + bake the golden VM (headless)
   build-app.sh                 # host: build the bundled dev .app
   run.sh                       # orchestrator: clone -> tailnet -> install -> drive -> verify -> delete
