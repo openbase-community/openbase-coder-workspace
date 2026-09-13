@@ -89,16 +89,14 @@ Three properties define a field test and separate it from tier 2:
 
 ### Field-test procedure
 
-Every field-test session follows the same three-step shape:
+Every field-test session follows the same four-step shape:
 
 1. **Installation** — stand up a clean environment and install the product via
    the sampled installation method.
 2. **Smoke test** — a short, basic check that the core call/response loop works
    at all before investing in anything deeper.
-3. **Targeted testing** — exercise whatever most likely changed since the last
-   field test, determined by reading recent commits across the workspace repos.
-   Field-test effort follows the code, so testing concentrates where the risk
-   was just introduced.
+3. **Super Agent gate** — spawn a real non-dispatcher Super Agent in a new folder, verify a small file-backed task, and hear its unsolicited self-announcement. Every macOS/Tart run must use a fresh Desktop folder, reset Desktop-folder TCC, surface the real macOS access prompt, and have the testing agent click Allow directly in Tart; an earlier permission grant or log-only evidence does not pass.
+4. **Targeted testing** — exercise whatever most likely changed since the last field test, determined by reading recent commits across the workspace repos. Field-test effort follows the code, so testing concentrates where the risk was just introduced.
 
 ### Field-test parameter model
 

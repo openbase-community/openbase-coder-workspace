@@ -12,7 +12,7 @@ The run passes only when all of these are true:
 - The phone and VM are connected through Openbase VPN or Openbase Direct, privately paired, and the local backend is healthy.
 - A question spoken acoustically to the physical iPhone receives an audible dispatcher answer in the configured dispatcher voice.
 - `~/.openbase/logs/livekit-agent.log` contains a matching `voice_turn_result` with `status=completed` and `backend_auth_failure=False`.
-- The stretch gate starts a non-dispatcher Super Agent in a new folder, the agent performs the briefing's real task, and its unsolicited introduction is heard. The spoken prompt must not ask the agent to introduce itself.
+- The mandatory Super Agent gate starts a non-dispatcher agent in a fresh Desktop folder, surfaces the real Desktop-access alert, has the testing agent click Allow directly in Tart, completes the briefing's real task, and plays an unsolicited introduction. The spoken prompt must not ask the agent to introduce itself.
 
 ## 1. Front-load the only human actions
 
@@ -159,13 +159,17 @@ tail -n 500 ~/.openbase/logs/livekit-agent.log |
 
 The matching line must show `status=completed` and `backend_auth_failure=False`. Logs do not replace listening.
 
-## 10. Fresh Desktop-permission Super Agent gate
+## 10. Mandatory fresh Desktop-permission Super Agent gate
 
-Create a new folder on the VM Desktop with a short `briefing.md` that asks for one exact file and exact content. Reset Desktop-folder TCC only on a disposable VM when the run specifically needs to prove the first-use permission path.
+Create a new folder on the VM Desktop with a short `briefing.md` that asks for one exact file and exact content. Reset Desktop-folder TCC in the disposable VM before every field-test gate so a prior onboarding or test grant cannot hide the first-use permission path.
+
+```bash
+tccutil reset SystemPolicyDesktopFolder
+```
 
 Speak only: “Start a coding session in the Desktop folder <folder name> and follow the briefing.” Do not ask the agent to introduce itself.
 
-The first Desktop access should produce the product's spoken blocked-turn hint and this macOS prompt. Click Allow yourself in the Tart window:
+The first Desktop access must produce the product's spoken blocked-turn hint and this macOS prompt. The testing agent must click Allow directly in the Tart window; do not ask the user or bypass the alert through an API:
 
 ![Openbase requesting access to the Desktop folder](images/allow-openbase-desktop-folder.png)
 

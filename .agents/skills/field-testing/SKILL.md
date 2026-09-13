@@ -41,18 +41,21 @@ It applies whenever the user asks for a field test, live/full-system/no-mock tes
 
 ## Field-Test Procedure
 
-Every field-test session runs the same three steps, in order:
+Every field-test session runs the same four steps, in order:
 
 1. **Installation.** Stand up a clean environment (Tart macOS VM, or a Windows VM for the native-Windows pathway), install the product using the sampled installation method, build/install the mobile field-test variant, and create the designated throwaway account through the real [signup and verification lifecycle](#field-test-account-lifecycle).
 2. **Smoke test.** A short basic check that the core loop works at all — place a call, get a dispatcher response through the full acoustic loop — before investing in anything deeper. If the smoke test fails, that is the finding; stop and file it.
-3. **Targeted testing.** Exercise whatever most likely changed since the last field test. Determine this by reading recent commits across the workspace repos since the previous field-test log entry (see below). Effort follows the code: concentrate on the surfaces and flows that were just modified.
+3. **Super Agent gate.** Spawn a real non-dispatcher Super Agent in a new folder, make it perform a small file-backed task, and hear its unsolicited self-announcement. On every macOS/Tart run, use a fresh Desktop folder, reset Desktop-folder TCC before the attempt, wait for the real macOS Desktop-access alert, and click **Allow directly in the Tart window**. A previously granted permission, a dispatcher-only answer, or log-only evidence does not satisfy this gate.
+4. **Targeted testing.** Exercise whatever most likely changed since the last field test. Determine this by reading recent commits across the workspace repos since the previous field-test log entry (see below). Effort follows the code: concentrate on the surfaces and flows that were just modified.
 
-### Exercise a Super Agent, not just the dispatcher
+### Mandatory Super Agent and Desktop-permission gate
 
-The dispatcher answering a question ("what is seven times six?") only proves the **voice dispatcher** brain + cloud auth + acoustic loop. A full field test must also prove the product's actual job: **spawning and steering a coding Super Agent**. After the dispatcher smoke passes, escalate:
+The dispatcher answering a question ("what is seven times six?") only proves the **voice dispatcher** brain + cloud auth + acoustic loop. Every full field test must also prove the product's actual job: **spawning and steering a coding Super Agent**. This is a completion gate, never an optional stretch goal. After the dispatcher smoke passes:
 
-1. By voice, give the dispatcher a real coding task (keep brittle specifics in a `briefing.md` and point at it — e.g. "start a coding session in the openbase field test folder and follow the briefing"). The task should be small but real (create/edit a file, run a command, report back).
-2. Confirm a **Super Agent thread is actually started** — not just a spoken dispatcher reply. Check the store and the log:
+1. Create a new folder and a `briefing.md` that asks for a small exact file-backed task. On macOS/Tart, put the folder on the VM Desktop and reset only Desktop-folder TCC in the disposable guest before the attempt. Do not accept an earlier grant from onboarding or another test in the same VM as coverage of this gate.
+2. By voice, tell the dispatcher to start a coding session in that folder and follow the briefing. Keep brittle specifics in the briefing and do not tell the Super Agent to introduce itself; the announcement must be unsolicited.
+3. On macOS/Tart, wait for the real `“Openbase” would like to access files in your Desktop folder` alert and click **Allow manually in the Tart window**. The field-testing agent performs this click; do not ask the user, bypass the alert with an API, or treat a log message as permission evidence. If the prompt does not appear because access is already granted, reset Desktop-folder TCC and repeat with a fresh Desktop folder.
+4. Confirm a **Super Agent thread is actually started** — not just a spoken dispatcher reply. Check the store and the log:
 
    ```bash
    sqlite3 ~/.local/share/super-agents-*/state.sqlite3 \
@@ -61,7 +64,7 @@ The dispatcher answering a question ("what is seven times six?") only proves the
    ```
 
    A Super Agent turn requires the coding backend to authenticate (the same `openbase_cloud`/machine-token or personal `claude login`/`codex login` path as the dispatcher). If the dispatcher says a coding-backend error aloud (now a graceful "trouble reaching the coding service" line, not a raw dump), grep for `stage=voice_turn_backend_auth_failure` / `voice_turn_backend_error` — that is the finding.
-3. Verify the thread **did the work** (the file/command exists in the VM) and that the dispatcher can **report its result back** by voice and **hand the call to it / return to dispatch**. The scripted `manual:e2e:ios:parallel-agents-truth` gate (below) is the frozen version of this — launch agents from a briefing, verify their Markdown reports, transfer the voice route, ask what happened, return to dispatch.
+5. Verify the thread **did the work** (the exact file/command exists in the VM), hear the Super Agent's unsolicited self-announcement on the physical phone, and confirm that the dispatcher can **report its result back** by voice and **hand the call to it / return to dispatch**. Database rows and voice-delivery logs corroborate the result but never replace listening. The scripted `manual:e2e:ios:parallel-agents-truth` gate (below) is the frozen version of this — launch agents from a briefing, verify their Markdown reports, transfer the voice route, ask what happened, return to dispatch.
 
 Note the store's `UNIQUE(name)` on sessions is not backend-scoped: if a prior run left a `dispatcher` (or same-named) session under a *different* backend identity, `create_session` collides (`sqlite3.IntegrityError: UNIQUE constraint failed: sessions.name`). Clear stale rows (`DELETE FROM sessions …`) or start from a fresh clone — a real clean-room run never hits this.
 
