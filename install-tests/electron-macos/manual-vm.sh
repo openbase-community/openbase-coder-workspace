@@ -17,6 +17,7 @@
 #   --source REF      macOS image/VM to clone (default: the cirruslabs base
 #                     image; e.g. macos-sequoia-vanilla for even less)
 #   --name NAME       clone name (default: openbase-manual)
+#   --display WxH     guest display (default: 1920x1200pt)
 #
 # When done: tart delete <name>   (default: openbase-manual)
 
@@ -26,6 +27,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP=""
 SOURCE="ghcr.io/cirruslabs/macos-sequoia-base:latest"
 NAME="openbase-manual"
+DISPLAY="1920x1200pt"
 VM_USER="admin"; VM_PASS="admin"
 
 # Real user-facing macOS download URLs (signed + notarized), per channel.
@@ -38,6 +40,7 @@ while [ "$#" -gt 0 ]; do
     --app) APP="$2"; shift 2 ;;
     --source) SOURCE="$2"; shift 2 ;;
     --name) NAME="$2"; shift 2 ;;
+    --display) DISPLAY="$2"; shift 2 ;;
     -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -52,10 +55,13 @@ command -v tart >/dev/null 2>&1 || die "tart not installed — run ./bootstrap-g
 command -v sshpass >/dev/null 2>&1 || die "sshpass not installed — run ./bootstrap-golden.sh"
 tart list 2>/dev/null | grep -q "[[:space:]]$NAME[[:space:]]" && die "VM '$NAME' already exists — delete it (tart delete $NAME) or pass --name."
 [ -n "$APP" ] && { [ -d "$APP" ] || die "app bundle not found: $APP"; }
+[ -n "$DISPLAY" ] || die "--display must not be empty"
 
 # --- Clone a fresh macOS + boot with a window --------------------------------
 step "Cloning fresh macOS '$SOURCE' -> '$NAME'"
 tart clone "$SOURCE" "$NAME"
+step "Setting guest display to $DISPLAY so onboarding and System Settings fit"
+tart set "$NAME" --display "$DISPLAY" --no-display-refit
 step "Booting VM with a window (a clean macOS desktop opens on your screen)"
 nohup tart run "$NAME" >/tmp/openbase-manual-$NAME.log 2>&1 &
 disown || true
@@ -92,8 +98,9 @@ want (signed + notarized, so Gatekeeper works normally):
   # staging
   curl -L -o ~/Downloads/Openbase.dmg "$DMG_STAGING"
 
-Then open the DMG, drag the app to /Applications, and run onboarding (it will
-prompt you to install Tailscale yourself).
+Then open the DMG, drag the app to /Applications, and run onboarding. A signed
+non-developer build offers Openbase VPN and Openbase Direct; seeing a standalone
+Tailscale option is a release defect.
 $( [ -n "$APP" ] && printf '\nA local unsigned dev build is also in ~/Downloads/%s (right-click > Open to bypass Gatekeeper).\n' "$APP_BASENAME" )
   SSH into it:        sshpass -p $VM_PASS ssh $VM_USER@$VM_IP
   Delete when done:   tart delete $NAME

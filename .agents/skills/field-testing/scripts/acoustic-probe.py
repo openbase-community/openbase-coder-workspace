@@ -19,13 +19,13 @@ spoken question and the dispatcher's answer — which is exactly what you want t
 eyeball: "did it actually answer, and was the answer right?"
 
 Examples:
-  export ASSEMBLYAI_API_KEY=...              # once per shell
-  acoustic-probe.py "What is seven times six?"
+  CARTESIA_API_KEY=... acoustic-probe.py "What is seven times six?"
   acoustic-probe.py "Start a super agent that lists my repos" --seconds 25
   acoustic-probe.py --no-tts --seconds 12    # just capture + transcribe
 
-Requires: ffmpeg (brew), macOS `say`. Host mic device defaults to the built-in
-MacBook Pro Microphone; list devices with `ffmpeg -f avfoundation
+Requires: ffmpeg (brew) and Cartesia for the default realistic TTS stimulus.
+Pass --tts macos for the explicit `say` fallback. Host mic device defaults to
+the built-in MacBook Pro Microphone; list devices with `ffmpeg -f avfoundation
 -list_devices true -i ""` and override with --device.
 """
 
@@ -41,10 +41,53 @@ import time
 import urllib.request
 
 AAI_BASE = "https://api.assemblyai.com/v2"
+CARTESIA_TTS_URL = "https://api.cartesia.ai/tts/bytes"
+DEFAULT_CARTESIA_VOICE_ID = "9626c31c-bec5-4cca-baa8-f8ba9e84c8bc"
+DEFAULT_CARTESIA_MODEL_ID = "sonic-3.5"
+DEFAULT_CARTESIA_VERSION = "2026-03-01"
 
 
 def _log(msg: str) -> None:
     print(msg, file=sys.stderr, flush=True)
+
+
+def synthesize_cartesia(
+    *,
+    text: str,
+    api_key: str,
+    voice_id: str,
+    model_id: str,
+    version: str,
+    out_path: str,
+) -> None:
+    """Synthesize realistic host-stimulus audio without exposing the API key."""
+    request = urllib.request.Request(
+        CARTESIA_TTS_URL,
+        data=json.dumps(
+            {
+                "model_id": model_id,
+                "transcript": text,
+                "voice": {"id": voice_id},
+                "output_format": {
+                    "container": "wav",
+                    "encoding": "pcm_f32le",
+                    "sample_rate": 44100,
+                },
+                "language": "en",
+                "generation_config": {"volume": 1, "speed": 1},
+            }
+        ).encode(),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "X-API-Key": api_key,
+            "Cartesia-Version": version,
+            "Content-Type": "application/json",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=120) as response:
+        audio = response.read()
+    with open(out_path, "wb") as output:
+        output.write(audio)
 
 
 def record_and_speak(
@@ -55,6 +98,7 @@ def record_and_speak(
     device: str,
     voice: str,
     rate: int,
+    stimulus_audio_path: str | None,
     out_path: str,
 ) -> None:
     """Record `seconds` of host mic to out_path, speaking `question` shortly in."""
@@ -86,7 +130,12 @@ def record_and_speak(
         time.sleep(tts_delay)
         if question:
             _log(f'▶ speaking: "{question}"')
-            subprocess.run(["say", "-v", voice, "-r", str(rate), question], check=False)
+            if stimulus_audio_path:
+                subprocess.run(["afplay", stimulus_audio_path], check=True)
+            else:
+                subprocess.run(
+                    ["say", "-v", voice, "-r", str(rate), question], check=True
+                )
         rec.wait(timeout=seconds + 30)
     finally:
         if rec.poll() is None:
@@ -151,8 +200,26 @@ def main() -> int:
     ap.add_argument(
         "--device", default="1", help="avfoundation audio input index (1=MacBook mic)."
     )
-    ap.add_argument("--voice", default="Daniel", help="macOS `say` voice (neutral).")
+    ap.add_argument(
+        "--tts",
+        choices=["cartesia", "macos"],
+        default="cartesia",
+        help="Host stimulus TTS (default: realistic Cartesia voice).",
+    )
+    ap.add_argument("--voice", default="Samantha", help="macOS `say` fallback voice.")
     ap.add_argument("--rate", type=int, default=175, help="Speech rate wpm.")
+    ap.add_argument(
+        "--cartesia-voice-id",
+        default=os.getenv("OPENBASE_E2E_CARTESIA_VOICE_ID", DEFAULT_CARTESIA_VOICE_ID),
+    )
+    ap.add_argument(
+        "--cartesia-model-id",
+        default=os.getenv("OPENBASE_E2E_CARTESIA_MODEL_ID", DEFAULT_CARTESIA_MODEL_ID),
+    )
+    ap.add_argument(
+        "--cartesia-version",
+        default=os.getenv("OPENBASE_E2E_CARTESIA_VERSION", DEFAULT_CARTESIA_VERSION),
+    )
     ap.add_argument("--stt", choices=["assemblyai", "mlx"], default="assemblyai")
     ap.add_argument("--out", default="", help="Keep the wav at this path.")
     args = ap.parse_args()
@@ -165,17 +232,44 @@ def main() -> int:
         _log("No $ASSEMBLYAI_API_KEY set. Set it, or pass --stt mlx.")
         return 2
 
-    wav = args.out or tempfile.mktemp(suffix=".wav")
-    _log(f"● recording {args.seconds:.0f}s from audio device :{args.device} → {wav}")
-    record_and_speak(
-        question=None if args.no_tts else args.question,
-        seconds=args.seconds,
-        tts_delay=args.tts_delay,
-        device=args.device,
-        voice=args.voice,
-        rate=args.rate,
-        out_path=wav,
+    cartesia_key = os.getenv("OPENBASE_E2E_CARTESIA_API_KEY") or os.getenv(
+        "CARTESIA_API_KEY"
     )
+    if not args.no_tts and args.tts == "cartesia" and not cartesia_key:
+        _log(
+            "No $CARTESIA_API_KEY set. Provide only that key, or pass --tts macos."
+        )
+        return 2
+
+    wav = args.out or tempfile.mktemp(suffix=".wav")
+    stimulus_audio_path = None
+    if not args.no_tts and args.tts == "cartesia":
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as stimulus:
+            stimulus_audio_path = stimulus.name
+        _log(f"◆ synthesizing realistic stimulus via Cartesia {args.cartesia_model_id}")
+        synthesize_cartesia(
+            text=args.question,
+            api_key=cartesia_key,
+            voice_id=args.cartesia_voice_id,
+            model_id=args.cartesia_model_id,
+            version=args.cartesia_version,
+            out_path=stimulus_audio_path,
+        )
+    _log(f"● recording {args.seconds:.0f}s from audio device :{args.device} → {wav}")
+    try:
+        record_and_speak(
+            question=None if args.no_tts else args.question,
+            seconds=args.seconds,
+            tts_delay=args.tts_delay,
+            device=args.device,
+            voice=args.voice,
+            rate=args.rate,
+            stimulus_audio_path=stimulus_audio_path,
+            out_path=wav,
+        )
+    finally:
+        if stimulus_audio_path:
+            os.unlink(stimulus_audio_path)
     if not os.path.exists(wav) or os.path.getsize(wav) < 1024:
         _log("Recording produced no audio (check mic permission / --device).")
         return 3

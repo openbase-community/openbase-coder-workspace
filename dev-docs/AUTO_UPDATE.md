@@ -19,7 +19,7 @@ Each component owns its own update; nothing installs into another component.
 Rules that must not regress:
 
 - The CLI package bundled inside the desktop DMG is a **first-install seed only**. After activation, the GitHub release feed is the sole authority; the desktop app triggers CLI updates through the local API (`POST /api/update/apply`), it never installs the CLI itself.
-- **Dev-workspace installs never auto-update.** `self-update` refuses when the CLI is not running from a standalone runtime package; dev checkouts are git-managed.
+- **Dev-workspace installs never auto-update.** `self-update` refuses when the CLI is not running from a standalone runtime package; dev checkouts are git-managed. After a source update, a restart that includes `livekit-server` prepares the checkout's pinned engine before scheduling service restarts. A failed download leaves running services untouched and fails the restart request; packaged installs keep their bundled engine.
 - **Self-update must never depend on the desktop app.** The CLI and its routines service apply updates on their own; the desktop app only *triggers* an update through the local API, it is never required for one to complete (auto-update runs from the routines service with the app closed).
 
 ## Release artifacts and the update manifest
@@ -78,6 +78,7 @@ Every push to `staging` cuts a **staging-channel release** the same way: the ver
 - Manual releases: `workflow_dispatch` on auto-release (bump choice) or on release-standalone directly (exact version, draft option, sibling branch).
 - Pushes to `main` are production; pushes to `staging` serve only staging-channel installs. Sibling-only changes (console, skills, …) need a manual dispatch since only cli pushes trigger auto-release.
 - The release build stamps the release version into the packaged CLI via the **unsuffixed** `SETUPTOOLS_SCM_PRETEND_VERSION` so `openbase-coder --version` matches the package version. hatch-vcs silently ignores the `SETUPTOOLS_SCM_PRETEND_VERSION_FOR_<dist>` variant and would fall back to a dev version, so the release build sets (and a build-time guard checks) the unsuffixed form only.
+- `ERR_PNPM_OUTDATED_LOCKFILE` in the release build's frozen install means a frontend member repo (console, coder-react, multi-react, boilersync-react) changed npm dependencies without regenerating **both** lockfiles: the workspace-root `pnpm-lock.yaml` (dev workspace and promote precheck assembly) and the pinned `cli/scripts/release-workspace/pnpm-lock.yaml` that the release build actually installs from (regenerate with `cli/scripts/update-release-lockfile.sh`, run against up-to-date local member checkouts). Commit both on develop and re-promote; the local dev workspace won't catch the pinned one drifting because only the release build consumes it (this failed the 2026-09-08 release cut).
 
 ## Inspecting versions
 
@@ -125,6 +126,8 @@ Every Openbase-owned state file carries a `schema_version` (all currently 1):
 - `~/.openbase/installation.json`
 - `~/.openbase/dispatcher-config.json`
 - `~/.openbase/plugins/plugins.json`
+
+Private service publication additionally uses `published-service-transaction.json` beside the publication registry (`schema_version` 1). It journals the operation, previous registry, exact service target, DNS-release ownership, and helper-planned allowable route hashes before mutation. New CLI versions refuse unknown journal schemas; `service recover` removes an interrupted publication without overwriting unknown VPN routes. The publication registry remains version 5; this journal is independent of installation/update state.
 
 The rules (this is the lesson of the pre-1.0 legacy purge — no silent fallback reads, ever):
 

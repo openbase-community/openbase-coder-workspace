@@ -318,3 +318,30 @@ tart run openbase-golden-sip --recovery            # boots to Recovery
 ```
 
 Then clone VPN-exercising field tests from `openbase-golden-sip`. See the `field-testing` skill and `install-tests/electron-macos/bootstrap-golden.sh` for the full golden-image procedure. (Openbase Direct would be the VM fallback that avoids netmesh entirely, but the standalone/desktop package currently omits `openbase-tunneld` — a separate real bug.)
+
+## `openbase-coder user say` Fails With "Unable to publish announcer message"
+
+### Symptoms Seen
+
+- Every `openbase-coder user say` exits 1 with `Unable to publish announcer message.`
+- `django-cli.log` shows `Unable to publish LiveKit announcer message` with
+  `ServerDisconnectedError` or `ConnectionResetError` from
+  `RoomService.ListRooms`, and `livekit-server.log` shows **no**
+  `API RoomService.ListRooms` entries at those timestamps.
+
+### Diagnosis
+
+In tailscale mode the django-cli service gets the client-facing
+`LIVEKIT_URL=ws://<tailnet-ip>:7880`, while livekit-server binds only
+`127.0.0.1` — so same-host twirp API calls target an address nothing serves.
+The announcer now rewrites the tailnet node IP to `localhost` for server API
+calls (override with `LIVEKIT_API_URL`) and retries once on transient
+connection loss. When publishing still fails, `user say` degrades to a linked
+phone notification instead of dropping the message.
+
+### Checks
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:7880/   # expect 200
+openbase-coder user say "<agent>" "test"                          # expect spoken or phone fallback, exit 0
+```

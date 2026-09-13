@@ -5,3 +5,12 @@ packages:
   - "multi-react"
   - "boilersync-react"
   - "e2e-scripted"
+
+onlyBuiltDependencies:
+  - "electron"
+
+overrides:
+  "@types/react": "^18.3.3"
+  "@types/react-dom": "^18.3.0"
+  "deepmerge-ts": ">=8.0.0"
+  "nanoid@<3.3.18": "^3.3.18"
