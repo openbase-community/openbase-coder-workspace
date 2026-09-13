@@ -79,6 +79,13 @@ Three properties define a field test and separate it from tier 2:
    developer's real account. A field test must be able to run without disturbing
    any live developer state.
 
+   "Fresh" is per-run, not per-VM-name: the run must begin by cloning a golden
+   image, and the results only count if the environment was created by that
+   run. Resuming a warm VM left over from an earlier session — already
+   provisioned, signed in, or hand-patched — is *debugging*, and its results
+   must never be reported as field-test results; the field-testing skill's
+   "Hard Boundary Zero" section is authoritative on this.
+
 3. **Full acoustic loop.** Field tests close the real audio loop in both
    directions. Cartesia TTS is played through speakers into the phone's
    microphone as genuine acoustic stimulus, and the phone's spoken reply is
@@ -89,16 +96,14 @@ Three properties define a field test and separate it from tier 2:
 
 ### Field-test procedure
 
-Every field-test session follows the same three-step shape:
+Every field-test session follows the same four-step shape:
 
 1. **Installation** — stand up a clean environment and install the product via
    the sampled installation method.
 2. **Smoke test** — a short, basic check that the core call/response loop works
    at all before investing in anything deeper.
-3. **Targeted testing** — exercise whatever most likely changed since the last
-   field test, determined by reading recent commits across the workspace repos.
-   Field-test effort follows the code, so testing concentrates where the risk
-   was just introduced.
+3. **Super Agent gate** — spawn a real non-dispatcher Super Agent in a new folder, verify a small file-backed task, and hear its unsolicited self-announcement. Every macOS/Tart run must use a fresh Desktop folder, reset Desktop-folder TCC, surface the real macOS access prompt, and have the testing agent click Allow directly in Tart; an earlier permission grant or log-only evidence does not pass.
+4. **Targeted testing** — exercise whatever most likely changed since the last field test, determined by reading recent commits across the workspace repos. Field-test effort follows the code, so testing concentrates where the risk was just introduced.
 
 ### Field-test parameter model
 

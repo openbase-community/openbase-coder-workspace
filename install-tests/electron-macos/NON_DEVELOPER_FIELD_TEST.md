@@ -12,11 +12,11 @@ The run passes only when all of these are true:
 - The phone and VM are connected through Openbase VPN or Openbase Direct, privately paired, and the local backend is healthy.
 - A question spoken acoustically to the physical iPhone receives an audible dispatcher answer in the configured dispatcher voice.
 - `~/.openbase/logs/livekit-agent.log` contains a matching `voice_turn_result` with `status=completed` and `backend_auth_failure=False`.
-- The stretch gate starts a non-dispatcher Super Agent in a new folder, the agent performs the briefing's real task, and its unsolicited introduction is heard. The spoken prompt must not ask the agent to introduce itself.
+- The mandatory Super Agent gate starts a non-dispatcher agent in a fresh Desktop folder, surfaces the real Desktop-access alert, has the testing agent click Allow directly in Tart, completes the briefing's real task, and plays an unsolicited introduction. The spoken prompt must not ask the agent to introduce itself.
 
 ## 1. Front-load the only human actions
 
-Before touching the VM, ask the user to unlock the physical iPhone, set Auto-Lock to Never, keep it beside the Mac's speakers, and be ready for one or two iOS device-passcode prompts for the VPN configuration and Mac trust. The agent drives every Tart/VM action, including the VM's own admin-password sheets. The agent never learns or enters the iPhone passcode.
+Before touching the VM, ask the user to unlock the physical iPhone, set Auto-Lock to Never, keep it beside the Mac's speakers, and be ready for one or two iOS device-passcode prompts for the VPN configuration and Mac trust. Immediately establish Appium control and drive the phone's user-gated chain far enough to surface those prompts; do not merely announce the actions and postpone them until after VM provisioning. Keep that Appium session attached through the final acoustic work and user-facing handoff so a follow-up does not find the phone unexpectedly outside automation. The agent drives every Tart/VM action, including the VM's own admin-password sheets. The agent never learns or enters the iPhone passcode.
 
 Use only the field-test mobile variant, such as `com.openbase.coder.field-test`. Never launch or automate `com.openbase.coder`, because doing so can replace the user's normal VPN state.
 
@@ -111,7 +111,18 @@ Record the embedded Netmesh app build numbers so a stale prebuilt is visible in 
 
 For a staging DMG, confirm both apps came from the staging prebuilt channel and meet the release's minimum build. A staging package that silently fetches the stable-channel prebuilt is a release defect even if code signing succeeds; the staging build and publish paths must remain channel-local.
 
+When testing an app upgrade, launch the replacement app and compare `netmesh-ctl version` with the embedded companion build before rebooting. The already-onboarded desktop must reconcile the registered privileged helper at launch; if the old helper remains active, record a release defect and do not use `tailnet set-provider` to make the reboot gate pass.
+
+If reconciliation fails, inspect only bounded log tails. Repeated `Operation not permitted` registration lines after a pending replacement mean continuation reused the companion process that performed the unregister; the desktop must recycle that control process before registration. Do not normalize a second app launch as the upgrade procedure.
+
+```bash
+tail -n 200 ~/.openbase/logs/electron-main.log | grep 'netmesh-helper-launch' | tail -n 10
+tail -n 200 ~/Library/Logs/OpenbaseNetmesh/companion.log | grep -E 'replace-helper|register:' | tail -n 20
+```
+
 After the first successful connection, reboot the disposable VM once and verify Openbase VPN resumes without rerunning setup or `tailnet set-provider`. Pass only when the Netmesh status command returns promptly, the same private identity is present, and local LiveKit is listening again. A configured provider with an empty status response or a crash-loop reporting `LIVEKIT_NODE_IP is required` is a release defect.
+
+Watch the desktop app during that reboot. Electron and the launchd backend start independently, so the renderer's first localhost health request can arrive before the backend is ready. A loading state or a momentary unavailable status is acceptable, but an already-configured install must recheck automatically and open the normal Workspace as soon as health returns. If it remains on Setup until the window is refocused or Recheck is clicked, record a startup-reconciliation defect; do not rerun setup to hide it.
 
 ## 8. Link, pair, and select the correct backend
 
@@ -121,7 +132,7 @@ Use the field-test iPhone app to link the account, accept its VPN configuration 
 
 Speaker mode is a hard precondition. Connect the call, explicitly enable speaker, and verify the speaker control is visibly active. A tap alone is not proof. Do not emit any host speech until speaker state is proven.
 
-In a noisy room, keep the phone muted while preparing. Immediately before playback, verify speaker mode again and tap Unmute. Immediately after the complete stimulus finishes, tap Mute.
+In a noisy room, keep the phone muted while preparing and turn Auto-unmute off so the microphone stays closed after the response. Immediately before playback, verify speaker mode again and tap Unmute. Auto-mute may close the microphone when dispatcher audio begins; otherwise tap Mute immediately after the complete stimulus finishes. If the call is interrupted or hung up during playback, discard that attempt and start a fresh call rather than diagnosing it as a product failure.
 
 Use Cartesia, not a macOS system voice, for the host stimulus. Extract only its API key from `~/Developer/.env` and pass it to the probe for that command:
 
@@ -131,7 +142,17 @@ CARTESIA_API_KEY="$(awk -F= '$1 == "CARTESIA_API_KEY" {sub(/^[^=]*=/, ""); print
   "What is seven times six?" --stt mlx --seconds 25
 ```
 
-Set and verify host output volume before playback. Confirm the physical phone audibly speaks the correct answer in the dispatcher's configured voice. Then corroborate the turn with a narrowly bounded log query:
+Set host output volume before playback:
+
+```bash
+osascript -e 'set volume output volume 65'
+```
+
+When room noise or setup latency makes one-shot synthesis unreliable, render the Cartesia stimulus while the phone remains muted, start the recorder, and unmute only immediately before playing that prepared audio.
+
+Troubleshooting only: if the phone does not react to an otherwise audible probe, confirm macOS did not route the stimulus to Bluetooth headphones with `system_profiler SPAudioDataType`. Switch to the built-in speakers and retry; this is not a routine preflight requirement.
+
+Confirm the physical phone audibly speaks the correct answer in the dispatcher's configured voice. Then corroborate the turn with a narrowly bounded log query:
 
 ```bash
 tail -n 500 ~/.openbase/logs/livekit-agent.log |
@@ -140,13 +161,17 @@ tail -n 500 ~/.openbase/logs/livekit-agent.log |
 
 The matching line must show `status=completed` and `backend_auth_failure=False`. Logs do not replace listening.
 
-## 10. Fresh Desktop-permission Super Agent gate
+## 10. Mandatory fresh Desktop-permission Super Agent gate
 
-Create a new folder on the VM Desktop with a short `briefing.md` that asks for one exact file and exact content. Reset Desktop-folder TCC only on a disposable VM when the run specifically needs to prove the first-use permission path.
+Create a new folder on the VM Desktop with a short `briefing.md` that asks for one exact file and exact content. Reset Desktop-folder TCC in the disposable VM before every field-test gate so a prior onboarding or test grant cannot hide the first-use permission path.
+
+```bash
+tccutil reset SystemPolicyDesktopFolder
+```
 
 Speak only: “Start a coding session in the Desktop folder <folder name> and follow the briefing.” Do not ask the agent to introduce itself.
 
-The first Desktop access should produce the product's spoken blocked-turn hint and this macOS prompt. Click Allow yourself in the Tart window:
+The first Desktop access must produce the product's spoken blocked-turn hint and a real macOS Desktop-folder prompt. macOS may label the requester `Openbase` or the packaged runtime child `python3.12`; record the exact attribution shown during the sampled turn. The testing agent must click Allow directly in the Tart window; do not ask the user or bypass the alert through an API:
 
 ![Openbase requesting access to the Desktop folder](images/allow-openbase-desktop-folder.png)
 
@@ -169,4 +194,4 @@ If `super_agents_start` is absent, inspect the dispatcher MCP initialization sta
 
 Document each action and finding as it occurs in `.local/field-tests/YYYY-MM-DD.md`. Report each defect in the `#qa` thread. Fix on `develop`, test the affected repositories, and use the exact-tree `scripts/promote develop staging -y` workflow only when staging must be refreshed. Never patch or deploy production.
 
-Keep the VM, account, and field-test app available until the testing session truly ends. When closing, end the phone call, delete the Appium session, destroy the dedicated test account, remove its credential-vault item, stop/delete only the disposable VM named in the run, and restore the user's normal VPN without launching or automating the normal app.
+Keep the VM, account, field-test app, and Appium control session available until the testing session truly ends. Passing the last assertion is not the end: first finish requested follow-ups, finish the audit trail, and deliver the final audible handoff. Do not delete Appium while the agent is still working or before that handoff. Only then end the phone call, delete the Appium session, destroy the dedicated test account, remove its credential-vault item, stop/delete only the disposable VM named in the run, and restore the user's normal VPN without launching or automating the normal app.

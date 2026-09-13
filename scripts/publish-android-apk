@@ -12,7 +12,7 @@
 #   2. Run android/scripts/build-and-upload-apk.sh — builds the debug APK and
 #      uploads versioned + latest keys to S3 (that script owns aws/metadata).
 #   3. Read versionName from android/app/build.gradle.kts.
-#   4. Update the "Test build · vX.Y.Z" Android mini-card label in the
+#   4. Update the "Direct APK · vX.Y.Z" Android mini-card label in the
 #      marketing repo's site-content/install.html, then commit ONLY that file
 #      and push origin main (the push triggers the site deploy).
 #
@@ -107,9 +107,11 @@ fi
 echo
 
 # --- 2. marketing downloads-card label bump -------------------------------
-# The label pattern we own. Matches "Test build · v<version>" (any version).
-LABEL_RE='Test build · v[0-9][0-9A-Za-z._-]*'
-NEW_LABEL="Test build · v${version_name}"
+# The label prefix we own. Matches "Direct APK · v<version>" (any version) and
+# deliberately stops at the version so any trailing card copy (e.g.
+# " · prefer the Google Play beta above") is preserved by the sed replacement.
+LABEL_RE='Direct APK · v[0-9][0-9A-Za-z._-]*'
+NEW_LABEL="Direct APK · v${version_name}"
 
 if [[ ! -d "$MARKETING_REPO/.git" ]]; then
     warn "Marketing repo checkout missing at $MARKETING_REPO — skipping the downloads-card bump. APK is uploaded; bump the card manually."
