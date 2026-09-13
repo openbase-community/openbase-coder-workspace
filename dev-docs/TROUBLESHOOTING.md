@@ -345,3 +345,32 @@ phone notification instead of dropping the message.
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:7880/   # expect 200
 openbase-coder user say "<agent>" "test"                          # expect spoken or phone fallback, exit 0
 ```
+
+## `codex resume <name>` Fails: "Cannot verify a unique session label across server pages"
+
+### Symptoms
+
+- `codex --remote unix:// resume <session-name>` (e.g. the `yc` alias) errors
+  with `Cannot verify a unique session label across server pages; matching
+  session UUID: <uuid>` even though the named session exists and is unique.
+
+### Diagnosis
+
+The Codex TUI resolves a session name by paging the app server's
+`thread/list` (archived=false, sources `cli`+`vscode`, 100 per page) and
+refuses **any** name match when the listing spans more than one page — it
+cannot trust older server cursors at page boundaries. Openbase names every
+dispatched agent thread, so agent-heavy installs accumulate thousands of
+active interactive threads and resume-by-name permanently trips this guard.
+
+### Fix
+
+```bash
+openbase-coder threads archive-stale --dry-run   # inspect
+openbase-coder threads archive-stale             # archive threads idle > 10 days
+```
+
+Archiving is reversible: archived threads stay resumable by UUID and can be
+unarchived. The command reports `resumeByNameUsable` — the active
+interactive set must fit one page (≤ 100 threads). As a one-off workaround,
+resume by the UUID printed in the error message.
