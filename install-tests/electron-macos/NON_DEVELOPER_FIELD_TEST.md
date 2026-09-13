@@ -109,6 +109,8 @@ Record the embedded Netmesh app build numbers so a stale prebuilt is visible in 
   /Applications/Openbase.app/Contents/Resources/OpenbaseNetmesh.app/Contents/Info.plist
 ```
 
+For a staging DMG, confirm both apps came from the staging prebuilt channel and meet the release's minimum build. A staging package that silently fetches the stable-channel prebuilt is a release defect even if code signing succeeds; the staging build and publish paths must remain channel-local.
+
 After the first successful connection, reboot the disposable VM once and verify Openbase VPN resumes without rerunning setup or `tailnet set-provider`. Pass only when the Netmesh status command returns promptly, the same private identity is present, and local LiveKit is listening again. A configured provider with an empty status response or a crash-loop reporting `LIVEKIT_NODE_IP is required` is a release defect.
 
 ## 8. Link, pair, and select the correct backend
