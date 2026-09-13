@@ -16,7 +16,7 @@ The run passes only when all of these are true:
 
 ## 1. Front-load the only human actions
 
-Before touching the VM, ask the user to unlock the physical iPhone, set Auto-Lock to Never, keep it beside the Mac's speakers, and be ready for one or two iOS device-passcode prompts for the VPN configuration and Mac trust. The agent drives every Tart/VM action, including the VM's own admin-password sheets. The agent never learns or enters the iPhone passcode.
+Before touching the VM, ask the user to unlock the physical iPhone, set Auto-Lock to Never, keep it beside the Mac's speakers, and be ready for one or two iOS device-passcode prompts for the VPN configuration and Mac trust. Immediately establish Appium control and drive the phone's user-gated chain far enough to surface those prompts; do not merely announce the actions and postpone them until after VM provisioning. Keep that Appium session attached through the final acoustic work and user-facing handoff so a follow-up does not find the phone unexpectedly outside automation. The agent drives every Tart/VM action, including the VM's own admin-password sheets. The agent never learns or enters the iPhone passcode.
 
 Use only the field-test mobile variant, such as `com.openbase.coder.field-test`. Never launch or automate `com.openbase.coder`, because doing so can replace the user's normal VPN state.
 
@@ -194,4 +194,4 @@ If `super_agents_start` is absent, inspect the dispatcher MCP initialization sta
 
 Document each action and finding as it occurs in `.local/field-tests/YYYY-MM-DD.md`. Report each defect in the `#qa` thread. Fix on `develop`, test the affected repositories, and use the exact-tree `scripts/promote develop staging -y` workflow only when staging must be refreshed. Never patch or deploy production.
 
-Keep the VM, account, and field-test app available until the testing session truly ends. When closing, end the phone call, delete the Appium session, destroy the dedicated test account, remove its credential-vault item, stop/delete only the disposable VM named in the run, and restore the user's normal VPN without launching or automating the normal app.
+Keep the VM, account, field-test app, and Appium control session available until the testing session truly ends. Passing the last assertion is not the end: first finish requested follow-ups, finish the audit trail, and deliver the final audible handoff. Do not delete Appium while the agent is still working or before that handoff. Only then end the phone call, delete the Appium session, destroy the dedicated test account, remove its credential-vault item, stop/delete only the disposable VM named in the run, and restore the user's normal VPN without launching or automating the normal app.
