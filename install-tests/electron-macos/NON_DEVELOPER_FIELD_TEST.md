@@ -122,6 +122,8 @@ tail -n 200 ~/Library/Logs/OpenbaseNetmesh/companion.log | grep -E 'replace-help
 
 After the first successful connection, reboot the disposable VM once and verify Openbase VPN resumes without rerunning setup or `tailnet set-provider`. Pass only when the Netmesh status command returns promptly, the same private identity is present, and local LiveKit is listening again. A configured provider with an empty status response or a crash-loop reporting `LIVEKIT_NODE_IP is required` is a release defect.
 
+Watch the desktop app during that reboot. Electron and the launchd backend start independently, so the renderer's first localhost health request can arrive before the backend is ready. A loading state or a momentary unavailable status is acceptable, but an already-configured install must recheck automatically and open the normal Workspace as soon as health returns. If it remains on Setup until the window is refocused or Recheck is clicked, record a startup-reconciliation defect; do not rerun setup to hide it.
+
 ## 8. Link, pair, and select the correct backend
 
 Use the field-test iPhone app to link the account, accept its VPN configuration with the user-entered passcode, pair privately, and select this VM in the per-purpose backend device picker. Do not assume a successful pair proves the backend is running; retain the health checks from the previous step.
