@@ -22,6 +22,8 @@
 #   safari-tunnel NAME [PORT]   start guest safaridriver + forward to host
 #                               (prints the local WebDriver endpoint; leave
 #                               running, Ctrl-C to stop)
+#   safari-adopt NAME [PORT]    move an externally opened OAuth URL into the
+#                               SafariDriver-controlled window
 #   app-cdp NAME [APP] [PORT]   launch the installed Electron app in the guest
 #                               GUI session with a CDP port + forward to host
 #                               (prints the local CDP endpoint; leave running)
@@ -39,6 +41,7 @@ set -euo pipefail
 
 VM_USER="${VM_USER:-admin}"; VM_PASS="${VM_PASS:-admin}"
 SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10)
+SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
 
 die() { printf '\033[31mFATAL\033[0m %s\n' "$*" >&2; exit 2; }
 step() { printf '\033[34m==>\033[0m %s\n' "$*"; }
@@ -102,6 +105,26 @@ case "$cmd" in
     # -t keeps safaridriver attached to the ssh session so Ctrl-C cleans up.
     sshpass -p "$VM_PASS" ssh -t "${SSH_OPTS[@]}" -L "$PORT:127.0.0.1:$PORT" \
       "$VM_USER@$IP" "/usr/bin/safaridriver --port $PORT" ;;
+
+  safari-adopt)
+    NAME="${1:?usage: guest-automate.sh safari-adopt NAME [PORT]}"
+    PORT="${2:-4444}"
+    IP="$(vm_ip "$NAME")"
+    OAUTH_URL="$(ssh_vm "$IP" "/usr/bin/osascript \
+      -e 'tell application \"System Events\"' \
+      -e 'tell process \"Safari\"' \
+      -e 'repeat with safariWindow in windows' \
+      -e 'try' \
+      -e 'set candidate to value of text field 1 of group 3 of toolbar 1 of safariWindow' \
+      -e 'if candidate starts with \"https://\" then return candidate' \
+      -e 'end try' \
+      -e 'end repeat' \
+      -e 'end tell' \
+      -e 'end tell'")"
+    [[ "$OAUTH_URL" == https://* ]] || die "no HTTPS page is open in guest Safari"
+    node "$SCRIPT_DIR/driver/host-drive.mjs" \
+      --wd "http://127.0.0.1:$PORT" goto "$OAUTH_URL"
+    step "adopted guest Safari OAuth page into the WebDriver-controlled window" ;;
 
   app-cdp)
     NAME="${1:?usage: guest-automate.sh app-cdp NAME [APP_PATH] [PORT]}"

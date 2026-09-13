@@ -135,7 +135,7 @@ To get a completely fresh, **visible**, **bare** macOS VM and do the whole
 install by hand — including choosing which channel to test:
 
 ```bash
-./install-tests/electron-macos/manual-vm.sh --display 1920x1200pt
+./install-tests/electron-macos/manual-vm.sh --display 1600x900pt
 ```
 
 This clones the **clean base macOS image** (NOT the provisioned golden VM): no
@@ -155,7 +155,7 @@ Those are signed + notarized, so Gatekeeper behaves normally: open the DMG, drag
 Options: `--app PATH` also drops a **local** unsigned dev build in `~/Downloads`
 (for testing a local build instead of a channel; right-click → Open to bypass
 Gatekeeper). `--source <ref>` clones a different image (e.g. a barer
-`macos-sequoia-vanilla`). `--display <WxH>` controls the fixed guest resolution and defaults to `1920x1200pt`; use the larger default instead of relying on Tart scrolling or window-resize tricks.
+`macos-sequoia-vanilla`). `--display <WxH>` controls the fixed guest resolution and defaults to `1600x900pt`, which fits inside a 1920x1200 host after Tart and macOS chrome. Use `1920x1200pt` only on a larger host; do not rely on Tart scrolling or window-resize tricks.
 
 `run.sh` orchestrates, all on disposable state:
 

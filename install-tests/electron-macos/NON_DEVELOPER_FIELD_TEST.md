@@ -1,6 +1,6 @@
 # Non-developer macOS DMG field-test runbook
 
-This is the signed-DMG track for proving the complete path a non-developer uses: install Openbase in a clean Tart VM, finish all nine onboarding steps, pair the physical field-test iPhone, hear a dispatcher answer, and launch a real Super Agent. Use the root `field-testing` skill as the authoritative policy layer. Never use a developer's normal Openbase account, normal mobile app, or live macOS installation.
+This is the signed-DMG track for proving the complete path a non-developer uses: install Openbase in a clean Tart VM, finish all nine onboarding steps, pair a physical phone running the field-test app, hear a dispatcher answer, and launch a real Super Agent. Use the root `field-testing` skill as the authoritative policy layer. Never use a developer's normal Openbase account, normal mobile app, or live macOS installation.
 
 ## Pass criteria
 
@@ -16,27 +16,27 @@ The run passes only when all of these are true:
 
 ## 1. Front-load the only human actions
 
-Before touching the VM, ask the user to unlock the physical iPhone, set Auto-Lock to Never, keep it beside the Mac's speakers, and be ready for one or two iOS device-passcode prompts for the VPN configuration and Mac trust. Immediately establish Appium control and drive the phone's user-gated chain far enough to surface those prompts; do not merely announce the actions and postpone them until after VM provisioning. Keep that Appium session attached through the final acoustic work and user-facing handoff so a follow-up does not find the phone unexpectedly outside automation. The agent drives every Tart/VM action, including the VM's own admin-password sheets. The agent never learns or enters the iPhone passcode.
+Before touching the VM, ask the user to unlock the physical phone, keep it beside the Mac's speakers, and be ready for the platform's trust or VPN prompts. On iOS, also set Auto-Lock to Never and expect one or two device-passcode prompts for VPN configuration and Mac trust. On Android, connect USB debugging and have the user accept the on-device computer-trust prompt immediately. Establish Appium control at once and drive the phone's user-gated chain far enough to surface those prompts; do not merely announce the actions and postpone them until after VM provisioning. Keep that Appium session attached through the final acoustic work and user-facing handoff so a follow-up does not find the phone unexpectedly outside automation. The agent drives every Tart/VM action, including the VM's own admin-password sheets. The agent never learns or enters a physical-device passcode.
 
-Use only the field-test mobile variant, such as `com.openbase.coder.field-test`. Never launch or automate `com.openbase.coder`, because doing so can replace the user's normal VPN state.
+Use only the field-test mobile variant: `com.openbase.coder.field-test` on iOS or `com.openbase.android.fieldtest` on Android. Never launch, reset, uninstall, or automate either normal app, because doing so can replace the user's normal VPN state.
 
 ## 2. Start a clean, usable VM
 
 Openbase VPN requires a SIP-enabled guest. Use the maintained SIP-on field-test source or a vanilla macOS IPSW-derived source; do not use a SIP-disabled CI image for the VPN portion.
 
-Start the VM at a large resolution so the complete onboarding and System Settings panes fit without brittle resizing or scroll workarounds:
+Start the VM at the largest resolution that fits inside the host display after allowing for Tart's title bar and macOS chrome. On a 1920x1200 host, use 1600x900pt; a 1920x1200pt guest is itself clipped by the host and recreates the problem this setting is meant to solve. Use 1920x1200pt only when the host is larger:
 
 ```bash
 ./install-tests/electron-macos/manual-vm.sh \
   --source <sip-enabled-source> \
   --name <run-name> \
-  --display 1920x1200pt
+  --display 1600x900pt
 ```
 
 For an existing stopped VM, set the display before booting it again:
 
 ```bash
-tart set <run-name> --display 1920x1200pt --no-display-refit
+tart set <run-name> --display 1600x900pt --no-display-refit
 ```
 
 Tart's synthetic scroll, Page Down, and End forwarding is unreliable. A properly sized display is the supported solution; do not rely on meticulous window-edge dragging as part of the test procedure.
@@ -59,10 +59,18 @@ Release Electron builds fuse off CDP. Start Safari control before clicking the o
 ./install-tests/electron-macos/guest-automate.sh enable-safaridriver <run-name>
 ./install-tests/electron-macos/guest-automate.sh safari-tunnel <run-name> 4444
 node install-tests/electron-macos/driver/host-drive.mjs \
-  --wd http://127.0.0.1:4444 goto "https://example.com"
+  --wd http://127.0.0.1:4444 snapshot
 ```
 
-Leave the tunnel running. Return to Openbase, click its login action, then use the WebDriver endpoint to inspect and fill the OAuth form. Starting the tunnel only after OAuth has opened is unreliable and can leave Safari outside computer control.
+Leave the tunnel running. Return to Openbase and click its login action. Safari can still open the OAuth URL in a second ordinary window while SafariDriver remains attached to its original blank automation window. If `snapshot` returns `[]` while the OAuth page is visibly loaded, do not type through Tart and do not stop the automation session. Adopt the visible page into the controlled window, then inspect and fill it normally:
+
+```bash
+./install-tests/electron-macos/guest-automate.sh safari-adopt <run-name> 4444
+node install-tests/electron-macos/driver/host-drive.mjs \
+  --wd http://127.0.0.1:4444 snapshot
+```
+
+Starting the tunnel only after OAuth has opened is unreliable and can leave Safari outside computer control.
 
 Verify the address-bar origin before entering credentials. Pass secrets through standard input to the semantic `fill` command, never as command-line arguments. Extract only the specific credential needed from secure storage; never source an entire environment file.
 
@@ -126,7 +134,7 @@ Watch the desktop app during that reboot. Electron and the launchd backend start
 
 ## 8. Link, pair, and select the correct backend
 
-Use the field-test iPhone app to link the account, accept its VPN configuration with the user-entered passcode, pair privately, and select this VM in the per-purpose backend device picker. Do not assume a successful pair proves the backend is running; retain the health checks from the previous step.
+Use the platform's field-test app to link the account, accept its VPN configuration or Android system permission through the normal user-gated path, pair privately, and select this VM in the per-purpose backend device picker. Do not assume a successful pair proves the backend is running; retain the health checks from the previous step.
 
 ## 9. Acoustic dispatcher smoke
 

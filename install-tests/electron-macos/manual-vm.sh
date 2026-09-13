@@ -17,7 +17,7 @@
 #   --source REF      macOS image/VM to clone (default: the cirruslabs base
 #                     image; e.g. macos-sequoia-vanilla for even less)
 #   --name NAME       clone name (default: openbase-manual)
-#   --display WxH     guest display (default: 1920x1200pt)
+#   --display WxH     guest display (default: 1600x900pt, fits a 1920x1200 host)
 #
 # When done: tart delete <name>   (default: openbase-manual)
 
@@ -27,7 +27,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP=""
 SOURCE="ghcr.io/cirruslabs/macos-sequoia-base:latest"
 NAME="openbase-manual"
-DISPLAY="1920x1200pt"
+DISPLAY="1600x900pt"
 VM_USER="admin"; VM_PASS="admin"
 
 # Real user-facing macOS download URLs (signed + notarized), per channel.
