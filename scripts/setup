@@ -158,7 +158,9 @@ multi sync --install-set "$INSTALL_SET"
 # Multi clones missing unlocked repos on the workspace branch, but intentionally
 # leaves existing repo checkouts alone. Refuse a mixed source tree instead of
 # silently installing (for example) root develop with an existing cli on main.
-if ! multi branch check; then
+# Check only the selected install set: a public/default checkout intentionally
+# omits internal-only repositories.
+if ! node "$SCRIPT_DIR/check-workspace-branches.mjs" "$ROOT_DIR" "$INSTALL_SET"; then
   echo "Error: workspace repositories are not on their expected branches." >&2
   echo "Run 'multi set-branch $(git branch --show-current)' after making every repo clean, then rerun setup." >&2
   exit 1
