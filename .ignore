@@ -6,6 +6,8 @@
 !/openbase-agent-ui-swift
 !/allauth-client-kotlin/
 !/allauth-client-kotlin
+!/openbase-agent-ui-kotlin/
+!/openbase-agent-ui-kotlin
 !/cli/
 !/cli
 !/console/
@@ -22,6 +24,8 @@
 !/skills
 !/netmesh-go/
 !/netmesh-go
+!/netmesh-macos/
+!/netmesh-macos
 !/super-agents/
 !/super-agents
 !/multi-react/

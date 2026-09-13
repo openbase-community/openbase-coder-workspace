@@ -24,7 +24,17 @@ Setup puts `openbase-coder` on PATH via a shim at `~/.local/bin` that runs the w
 
 With no flags, setup runs the interactive first-run pickers (coding backend and voice audio provider), then offers `openbase-coder login`, verifies cloud device registration and Tailscale Serve health, and prints a phone-downloads QR code. Any flag makes the run non-interactive (a fresh install then requires `--backend`). The picker/flag semantics are owned by [`cli/docs/commands/setup.md`](../cli/docs/commands/setup.md) — don't restate them here.
 
-`scripts/setup` preserves the checkout's Multi install set: if any dev-only repo is already checked out it syncs `dev`; otherwise it syncs `default` so a public clone never requires private repo access. It then creates the cli venv, downloads LiveKit model files, builds the console, generates `~/.openbase` (env, agent homes, dispatcher config), installs the launchd services, and configures Tailscale Serve. It never clones anything itself. If a standalone install or another development workspace install already exists, it stops and points to https://docs.openbase.cloud/uninstall/ before making changes.
+`scripts/setup` preserves the checkout's Multi install set: if any internal-only repo is already checked out it syncs `internal`; otherwise it syncs `default` so a public clone never requires private repo access. Multi clones any missing repositories in that selected set. Setup then creates the CLI venv, downloads LiveKit model files, builds the console, generates `~/.openbase` (environment, agent homes, and dispatcher config), installs the launchd services, and configures the selected private network. If a standalone install or another development workspace install already exists, it stops and points to https://docs.openbase.cloud/uninstall/ before making changes.
+
+Branch selection is explicit. If the workspace root is on `develop`, `multi sync` clones missing unlocked repositories on `develop`, and setup now runs `multi branch check` to refuse any existing unlocked repository still on another branch. Four repositories are intentional trunk dependencies and remain on their `multi.json` `fixedBranch` of `main`: `netmesh-go`, `netmesh-macos`, `multi-react`, and `boilersync-react`. Everything else in the selected install set must match the workspace branch. Use `multi branch check` to inspect the exact source mix and `multi set-branch develop` from a completely clean workspace to correct it.
+
+A source-workspace install targets production Openbase Cloud by default even when the workspace branch is `develop`; the local CLI, console, desktop launcher, skills, and Super Agents still come from the checked-out branches described above. This is not a third develop environment: only production and staging Cloud deployments exist. When local develop code depends on a Cloud change not yet in production, choose staging before setup and before login so the endpoint is persisted into `~/.openbase/.env`:
+
+```bash
+OPENBASE_CODER_CLI_WEB_BACKEND_URL=https://app-staging.openbase.cloud ./scripts/setup
+```
+
+Do not reuse production login tokens after changing the endpoint; run `openbase-coder login` against the selected Cloud. Verify the installed mix with `multi branch check`, `openbase-coder version`, and the `OPENBASE_CODER_CLI_WEB_BACKEND_URL` entry in `~/.openbase/.env` (absence means the production default).
 
 ## 3. Authenticate
 

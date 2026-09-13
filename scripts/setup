@@ -155,6 +155,14 @@ INSTALL_SET="$(node "$SCRIPT_DIR/detect-install-set.mjs" "$ROOT_DIR")"
 echo "Syncing the Multi '${INSTALL_SET}' install set."
 pushd "$ROOT_DIR"
 multi sync --install-set "$INSTALL_SET"
+# Multi clones missing unlocked repos on the workspace branch, but intentionally
+# leaves existing repo checkouts alone. Refuse a mixed source tree instead of
+# silently installing (for example) root develop with an existing cli on main.
+if ! multi branch check; then
+  echo "Error: workspace repositories are not on their expected branches." >&2
+  echo "Run 'multi set-branch $(git branch --show-current)' after making every repo clean, then rerun setup." >&2
+  exit 1
+fi
 popd
 
 # Run the full local Openbase setup against this checkout, wherever it lives.
