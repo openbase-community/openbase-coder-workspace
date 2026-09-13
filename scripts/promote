@@ -394,6 +394,20 @@ for repo in "${REPOS[@]}"; do
         FAILED=1
         continue
     fi
+    # Fast-forwardable, but linear-history targets (workspace-root and desktop
+    # main reject merge commits) decline even a fast-forward push whose range
+    # carries a merge commit. Promote those by exact-tree commit too — a raw FF
+    # push GitHub would reject with GH006 "must not contain merge commits"
+    # mid-burst, leaving the promotion half-applied.
+    case "$TO" in
+        main|master|staging)
+            if [[ "$(git -C "$dir" rev-list --count --merges "${to_sha}..${from_sha}")" != "0" ]]; then
+                PLAN_REPO+=("$label"); PLAN_ACTION+=(tree)
+                PLAN_DETAIL+=("exact-tree promote (fast-forwardable, but range carries merge commit(s) a linear-history ${TO} rejects): $(git -C "$dir" log --oneline -1 "$from_sha")")
+                continue
+            fi
+            ;;
+    esac
     count="$(git -C "$dir" rev-list --count "${to_sha}..${from_sha}")"
     PLAN_REPO+=("$label"); PLAN_ACTION+=(push); PLAN_DETAIL+=("${count} commit(s): $(git -C "$dir" log --oneline -1 "$from_sha")")
 done
