@@ -97,9 +97,31 @@ Either way the CLI comes from git at that branch's HEAD (a rebake picks up new c
 
 **Escape hatch:** `--no-wait-ci` restores the old fire-and-forget pushes (desktop alongside cli, no rebuild watch) when you deliberately do not care about the seed — expect the bundled CLI to be one release behind in that mode.
 
+### Netmesh companion prebuilt (macOS) — refresh prod before it bites
+
+The macOS DMG build stages the private Netmesh apps (headless `OpenbaseNetmeshCompanion.app` + status menu-bar `OpenbaseNetmesh.app`) as **signed prebuilts downloaded from the release S3 bucket** — public/CI desktop checkouts have no `netmesh-macos` source, so they can only download, never build or publish, these artifacts. The prefix is channel-local: `mac/` for `main`, `mac-staging/` for `staging` (see `desktop/scripts/stage-netmesh-companion.mjs` / `stage-netmesh-menubar.mjs`).
+
+`desktop/scripts/netmesh-prebuilt-contract.mjs` pins `MINIMUM_NETMESH_BUILD`. The macOS job **fails at the stage step** (`build N is too old; build M or newer is required`) if the downloaded artifact's `CFBundleVersion` is below it. Because CI never refreshes the prod artifact, bumping `MINIMUM_NETMESH_BUILD` (or shipping a netmesh-macos build the desktop runtime now relies on) **will fail the prod macOS DMG until the `mac/` artifact is refreshed** — even though every git push and the CLI release succeeded. This is a pre-desktop-push gate, not a post-hoc check: verify it *before* promoting a desktop change that touches the contract.
+
+`netmesh-macos` is pinned `@main`, so the staging and prod companion are the same build — the fast, low-risk refresh is to promote the already-signed artifact from `mac-staging/` to `mac/`:
+
+```bash
+BUCKET=openbase-coder-desktop-releases-632795836081-us-east-1
+# 1. Confirm the desktop contract's required build and that netmesh-macos@main matches:
+grep MINIMUM_NETMESH_BUILD desktop/scripts/netmesh-prebuilt-contract.mjs
+grep CURRENT_PROJECT_VERSION netmesh-macos/project.yml
+# 2. For each of OpenbaseNetmeshCompanion-latest-arm64.zip and OpenbaseNetmesh-latest-arm64.zip:
+#    download the mac-staging artifact, verify CFBundleVersion >= minimum and
+#    `codesign --verify --deep --strict` (Developer ID Application), back up the
+#    current mac/ object, then copy staging -> prod:
+aws s3 cp "s3://$BUCKET/mac-staging/<zip>" "s3://$BUCKET/mac/<zip>"
+```
+
+Both artifacts are contract-gated, so refresh both. (These prebuilts are unnotarized-but-signed by design — the outer DMG notarization covers the nested apps; do not expect a stapled ticket on the companion itself.) If `mac-staging/` does not yet carry the required build, run a staging desktop build first (or build from the `netmesh-macos` source checkout so `publish-s3.mjs` publishes it).
+
 The same principle applies across workspaces: cloud, coder, multi, and boilersync each run their **own deploy lifecycle** from their own `scripts/promote`, and nothing synchronizes them. A Cloud DevSpace AMI bake snapshots this workspace's branches whenever it happens to run; multi-react/boilersync-react enter builds at whatever their trunk `main` holds. Cross-workspace freshness is eventually consistent by design — do not add cross-workspace waits.
 
-Known CI behaviors: the `rebuild linux` and `rebuild macOS` jobs publish independently, so diagnose the failed job without assuming the other artifact failed too. If BOTH jobs fail instantly with zero steps, the org has exhausted its GitHub Actions spending limit — fix in org billing settings, then `gh run rerun`. A `workflow_dispatch`ed release shares the concurrency group with push runs and gets cancelled by any release-worthy push to main mid-build; `[skip release]` pushes are the exception — they never cancel (conditional `cancel-in-progress`, see dev-docs/AUTO_UPDATE.md).
+Known CI behaviors: the `rebuild linux` and `rebuild macOS` jobs publish independently, so diagnose the failed job without assuming the other artifact failed too. If BOTH jobs fail instantly with zero steps, the org has exhausted its GitHub Actions spending limit — fix in org billing settings, then `gh run rerun`. A `403 Forbidden` / `Failed to FinalizeArtifact` on the `Upload macOS DMG` step is a **transient GitHub artifact-storage flake**, not a build problem — build+sign+notarize already passed, but because that step precedes `Publish macOS DMG to S3`, its failure leaves the S3 feed un-updated; just `gh run rerun --failed` (build+notarize re-run, ~20 min) and it publishes cleanly. A `workflow_dispatch`ed release shares the concurrency group with push runs and gets cancelled by any release-worthy push to main mid-build; `[skip release]` pushes are the exception — they never cancel (conditional `cancel-in-progress`, see dev-docs/AUTO_UPDATE.md).
 
 If the macOS job fails late with `Electron failed to install correctly`, the workflow's pnpm postinstall config has regressed — see the `pnpm.onlyBuiltDependencies` rule in `dev-docs/AUTO_UPDATE.md` (Desktop app updates). Fix the workflow, then rerun after the CLI release asset exists so the desktop seed is the current CLI version.
 
