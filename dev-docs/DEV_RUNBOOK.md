@@ -49,6 +49,10 @@ Browser OAuth against app.openbase.cloud; tokens land in `~/.openbase/auth.json`
 > That page is shared with desktop onboarding — ignore it; the terminal's
 > "Logged in successfully" is the source of truth for CLI login.
 
+### Physical-iPhone field-test ordering
+
+When this developer install is being exercised as a physical-iPhone field test, the shared [blocking early iPhone VPN passcode gate](../.agents/skills/field-testing/SKILL.md#blocking-early-iphone-vpn-passcode-gate) overrides the normal verify-first order below. After Appium control is active, perform only the account, VM sign-in, Openbase VPN selection, and phone system-alert prerequisites defined by that gate until Appium visibly proves the real **Enter iPhone Passcode — Add VPN Configurations** sheet. Do not run `doctor`, health/model probes, tests, fixes, commits, or other validation first. The developer and signed-DMG flows intentionally reference this single shared procedure.
+
 ## 4. Verify, then exercise the product
 
 ```bash

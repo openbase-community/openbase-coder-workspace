@@ -16,7 +16,7 @@ The run passes only when all of these are true:
 
 ## 1. Assert Appium control before any VM work
 
-Execute [Preflight Sequence step 0](../../.agents/skills/field-testing/SKILL.md#preflight-sequence) from the shared `field-testing` skill before continuing. That is the single source of truth for the one-minute Appium-control deadline, the separate earliest-valid Openbase VPN passcode prompt, field-test mobile variants, and session-lifetime rules across both developer-flow and signed-DMG field tests. Do not duplicate those instructions in an install-track runbook.
+Execute [Preflight Sequence step 0](../../.agents/skills/field-testing/SKILL.md#preflight-sequence), including its [blocking early iPhone VPN passcode gate](../../.agents/skills/field-testing/SKILL.md#blocking-early-iphone-vpn-passcode-gate), before continuing. Those shared sections are the single source of truth for the one-minute Appium-control deadline, the earliest-valid Openbase VPN passcode critical path, field-test mobile variants, and session-lifetime rules across both developer-flow and signed-DMG field tests. Do not duplicate those instructions in an install-track runbook.
 
 ## 2. Start a clean, usable VM
 
