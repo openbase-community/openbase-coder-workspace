@@ -49,8 +49,10 @@ command -v uv   >/dev/null 2>&1 || die "uv is required (curl -LsSf https://astra
 command -v pnpm >/dev/null 2>&1 || die "pnpm is required (corepack enable / https://pnpm.io)."
 command -v node >/dev/null 2>&1 || die "Node >= 20 is required."
 command -v xcodebuild >/dev/null 2>&1 || die "Xcode is required to build the macOS companion (xcodebuild not found)."
+command -v go >/dev/null 2>&1 || die "Go is required to build the Openbase Direct tunnel."
 
 CLI_PKG_DIR="$CLI_DIR/dist/openbase-coder-package"
+TUNNELD_BIN="$CLI_DIR/tunneld/bin/openbase-tunneld"
 
 if [ "$SKIP_CLI_BUILD" = "1" ]; then
   [ -f "$CLI_PKG_DIR/console/index.html" ] || {
@@ -58,6 +60,9 @@ if [ "$SKIP_CLI_BUILD" = "1" ]; then
   step "Reusing standalone CLI package at $CLI_PKG_DIR"
 else
   [ -x "$LIVEKIT_BIN" ] || { echo "livekit-server not found at $LIVEKIT_BIN (pass --livekit-bin)" >&2; exit 1; }
+  step "Building Openbase Direct tunnel"
+  mkdir -p "$(dirname "$TUNNELD_BIN")"
+  ( cd "$CLI_DIR/tunneld" && go build -trimpath -ldflags="-s -w" -o "$TUNNELD_BIN" . )
   step "Building standalone CLI package (with console) for desktop bundling"
   # Console IS required for the desktop bundle (stage-openbase-coder-cli.mjs
   # validates console/index.html), so do NOT pass --skip-console-build here.
@@ -66,6 +71,7 @@ else
       --version "0.0.0" \
       --channel installtest \
       --livekit-server-bin "$LIVEKIT_BIN" \
+      --tunneld-bin "$TUNNELD_BIN" \
       --package-dir "$CLI_PKG_DIR" \
       --force )
 fi
@@ -92,6 +98,7 @@ APP="$(find "$DESKTOP_DIR/release/mac-arm64" -maxdepth 1 -name '*.app' | head -1
 
 step "Verifying the built app bundles its resources"
 test -d "$APP/Contents/Resources/OpenbaseCoderCLI" || { echo "missing bundled OpenbaseCoderCLI" >&2; exit 1; }
+test -x "$APP/Contents/Resources/OpenbaseCoderCLI/bin/openbase-tunneld" || { echo "missing bundled Openbase Direct tunnel" >&2; exit 1; }
 test -d "$APP/Contents/Resources/OpenbaseScreenShareCompanion.app" || echo "WARN: companion app not bundled" >&2
 
 step "Built: $APP"

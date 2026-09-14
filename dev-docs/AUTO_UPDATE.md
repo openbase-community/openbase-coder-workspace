@@ -31,6 +31,8 @@ Rules that must not regress:
 - `update-manifest.json` (+ `update-manifest.json.sig` when signing is configured) — built by `cli/scripts/build_update_manifest.py`
 - `install.sh`
 
+The macOS runtime package includes the relocatable CLI launcher, the pinned LiveKit server, and `openbase-tunneld`. Openbase Direct depends on that bundled tunnel binary; package validation, installation, self-update validation, and Electron staging all treat it as required rather than attempting a first-run Go build on the user's Mac.
+
 Manifest schema (`manifest_schema` 1):
 
 ```json
