@@ -49,7 +49,7 @@ If a staging retry produces a replacement artifact, mount and verify the new DMG
 
 Release builds fuse off Electron CDP. Apply the shared [Safari-before-OAuth procedure](../../.agents/skills/field-testing/SKILL.md#the-one-hard-boundary-never-touch-the-developers-state) before clicking the login action; if the visible OAuth page opens outside the controlled Safari window, use the shared `safari-adopt` recovery. Do not type credentials through Tart.
 
-Drive the managed-Cloud release path: Overview → Prerequisites → Setup → Sign in → Phone → Pairing → Verify. The shared field-testing skill owns the conditional-stage rule: BYO Codex/Claude Code adds Agent sign-in, while Cartesia adds Voice Keys. Do not duplicate those optional stages in the managed path.
+Drive every stage in the shared [conditional desktop onboarding sequence](../../.agents/skills/field-testing/SKILL.md#conditional-desktop-onboarding-stages). This track does not maintain a second stage list.
 
 - Install and activate the bundled CLI at Prerequisites.
 - Choose Openbase Cloud for coding agents and `openbase-cloud` audio unless the test matrix selects another real provider.
