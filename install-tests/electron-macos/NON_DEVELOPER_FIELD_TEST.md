@@ -1,28 +1,22 @@
-# Non-developer macOS DMG field-test runbook
+# Signed macOS DMG field-test installation track
 
-This is the signed-DMG track for proving the complete path a non-developer uses: install Openbase in a clean Tart VM, finish all nine onboarding steps, pair a physical phone running the field-test app, hear a dispatcher answer, and launch a real Super Agent. Use the root `field-testing` skill as the authoritative policy layer. Never use a developer's normal Openbase account, normal mobile app, or live macOS installation.
+This document contains only the signed-DMG installation delta for a full field test. The root [`field-testing` skill's documentation-ownership section](../../.agents/skills/field-testing/SKILL.md#documentation-ownership-keep-the-install-tracks-dry) identifies and owns all behavior shared with the developer-install flow. Do not copy those procedures here; update the shared skill when a lesson applies to both tracks.
 
-## Pass criteria
+## Entry and completion gates
 
-The run passes only when all of these are true:
+Begin with [Preflight Sequence step 0](../../.agents/skills/field-testing/SKILL.md#preflight-sequence) and remain inside the [blocking early iPhone VPN passcode gate](../../.agents/skills/field-testing/SKILL.md#blocking-early-iphone-vpn-passcode-gate) until it resolves as `VISIBLE` or genuinely `NOT_PRESENT`. After completing the signed-DMG steps below, return to the shared [Field-Test Procedure](../../.agents/skills/field-testing/SKILL.md#field-test-procedure). The run passes only when both the signed-DMG checks here and every shared smoke, acoustic, Super Agent, reporting, and teardown gate pass.
 
-- A signed and notarized channel DMG was installed into `/Applications` on a clean SIP-enabled macOS VM.
-- Browser OAuth used the intended origin. For staging, the origin is exactly `app-staging.openbase.cloud`; a production origin is a hard stop.
-- The generated CLI environment persists `OPENBASE_CODER_CLI_WEB_BACKEND_URL` with the same origin.
-- The phone and VM are connected through Openbase VPN or Openbase Direct, privately paired, and the local backend is healthy.
-- A question spoken acoustically to the physical iPhone receives an audible dispatcher answer in the configured dispatcher voice.
-- `~/.openbase/logs/livekit-agent.log` contains a matching `voice_turn_result` with `status=completed` and `backend_auth_failure=False`.
-- The mandatory Super Agent gate starts a non-dispatcher agent in a fresh Desktop folder, surfaces the real Desktop-access alert, has the testing agent click Allow directly in Tart, completes the briefing's real task, and plays an unsolicited introduction. The spoken prompt must not ask the agent to introduce itself.
+Signed-DMG-specific pass criteria:
 
-## 1. Assert Appium control before any VM work
+- A channel DMG obtained through the public download path was installed into `/Applications` on a fresh SIP-enabled Tart clone.
+- The downloaded artifact's version and SHA-256 were recorded, quarantine was present, deep/strict code-signature verification passed, and Gatekeeper accepted the notarized Developer ID app.
+- Browser OAuth used the intended origin, and the installed CLI persisted that same Cloud origin.
+- All nine desktop onboarding stages completed using the bundled CLI and real Openbase VPN.
+- The embedded Netmesh components matched the sampled release, survived one VM reboot, and restored VPN plus backend health without rerunning setup.
 
-Execute [Preflight Sequence step 0](../../.agents/skills/field-testing/SKILL.md#preflight-sequence), including its [blocking early iPhone VPN passcode gate](../../.agents/skills/field-testing/SKILL.md#blocking-early-iphone-vpn-passcode-gate), before continuing. Those shared sections are the single source of truth for the one-minute Appium-control deadline, the earliest-valid Openbase VPN passcode critical path, field-test mobile variants, and session-lifetime rules across both developer-flow and signed-DMG field tests. Do not duplicate those instructions in an install-track runbook.
+## 1. Clone the VM used by this run
 
-## 2. Start a clean, usable VM
-
-Openbase VPN requires a SIP-enabled guest. Use the maintained SIP-on field-test source or a vanilla macOS IPSW-derived source; do not use a SIP-disabled CI image for the VPN portion.
-
-Start the VM at the largest resolution that fits inside the host display after allowing for Tart's title bar and macOS chrome. On a 1920x1200 host, use 1600x900pt; a 1920x1200pt guest is itself clipped by the host and recreates the problem this setting is meant to solve. Use 1920x1200pt only when the host is larger:
+Use a new run-specific name and a SIP-enabled source. The default cirruslabs source is SIP-disabled and cannot exercise Openbase VPN; the shared skill owns the diagnosis and recovery for that failure.
 
 ```bash
 ./install-tests/electron-macos/manual-vm.sh \
@@ -31,82 +25,42 @@ Start the VM at the largest resolution that fits inside the host display after a
   --display 1600x900pt
 ```
 
-For an existing stopped VM, set the display before booting it again:
+Record the clone provenance immediately. Do not reuse an earlier VM for a result that will be reported as a field test. Choose the largest fixed guest resolution that fits the host; on a 1920x1200 host, use 1600x900pt. The shared skill owns the Tart display and input-recovery rules.
+
+## 2. Acquire and verify the real channel artifact
+
+Inside the VM, use `https://openbase.cloud/downloads?staging=true` for staging or `https://openbase.cloud/downloads` for production and click the page's normal download control. A direct release-bucket URL is a diagnostic fallback, not the complete user path; if it is needed, record the public download surface as untested and follow the fallback in the shared skill.
+
+Keep the DMG in `~/Downloads`, open it in Finder, drag Openbase to Applications, and launch it through the ordinary Gatekeeper confirmation. Do not strip quarantine or right-click-bypass Gatekeeper during a signed-channel field test.
+
+Before onboarding, record artifact identity and verify the installed app:
 
 ```bash
-tart set <run-name> --display 1600x900pt --no-display-refit
+shasum -a 256 ~/Downloads/Openbase*.dmg
+xattr -p com.apple.quarantine /Applications/Openbase.app
+codesign --verify --deep --strict --verbose=2 /Applications/Openbase.app
+spctl --assess --type execute --verbose=4 /Applications/Openbase.app
+defaults read /Applications/Openbase.app/Contents/Info CFBundleShortVersionString
 ```
 
-Tart's synthetic scroll, Page Down, and End forwarding is unreliable. A properly sized display is the supported solution; do not rely on meticulous window-edge dragging as part of the test procedure.
+If a staging retry produces a replacement artifact, mount and verify the new DMG before replacing the installed app. Keep the previous app as a recoverable backup until Openbase has reconciled its registered helper; macOS can continue resolving a registered background helper through the moved bundle during replacement.
 
-## 3. Install the real channel DMG
+## 3. Drive release onboarding
 
-Inside the VM, open `https://openbase.cloud/downloads?staging=true` for staging or `https://openbase.cloud/downloads` for production, use the page's normal download control, open the DMG, drag Openbase to Applications, and open it through Gatekeeper. A staging-only run must never switch to or deploy production.
+Release builds fuse off Electron CDP. Apply the shared [Safari-before-OAuth procedure](../../.agents/skills/field-testing/SKILL.md#the-one-hard-boundary-never-touch-the-developers-state) before clicking the login action; if the visible OAuth page opens outside the controlled Safari window, use the shared `safari-adopt` recovery. Do not type credentials through Tart.
 
-If Tart input prevents testing the marketing page, record that surface as untested and use the VM's built-in `curl -fL` over the documented one-line SSH path to place the exact channel DMG in `~/Downloads`; then resume Finder, Gatekeeper, Applications, and onboarding normally. Do not install extra download tools into the clean VM.
+Drive all nine release onboarding stages: Overview → Prerequisites → Setup → Agent sign-in → Voice → Sign in → Phone → Pairing → Verify.
 
-Keep the DMG in `~/Downloads`, not `/tmp`; macOS may clear `/tmp` across a VM reboot. When replacing an artifact during a staging retry, mount and verify the new DMG before moving the installed app, keep the previous app as a recoverable backup, and let Openbase reconcile its registered helper before removing that backup. A registered macOS background helper can continue resolving through the moved bundle until replacement finishes.
+- Install and activate the bundled CLI at Prerequisites.
+- Choose Openbase Cloud for coding agents and `openbase-cloud` audio unless the test matrix selects another real provider.
+- Choose Openbase VPN. A signed non-developer build must offer Openbase VPN and Openbase Direct, not the developer-only standalone Tailscale option.
+- Verify the browser origin before credentials are entered and verify `OPENBASE_CODER_CLI_WEB_BACKEND_URL` persisted afterward.
+- Approve the Netmesh background item through System Settings with Computer Use, following the shared disposable-VM rule. Keep setup running while macOS authorization completes.
+- Before pairing, apply shared Preflight checks 4.5–4.7, including Cloud netmesh configuration, model availability, and the actual backend-health check on port 7999. Port 49154 alone proves only that the Electron control shell is running.
 
-Verify the installed app is running from `/Applications` and is not app-translocated. Record its version, signature/notarization result, channel, and bundled CLI version in the field-test log.
+## 4. Verify the embedded VPN components
 
-## 4. Prepare Safari control before OAuth
-
-Release Electron builds fuse off CDP. Start Safari control before clicking the onboarding login action so the OAuth page opens in the Safari instance that is already under semantic control:
-
-```bash
-./install-tests/electron-macos/guest-automate.sh enable-safaridriver <run-name>
-./install-tests/electron-macos/guest-automate.sh safari-tunnel <run-name> 4444
-node install-tests/electron-macos/driver/host-drive.mjs \
-  --wd http://127.0.0.1:4444 snapshot
-```
-
-Leave the tunnel running. Return to Openbase and click its login action. Safari can still open the OAuth URL in a second ordinary window while SafariDriver remains attached to its original blank automation window. If `snapshot` returns `[]` while the OAuth page is visibly loaded, do not type through Tart and do not stop the automation session. Adopt the visible page into the controlled window, then inspect and fill it normally:
-
-```bash
-./install-tests/electron-macos/guest-automate.sh safari-adopt <run-name> 4444
-node install-tests/electron-macos/driver/host-drive.mjs \
-  --wd http://127.0.0.1:4444 snapshot
-```
-
-Starting the tunnel only after OAuth has opened is unreliable and can leave Safari outside computer control.
-
-Verify the address-bar origin before entering credentials. Pass secrets through standard input to the semantic `fill` command, never as command-line arguments. Extract only the specific credential needed from secure storage; never source an entire environment file.
-
-## 5. Tart text-entry rule
-
-Do not paste credentials into Tart. Host Command-V may time out and insert only a literal `v`; punctuation and shifted characters may also be corrupted.
-
-Use Safari WebDriver for browser fields. If a release UI field has no semantic endpoint and Tart typing is the only available path, select all or clear the field and keystroke the entire value again. Inspect the complete field before submitting. Never append characters to repair a malformed value. Generate long alphanumeric-only field-test passwords with no punctuation.
-
-## 6. Complete all nine onboarding steps
-
-Drive Overview → Prerequisites → Setup → Agent sign-in → Voice → Sign in → Phone → Pairing → Verify.
-
-- Install the bundled CLI at Prerequisites.
-- Run Setup and confirm the backend answers on `127.0.0.1:7999`.
-- Choose Openbase Cloud for coding agents.
-- Choose `openbase-cloud` audio unless the test matrix explicitly selects another real provider.
-- Verify the cloud origin before sign-in and verify it persisted afterward.
-- A signed non-developer build must offer only Openbase VPN and Openbase Direct. Seeing a standalone Tailscale option is a release defect.
-
-Before pairing, verify the backend is truly ready:
-
-```bash
-curl -fsS http://127.0.0.1:7999/api/health/
-lsof -nP -iTCP -sTCP:LISTEN | grep -E ':(7999|18080)'
-```
-
-## 7. Approve Openbase VPN in System Settings
-
-Selecting Openbase VPN installs the signed `OpenbaseNetmesh` background item. Open System Settings → General → Login Items & Extensions, enable the Openbase Netmesh companion under Allow in the Background, enter the disposable VM's administrator password in the authorization sheet, and click Modify Settings.
-
-![Openbase Netmesh companion enabled under Allow in the Background](images/allow-openbase-netmesh-background.png)
-
-![Authorization sheet for changing Login Items](images/authorize-login-items-change.png)
-
-Wait for the VM to join the intended Openbase network and confirm direct reachability to the phone. If repeated polling creates duplicate companion processes or `Address already in use`, record the failure; do not normalize a relaunch race as expected setup behavior.
-
-Record the embedded Netmesh app build numbers so a stale prebuilt is visible in the field-test evidence:
+Record both embedded Netmesh build numbers so a stale or wrong-channel prebuilt is visible:
 
 ```bash
 /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' \
@@ -115,89 +69,17 @@ Record the embedded Netmesh app build numbers so a stale prebuilt is visible in 
   /Applications/Openbase.app/Contents/Resources/OpenbaseNetmesh.app/Contents/Info.plist
 ```
 
-For a staging DMG, confirm both apps came from the staging prebuilt channel and meet the release's minimum build. A staging package that silently fetches the stable-channel prebuilt is a release defect even if code signing succeeds; the staging build and publish paths must remain channel-local.
+For a staging DMG, require the builds expected by that staging release. Apply the shared post-approval readiness and concurrent-client checks; they are not repeated here.
 
-When testing an app upgrade, launch the replacement app and compare `netmesh-ctl version` with the embedded companion build before rebooting. The already-onboarded desktop must reconcile the registered privileged helper at launch; if the old helper remains active, record a release defect and do not use `tailnet set-provider` to make the reboot gate pass.
-
-If reconciliation fails, inspect only bounded log tails. Repeated `Operation not permitted` registration lines after a pending replacement mean continuation reused the companion process that performed the unregister; the desktop must recycle that control process before registration. Do not normalize a second app launch as the upgrade procedure.
+For an upgrade test, launch the replacement app and compare `netmesh-ctl version` with the embedded build before rebooting. The already-onboarded desktop must reconcile the registered privileged helper at launch. If it does not, inspect bounded log tails and record the failure rather than rerunning setup or using `tailnet set-provider` to hide it:
 
 ```bash
 tail -n 200 ~/.openbase/logs/electron-main.log | grep 'netmesh-helper-launch' | tail -n 10
 tail -n 200 ~/Library/Logs/OpenbaseNetmesh/companion.log | grep -E 'replace-helper|register:' | tail -n 20
 ```
 
-After the first successful connection, reboot the disposable VM once and verify Openbase VPN resumes without rerunning setup or `tailnet set-provider`. Pass only when the Netmesh status command returns promptly, the same private identity is present, and local LiveKit is listening again. A configured provider with an empty status response or a crash-loop reporting `LIVEKIT_NODE_IP is required` is a release defect.
+After the first successful connection, reboot the disposable VM once. Pass only when Openbase VPN restores the same private identity, the status command returns promptly, the local backend and LiveKit listeners recover, and the renderer leaves any temporary loading state without requiring a refocus, manual Recheck, or another setup run.
 
-Watch the desktop app during that reboot. Electron and the launchd backend start independently, so the renderer's first localhost health request can arrive before the backend is ready. A loading state or a momentary unavailable status is acceptable, but an already-configured install must recheck automatically and open the normal Workspace as soon as health returns. If it remains on Setup until the window is refocused or Recheck is clicked, record a startup-reconciliation defect; do not rerun setup to hide it.
+## 5. Return to the shared procedure
 
-## 8. Link, pair, and select the correct backend
-
-Use the platform's field-test app to link the account, accept its VPN configuration or Android system permission through the normal user-gated path, pair privately, and select this VM in the per-purpose backend device picker. Do not assume a successful pair proves the backend is running; retain the health checks from the previous step.
-
-## 9. Acoustic dispatcher smoke
-
-Speaker mode is a hard precondition. Connect the call, explicitly enable speaker, and verify the speaker control is visibly active. A tap alone is not proof. Do not emit any host speech until speaker state is proven.
-
-In a noisy room, keep the phone muted while preparing and turn Auto-unmute off so the microphone stays closed after the response. Immediately before playback, verify speaker mode again and tap Unmute. Auto-mute may close the microphone when dispatcher audio begins; otherwise tap Mute immediately after the complete stimulus finishes. If the call is interrupted or hung up during playback, discard that attempt and start a fresh call rather than diagnosing it as a product failure.
-
-Use Cartesia, not a macOS system voice, for the host stimulus. Extract only its API key from `~/Developer/.env` and pass it to the probe for that command:
-
-```bash
-CARTESIA_API_KEY="$(awk -F= '$1 == "CARTESIA_API_KEY" {sub(/^[^=]*=/, ""); print; exit}' ~/Developer/.env)" \
-  .agents/skills/field-testing/scripts/acoustic-probe.py \
-  "What is seven times six?" --stt mlx --seconds 25
-```
-
-Set host output volume before playback:
-
-```bash
-osascript -e 'set volume output volume 65'
-```
-
-When room noise or setup latency makes one-shot synthesis unreliable, render the Cartesia stimulus while the phone remains muted, start the recorder, and unmute only immediately before playing that prepared audio.
-
-Troubleshooting only: if the phone does not react to an otherwise audible probe, confirm macOS did not route the stimulus to Bluetooth headphones with `system_profiler SPAudioDataType`. Switch to the built-in speakers and retry; this is not a routine preflight requirement.
-
-Confirm the physical phone audibly speaks the correct answer in the dispatcher's configured voice. Then corroborate the turn with a narrowly bounded log query:
-
-```bash
-tail -n 500 ~/.openbase/logs/livekit-agent.log |
-  grep 'voice_turn_result' | tail -n 10
-```
-
-The matching line must show `status=completed` and `backend_auth_failure=False`. Logs do not replace listening.
-
-## 10. Mandatory fresh Desktop-permission Super Agent gate
-
-Create a new folder on the VM Desktop with a short `briefing.md` that asks for one exact file and exact content. Reset Desktop-folder TCC in the disposable VM before every field-test gate so a prior onboarding or test grant cannot hide the first-use permission path.
-
-```bash
-tccutil reset SystemPolicyDesktopFolder
-```
-
-Speak only: “Start a coding session in the Desktop folder <folder name> and follow the briefing.” Do not ask the agent to introduce itself.
-
-The first Desktop access must produce the product's spoken blocked-turn hint and a real macOS Desktop-folder prompt. macOS may label the requester `Openbase` or the packaged runtime child `python3.12`; record the exact attribution shown during the sampled turn. The testing agent must click Allow directly in the Tart window; do not ask the user or bypass the alert through an API:
-
-![Openbase requesting access to the Desktop folder](images/allow-openbase-desktop-folder.png)
-
-Pass only when all three layers agree:
-
-1. A non-dispatcher row appears in the Super Agents state database.
-2. The requested file exists in the requested folder with exact content.
-3. The phone audibly plays the Super Agent's unsolicited introduction and completion response.
-
-Example bounded verification:
-
-```bash
-sqlite3 ~/.local/share/super-agents-*/state.sqlite3 \
-  'select name,status from sessions;'
-```
-
-If `super_agents_start` is absent, inspect the dispatcher MCP initialization status and run the packaged MCP command directly. A command path that merely exists is not sufficient evidence that the MCP server is runtime-compatible.
-
-## 11. Record, fix, and close
-
-Document each action and finding as it occurs in `.local/field-tests/YYYY-MM-DD.md`. Report each defect in the `#qa` thread. Fix on `develop`, test the affected repositories, and use the exact-tree `scripts/promote develop staging -y` workflow only when staging must be refreshed. Never patch or deploy production.
-
-Keep the VM, account, field-test app, and Appium control session available until the testing session truly ends. Passing the last assertion is not the end: first finish requested follow-ups, finish the audit trail, and deliver the final audible handoff. Do not delete Appium while the agent is still working or before that handoff. Only then end the phone call, delete the Appium session, destroy the dedicated test account, remove its credential-vault item, stop/delete only the disposable VM named in the run, and restore the user's normal VPN without launching or automating the normal app.
+Complete the shared [Full Acoustic Loop](../../.agents/skills/field-testing/SKILL.md#full-acoustic-loop), [Mandatory Super Agent and Desktop-permission gate](../../.agents/skills/field-testing/SKILL.md#mandatory-super-agent-and-desktop-permission-gate), [Handling Failures](../../.agents/skills/field-testing/SKILL.md#handling-failures-every-failure-three-ways--maybe-four), and [Reporting](../../.agents/skills/field-testing/SKILL.md#reporting) sections. Those sections are intentionally not repeated in this installation track.

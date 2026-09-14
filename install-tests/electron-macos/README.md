@@ -135,13 +135,16 @@ To get a completely fresh, **visible**, **bare** macOS VM and do the whole
 install by hand — including choosing which channel to test:
 
 ```bash
-./install-tests/electron-macos/manual-vm.sh --display 1600x900pt
+./install-tests/electron-macos/manual-vm.sh \
+  --source <sip-enabled-source> \
+  --display 1600x900pt
 ```
 
-This clones the **clean base macOS image** (NOT the provisioned golden VM): no
+For a full Openbase VPN field test, follow the signed-DMG track's [entry and artifact-acquisition rules](NON_DEVELOPER_FIELD_TEST.md#entry-and-completion-gates). The `manual-vm.sh` default is the SIP-disabled cirruslabs image and is suitable only for harness/debugging work that does not claim the VPN gate; always pass a maintained SIP-enabled source for the full flow.
+
+This clones the selected **clean base macOS image** (NOT the provisioned golden VM): no
 Tailscale, no Node, no Homebrew, and **no app**. It opens a macOS **window** on
-your screen. Everything is yours to do. Inside the VM's Terminal, download the
-real signed DMG for whichever channel you want:
+your screen. Everything is yours to do. A complete field test downloads through the public Openbase downloads page as specified by the signed-DMG track. The direct URLs below are only a diagnostic fallback; using one leaves the public download surface untested and must be recorded that way:
 
 ```bash
 # main / stable
