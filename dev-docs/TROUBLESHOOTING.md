@@ -374,3 +374,18 @@ Archiving is reversible: archived threads stay resumable by UUID and can be
 unarchived. The command reports `resumeByNameUsable` — the active
 interactive set must fit one page (≤ 100 threads). As a one-off workaround,
 resume by the UUID printed in the error message.
+
+Two related resume traps against the shared daemon:
+
+- `Error: Permission overrides are not supported when resuming a remote
+  task.` — the invocation carries a permission-override flag (approval
+  policy or sandbox). A thread resumed over an explicit `--remote` endpoint
+  keeps the permission settings it was started with on the server, so drop
+  the override flags from the `resume`/`fork` invocation; nothing is lost.
+- `No saved session found with ID <word>` for a name that "should" exist —
+  the session name is a single positional argument with exact matching
+  (`codex resume <name> [prompt]`), so a two-word invocation passes only
+  the first word as the name and the rest as the opening prompt.
+
+See `DEV_RUNBOOK.md` ("Attaching a Codex TUI to the shared daemon") for the
+recommended invocation.
