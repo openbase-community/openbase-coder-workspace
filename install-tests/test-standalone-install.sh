@@ -60,9 +60,12 @@ build_tarball() {
     fatal "no livekit-server binary to bundle (looked at $lkbin). Pass --livekit-bin PATH, or set OPENBASE_CODER_INSTALL_TARBALL to a prebuilt tarball."
   fi
 
-  local build_root pkg_dir version target asset
+  command -v go >/dev/null 2>&1 || fatal "Go is required to build the Openbase Direct tunnel."
+
+  local build_root pkg_dir version target asset tunneld_bin
   build_root="$(mktemp -d "${TMPDIR:-/tmp}/openbase-pkg-build.XXXXXX")"
   pkg_dir="$build_root/pkg"
+  tunneld_bin="$build_root/openbase-tunneld"
   # A clean PEP 440 version the build's own version-stamp assertion accepts.
   # hatch-vcs otherwise overrides --version with the git-derived dev version,
   # so we also pin it via SETUPTOOLS_SCM_PRETEND_VERSION (mirrors CI).
@@ -73,12 +76,15 @@ build_tarball() {
   log "Building a standalone package to test install.sh against"
   note "livekit-server: $lkbin"
   note "this can take a few minutes and may download a standalone Python"
+  ( cd "$CLI_DIR/tunneld" && go build -trimpath -ldflags="-s -w" -o "$tunneld_bin" . ) \
+    || fatal "Openbase Direct tunnel build failed"
   ( cd "$CLI_DIR" && SETUPTOOLS_SCM_PRETEND_VERSION="$version" \
     uv run python scripts/build_standalone_package.py \
       --version "$version" \
       --target "$target" \
       --channel installtest \
       --livekit-server-bin "$lkbin" \
+      --tunneld-bin "$tunneld_bin" \
       --package-dir "$pkg_dir" \
       --skip-console-build \
       --force ) || fatal "package build failed"

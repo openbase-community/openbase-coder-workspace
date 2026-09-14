@@ -49,7 +49,7 @@ Out of scope for this automated developer harness: **Login** (browser OAuth), **
   (onboarding gates setup on Tailscale being connected).
 - **`run.sh`'s local build** (`build-app.sh`, only when you don't pass `--app`)
   needs the full desktop/CLI toolchain: **Xcode** (companion `xcodebuild`),
-  **uv**, **pnpm**, **Node ≥ 20**, and a **`~/.openbase/bin/livekit-server`**
+  **Go**, **uv**, **pnpm**, **Node ≥ 20**, and a **`~/.openbase/bin/livekit-server`**
   binary — which only exists if you already have a local Openbase dev install
   (or pass `--livekit-bin`). This produces the **unsigned** field-test build
   (`build-app.sh` — not a new build pathway; it is this harness's local
