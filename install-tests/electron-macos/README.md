@@ -34,7 +34,7 @@ In scope (the install flow): Prerequisites → **Setup** (activates the bundled
 CLI package into `~/.openbase/packages/standalone` and runs `openbase-coder
 setup`), then verification of the resulting install.
 
-Out of scope for this automated developer harness: **Login** (browser OAuth), **Pairing** (a physical phone), and the full acoustic loop. Those are explicitly covered by the non-developer field-test runbook linked above.
+Out of scope for this automated developer harness: **Login** (browser OAuth), **Pairing** (a physical phone), and the full acoustic loop. A full field test using either the developer-flow install or the signed-DMG install follows the shared `.agents/skills/field-testing/SKILL.md` procedure; [NON_DEVELOPER_FIELD_TEST.md](NON_DEVELOPER_FIELD_TEST.md) adds only the signed-DMG track details.
 
 ## Prerequisites
 
@@ -135,13 +135,16 @@ To get a completely fresh, **visible**, **bare** macOS VM and do the whole
 install by hand — including choosing which channel to test:
 
 ```bash
-./install-tests/electron-macos/manual-vm.sh --display 1920x1200pt
+./install-tests/electron-macos/manual-vm.sh \
+  --source <sip-enabled-source> \
+  --display 1600x900pt
 ```
 
-This clones the **clean base macOS image** (NOT the provisioned golden VM): no
+For a full Openbase VPN field test, follow the signed-DMG track's [entry and artifact-acquisition rules](NON_DEVELOPER_FIELD_TEST.md#entry-and-completion-gates). The `manual-vm.sh` default is the SIP-disabled cirruslabs image and is suitable only for harness/debugging work that does not claim the VPN gate; always pass a maintained SIP-enabled source for the full flow.
+
+This clones the selected **clean base macOS image** (NOT the provisioned golden VM): no
 Tailscale, no Node, no Homebrew, and **no app**. It opens a macOS **window** on
-your screen. Everything is yours to do. Inside the VM's Terminal, download the
-real signed DMG for whichever channel you want:
+your screen. Everything is yours to do. A complete field test downloads through the public Openbase downloads page as specified by the signed-DMG track. The direct URLs below are only a diagnostic fallback; using one leaves the public download surface untested and must be recorded that way:
 
 ```bash
 # main / stable
@@ -155,7 +158,7 @@ Those are signed + notarized, so Gatekeeper behaves normally: open the DMG, drag
 Options: `--app PATH` also drops a **local** unsigned dev build in `~/Downloads`
 (for testing a local build instead of a channel; right-click → Open to bypass
 Gatekeeper). `--source <ref>` clones a different image (e.g. a barer
-`macos-sequoia-vanilla`). `--display <WxH>` controls the fixed guest resolution and defaults to `1920x1200pt`; use the larger default instead of relying on Tart scrolling or window-resize tricks.
+`macos-sequoia-vanilla`). `--display <WxH>` controls the fixed guest resolution and defaults to `1600x900pt`, which fits inside a 1920x1200 host after Tart and macOS chrome. Use `1920x1200pt` only on a larger host; do not rely on Tart scrolling or window-resize tricks.
 
 `run.sh` orchestrates, all on disposable state:
 
@@ -193,7 +196,7 @@ Inside the VM, after setup fully completes:
 ```
 electron-macos/
   README.md
-  NON_DEVELOPER_FIELD_TEST.md  # signed-DMG + physical-phone field-test track
+  NON_DEVELOPER_FIELD_TEST.md  # signed-DMG-specific additions to the shared field-test procedure
   bootstrap-golden.sh          # one-time: install Tart + bake the golden VM (headless)
   build-app.sh                 # host: build the bundled dev .app
   run.sh                       # orchestrator: clone -> tailnet -> install -> drive -> verify -> delete

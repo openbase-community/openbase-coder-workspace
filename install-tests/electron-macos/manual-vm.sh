@@ -17,7 +17,7 @@
 #   --source REF      macOS image/VM to clone (default: the cirruslabs base
 #                     image; e.g. macos-sequoia-vanilla for even less)
 #   --name NAME       clone name (default: openbase-manual)
-#   --display WxH     guest display (default: 1920x1200pt)
+#   --display WxH     guest display (default: 1600x900pt, fits a 1920x1200 host)
 #
 # When done: tart delete <name>   (default: openbase-manual)
 
@@ -27,10 +27,10 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP=""
 SOURCE="ghcr.io/cirruslabs/macos-sequoia-base:latest"
 NAME="openbase-manual"
-DISPLAY="1920x1200pt"
+DISPLAY="1600x900pt"
 VM_USER="admin"; VM_PASS="admin"
 
-# Real user-facing macOS download URLs (signed + notarized), per channel.
+# Direct signed + notarized artifact URLs, for the documented diagnostic fallback.
 DMG_BASE="https://openbase-coder-desktop-releases-632795836081-us-east-1.s3.amazonaws.com"
 DMG_MAIN="$DMG_BASE/mac/Openbase-Coder-latest-arm64.dmg"
 DMG_STAGING="$DMG_BASE/mac-staging/Openbase-Coder-latest-arm64.dmg"
@@ -89,8 +89,9 @@ cat <<DONE
 $(printf '\033[32m==> Ready.\033[0m') A fresh, bare macOS VM is on your screen. Nothing Openbase is
 installed. Log in inside the VM as: $VM_USER / $VM_PASS
 
-To install a REAL release, open Terminal IN THE VM and download the channel you
-want (signed + notarized, so Gatekeeper works normally):
+For a full field test, use the public Openbase downloads page in Safari. If that
+surface is blocked and you explicitly record it as untested, these direct signed
+and notarized artifact URLs are the diagnostic fallback:
 
   # main / stable
   curl -L -o ~/Downloads/Openbase.dmg "$DMG_MAIN"

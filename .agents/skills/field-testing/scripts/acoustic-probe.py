@@ -45,6 +45,7 @@ CARTESIA_TTS_URL = "https://api.cartesia.ai/tts/bytes"
 DEFAULT_CARTESIA_VOICE_ID = "9626c31c-bec5-4cca-baa8-f8ba9e84c8bc"
 DEFAULT_CARTESIA_MODEL_ID = "sonic-3.5"
 DEFAULT_CARTESIA_VERSION = "2026-03-01"
+DEFAULT_MLX_MODEL_ID = "mlx-community/whisper-large-v3-turbo"
 
 
 def _log(msg: str) -> None:
@@ -103,7 +104,10 @@ def record_and_speak(
 ) -> None:
     """Record `seconds` of host mic to out_path, speaking `question` shortly in."""
     # avfoundation: ":<idx>" selects audio-only input by index. Mono 16 kHz keeps
-    # the upload small and matches what STT expects.
+    # the upload small and matches what STT expects. Continuity-device discovery
+    # can make AVFoundation's audio timestamps advance much faster than the
+    # samples delivered by the built-in mic. Anchor to wall-clock timestamps and
+    # fill those gaps so a requested 25-second probe really records 25 seconds.
     rec = subprocess.Popen(
         [
             "ffmpeg",
@@ -113,10 +117,14 @@ def record_and_speak(
             "error",
             "-f",
             "avfoundation",
+            "-use_wallclock_as_timestamps",
+            "1",
             "-i",
             f":{device}",
             "-t",
             str(seconds),
+            "-af",
+            "aresample=async=1000:first_pts=0",
             "-ac",
             "1",
             "-ar",
@@ -176,10 +184,21 @@ def transcribe_assemblyai(wav_path: str, api_key: str) -> str:
     raise RuntimeError("AssemblyAI transcription timed out")
 
 
-def transcribe_mlx(wav_path: str) -> str:
+def transcribe_mlx(wav_path: str, model_id: str) -> str:
     with tempfile.TemporaryDirectory() as td:
         subprocess.run(
-            ["mlx_whisper", wav_path, "--output-dir", td, "--output-format", "txt"],
+            [
+                "mlx_whisper",
+                wav_path,
+                "--model",
+                model_id,
+                "--language",
+                "en",
+                "--output-dir",
+                td,
+                "--output-format",
+                "txt",
+            ],
             check=True,
         )
         base = os.path.splitext(os.path.basename(wav_path))[0]
@@ -221,6 +240,11 @@ def main() -> int:
         default=os.getenv("OPENBASE_E2E_CARTESIA_VERSION", DEFAULT_CARTESIA_VERSION),
     )
     ap.add_argument("--stt", choices=["assemblyai", "mlx"], default="assemblyai")
+    ap.add_argument(
+        "--mlx-model",
+        default=os.getenv("OPENBASE_E2E_MLX_MODEL_ID", DEFAULT_MLX_MODEL_ID),
+        help="mlx-whisper model used by the local STT fallback.",
+    )
     ap.add_argument("--out", default="", help="Keep the wav at this path.")
     args = ap.parse_args()
 
@@ -278,7 +302,7 @@ def main() -> int:
     text = (
         transcribe_assemblyai(wav, key)
         if args.stt == "assemblyai"
-        else transcribe_mlx(wav)
+        else transcribe_mlx(wav, args.mlx_model)
     )
     print("\n=== TRANSCRIPT ===")
     print(text)

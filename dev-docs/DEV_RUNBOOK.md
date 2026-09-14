@@ -49,6 +49,10 @@ Browser OAuth against app.openbase.cloud; tokens land in `~/.openbase/auth.json`
 > That page is shared with desktop onboarding — ignore it; the terminal's
 > "Logged in successfully" is the source of truth for CLI login.
 
+### Physical-iPhone field-test ordering
+
+When this developer install is sampled in a field test, use this runbook only for the developer-workspace setup mechanics. The [`field-testing` skill's documentation-ownership section](../.agents/skills/field-testing/SKILL.md#documentation-ownership-keep-the-install-tracks-dry) identifies and owns all behavior shared with the signed-DMG track; do not restate those procedures here. In particular, its [blocking early iPhone VPN passcode gate](../.agents/skills/field-testing/SKILL.md#blocking-early-iphone-vpn-passcode-gate) overrides the normal verify-first order below.
+
 ## 4. Verify, then exercise the product
 
 ```bash
@@ -59,7 +63,7 @@ openbase-coder services status
 
 Then pick the surface you're testing:
 
-- **iOS app (the primary product surface).** Phone signed into the same Openbase Cloud account and on the same tailnet. The Mac appears via the cloud device registration that setup/login reported; start a voice session. If it sticks at "waiting for agent", see the LiveKit note in `AGENTS.md` (stale ICE state — restarting Mac + phone resolves it). The Xcode project is Tuist-generated and gitignored: after pulling or editing `ios/Project.swift`, run `tuist generate --no-open` in `ios/` before building, or the build silently uses stale Info.plist config (e.g. missing ATS exception domains → NSURLError -1022 on every plain-HTTP tailnet request).
+- **iOS app (the primary product surface).** Phone signed into the same Openbase Cloud account and on the same tailnet. The Mac appears via the cloud device registration that setup/login reported; start a voice session. If it sticks at "waiting for agent", see the LiveKit note in `AGENTS.md` (stale ICE state — restarting Mac + phone resolves it). The Xcode project is Tuist-generated and gitignored: after pulling or editing `ios/Project.swift`, run `tuist generate --no-open` in `ios/` before building, or the build silently uses stale Info.plist config (e.g. missing ATS exception domains → NSURLError -1022 on every plain-HTTP tailnet request). During a field test, follow the shared [Appium call procedure](../.agents/skills/field-testing/SKILL.md#driving-the-call-through-appium-do-this-before-you-speak) for first-call microphone permission, mic state, screenshot-proven speaker mode, Cartesia stimulus, and audible-response capture.
 - **Android app.** The Kotlin/Compose peer of the iOS app. Phone signed into the same Openbase Cloud account and on the same tailnet; add the Mac's MagicDNS host under Settings → Backend Host (see `android/README.md`).
 - **Web console.** `http://localhost:7999` — served by the django-cli service from `console/dist`. Threads, skills, settings, versions footer.
 - **Desktop app (optional — NOT needed for CLI/voice dev).** Offered at the end of `./scripts/setup`, or any time later via `./scripts/dev-launch --electron`. It builds the renderer once (skipped when unchanged), installs a thin launcher bundle at `/Applications/Openbase.app` (name + icon + Spotlight; no bundled runtime — it execs the workspace Electron, and it never replaces a real packaged install unless `OPENBASE_DEV_DASHBOARD_REPLACE_APP=1`), and runs Electron alone — no vite dev server or watchers; use `--electron-dev` only when working on the dashboard UI itself. It sets an explicit development dashboard-only mode; Electron also detects the active development `installation.json`. Its installer bridge and onboarding/setup wizard are unavailable, because `./scripts/setup` is the sole dev setup authority. Use `pnpm run install:local` only when intentionally testing a packaged app.

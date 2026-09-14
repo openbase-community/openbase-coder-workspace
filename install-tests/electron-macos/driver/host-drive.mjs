@@ -48,6 +48,11 @@ if ((!cdpUrl && !wdUrl) || !cmd) {
 
 const stdinText = () => readFileSync(0, "utf8").replace(/\n$/, "");
 
+function safeUrlLabel(rawUrl) {
+  const url = new URL(rawUrl);
+  return `${url.origin}${url.pathname}`;
+}
+
 // ---------------------------------------------------------------- CDP branch
 async function cdpMain() {
   const { chromium } = await import("playwright");
@@ -141,7 +146,10 @@ async function wdMain() {
   switch (cmd) {
     case "goto":
       await wd("POST", `/session/${s}/url`, { url: rest[0] });
-      console.log(`at: ${rest[0]}`);
+      // OAuth callback and authorization URLs carry short-lived codes, state,
+      // and PKCE material in their query strings. Keep those out of terminal
+      // transcripts while still proving which origin/path was adopted.
+      console.log(`at: ${safeUrlLabel(rest[0])}`);
       break;
     case "snapshot": {
       const items = await wd("POST", `/session/${s}/execute/sync`, {
