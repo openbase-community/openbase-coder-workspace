@@ -40,7 +40,10 @@
 set -euo pipefail
 
 VM_USER="${VM_USER:-admin}"; VM_PASS="${VM_PASS:-admin}"
-SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10)
+# Disposable field-test guests use the explicit VM password above. Ignore the
+# host's SSH agent so a busy developer keychain cannot exhaust MaxAuthTries
+# before password authentication is attempted.
+SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o PubkeyAuthentication=no -o PreferredAuthentications=password)
 SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
 
 die() { printf '\033[31mFATAL\033[0m %s\n' "$*" >&2; exit 2; }
