@@ -11,7 +11,7 @@ Signed-DMG-specific pass criteria:
 - A channel DMG obtained through the public download path was installed into `/Applications` on a fresh SIP-enabled Tart clone.
 - The downloaded artifact's version and SHA-256 were recorded, quarantine was present, deep/strict code-signature verification passed, and Gatekeeper accepted the notarized Developer ID app.
 - Browser OAuth used the intended origin, and the installed CLI persisted that same Cloud origin.
-- All nine desktop onboarding stages completed using the bundled CLI and real Openbase VPN.
+- Every onboarding stage applicable to the selected setup completed using the bundled CLI and real Openbase VPN.
 - The embedded Netmesh components matched the sampled release, survived one VM reboot, and restored VPN plus backend health without rerunning setup.
 
 ## 1. Clone the VM used by this run
@@ -49,7 +49,7 @@ If a staging retry produces a replacement artifact, mount and verify the new DMG
 
 Release builds fuse off Electron CDP. Apply the shared [Safari-before-OAuth procedure](../../.agents/skills/field-testing/SKILL.md#the-one-hard-boundary-never-touch-the-developers-state) before clicking the login action; if the visible OAuth page opens outside the controlled Safari window, use the shared `safari-adopt` recovery. Do not type credentials through Tart.
 
-Drive all nine release onboarding stages: Overview → Prerequisites → Setup → Agent sign-in → Voice → Sign in → Phone → Pairing → Verify.
+Drive the managed-Cloud release path: Overview → Prerequisites → Setup → Sign in → Phone → Pairing → Verify. The shared field-testing skill owns the conditional-stage rule: BYO Codex/Claude Code adds Agent sign-in, while Cartesia adds Voice Keys. Do not duplicate those optional stages in the managed path.
 
 - Install and activate the bundled CLI at Prerequisites.
 - Choose Openbase Cloud for coding agents and `openbase-cloud` audio unless the test matrix selects another real provider.
