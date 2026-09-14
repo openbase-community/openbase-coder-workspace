@@ -53,6 +53,8 @@ Browser OAuth against app.openbase.cloud; tokens land in `~/.openbase/auth.json`
 
 When this developer install is being exercised as a physical-iPhone field test, the shared [blocking early iPhone VPN passcode gate](../.agents/skills/field-testing/SKILL.md#blocking-early-iphone-vpn-passcode-gate) overrides the normal verify-first order below. After Appium control is active, perform only the account, VM sign-in, Openbase VPN selection, and phone system-alert prerequisites defined by that gate until Appium visibly proves the real **Enter iPhone Passcode — Add VPN Configurations** sheet. Do not run `doctor`, health/model probes, tests, fixes, commits, or other validation first. The developer and signed-DMG flows intentionally reference this single shared procedure.
 
+Both pathways also use the shared [Field-Test Account Lifecycle](../.agents/skills/field-testing/SKILL.md#field-test-account-lifecycle), including its mandatory post-verification `--mock-payment` entitlement step for every full field test. Keep the command and its ordering single-sourced there rather than copying them into either installation pathway.
+
 ## 4. Verify, then exercise the product
 
 ```bash
