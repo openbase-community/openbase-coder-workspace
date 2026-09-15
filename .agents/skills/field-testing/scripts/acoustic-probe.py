@@ -23,10 +23,11 @@ Examples:
   acoustic-probe.py "Start a super agent that lists my repos" --seconds 25
   acoustic-probe.py --no-tts --seconds 12    # just capture + transcribe
 
-Requires: ffmpeg (brew) and Cartesia for the default realistic TTS stimulus.
-Pass --tts macos for the explicit `say` fallback. Host mic device defaults to
-the built-in MacBook Pro Microphone; list devices with `ffmpeg -f avfoundation
--list_devices true -i ""` and override with --device.
+Requires: macOS Core Audio, Swift, ffmpeg (for conversion), and Cartesia for the
+default realistic TTS stimulus. Pass --tts macos for the explicit `say`
+fallback. Native Core Audio capture is the default because current FFmpeg
+AVFoundation builds can advance timestamps without delivering the corresponding
+microphone samples. The old FFmpeg path remains an explicit diagnostic fallback.
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ import sys
 import tempfile
 import time
 import urllib.request
+from pathlib import Path
 
 AAI_BASE = "https://api.assemblyai.com/v2"
 CARTESIA_TTS_URL = "https://api.cartesia.ai/tts/bytes"
@@ -46,6 +48,7 @@ DEFAULT_CARTESIA_VOICE_ID = "9626c31c-bec5-4cca-baa8-f8ba9e84c8bc"
 DEFAULT_CARTESIA_MODEL_ID = "sonic-3.5"
 DEFAULT_CARTESIA_VERSION = "2026-03-01"
 DEFAULT_MLX_MODEL_ID = "mlx-community/whisper-large-v3-turbo"
+NATIVE_RECORDER = Path(__file__).with_name("record-microphone.swift")
 
 
 def _log(msg: str) -> None:
@@ -100,41 +103,42 @@ def record_and_speak(
     voice: str,
     rate: int,
     stimulus_audio_path: str | None,
+    capture: str,
     out_path: str,
 ) -> None:
     """Record `seconds` of host mic to out_path, speaking `question` shortly in."""
-    # avfoundation: ":<idx>" selects audio-only input by index. Mono 16 kHz keeps
-    # the upload small and matches what STT expects. Continuity-device discovery
-    # can make AVFoundation's audio timestamps advance much faster than the
-    # samples delivered by the built-in mic. Anchor to wall-clock timestamps and
-    # fill those gaps so a requested 25-second probe really records 25 seconds.
-    rec = subprocess.Popen(
-        [
-            "ffmpeg",
-            "-y",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-f",
-            "avfoundation",
-            "-use_wallclock_as_timestamps",
-            "1",
-            "-i",
-            f":{device}",
-            "-t",
-            str(seconds),
-            "-af",
-            "aresample=async=1000:first_pts=0",
-            "-ac",
-            "1",
-            "-ar",
-            "16000",
-            out_path,
-        ],
-        stdin=subprocess.DEVNULL,
-    )
+    native_path = out_path + ".native.wav"
+    if capture == "coreaudio":
+        rec = subprocess.Popen(
+            ["swift", str(NATIVE_RECORDER), native_path, str(seconds)],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if rec.stdout is None or rec.stdout.readline().strip() != "READY":
+            detail = rec.stderr.read().strip() if rec.stderr else ""
+            raise RuntimeError(f"native microphone recorder failed to start: {detail}")
+    else:
+        rec = subprocess.Popen(
+            [
+                "ffmpeg",
+                "-y",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "avfoundation",
+                "-i",
+                f":{device}",
+                "-t",
+                str(seconds),
+                native_path,
+            ],
+            stdin=subprocess.DEVNULL,
+        )
     try:
-        # Let avfoundation warm up before speaking so the question isn't clipped.
+        # Let the capture path warm up before speaking so the question isn't clipped.
         time.sleep(tts_delay)
         if question:
             _log(f'▶ speaking: "{question}"')
@@ -152,6 +156,27 @@ def record_and_speak(
                 rec.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 rec.kill()
+    if rec.returncode != 0:
+        detail = rec.stderr.read().strip() if rec.stderr else ""
+        raise RuntimeError(f"microphone recorder failed: {detail}")
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            native_path,
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            out_path,
+        ],
+        check=True,
+    )
+    os.unlink(native_path)
 
 
 def transcribe_assemblyai(wav_path: str, api_key: str) -> str:
@@ -212,12 +237,18 @@ def main() -> int:
         "question", nargs="?", help="Stimulus to speak. Omit with --no-tts."
     )
     ap.add_argument("--no-tts", action="store_true", help="Record + transcribe only.")
-    ap.add_argument("--seconds", type=float, default=16.0, help="Total record seconds.")
+    ap.add_argument("--seconds", type=float, default=45.0, help="Total record seconds.")
     ap.add_argument(
         "--tts-delay", type=float, default=1.2, help="Seconds before speaking."
     )
     ap.add_argument(
-        "--device", default="1", help="avfoundation audio input index (1=MacBook mic)."
+        "--device", default="1", help="FFmpeg fallback audio input index."
+    )
+    ap.add_argument(
+        "--capture",
+        choices=["coreaudio", "ffmpeg"],
+        default="coreaudio",
+        help="Microphone capture backend (default: native Core Audio).",
     )
     ap.add_argument(
         "--tts",
@@ -289,6 +320,7 @@ def main() -> int:
             voice=args.voice,
             rate=args.rate,
             stimulus_audio_path=stimulus_audio_path,
+            capture=args.capture,
             out_path=wav,
         )
     finally:
