@@ -13,9 +13,12 @@
 //   snapshot                          list interactive elements (role, text)
 //   click TEXT_OR_SELECTOR            click a button/link by visible text
 //                                     (CDP) or CSS selector (WebDriver)
+//   clicktext TEXT                    click visible control text (WebDriver)
 //   fill SELECTOR                     set a field's value from STDIN,
 //                                     byte-exact, firing real input events
-//   goto URL                          navigate (WebDriver only)
+//   press SELECTOR KEY                send a key to a field
+//   goto [URL]                        navigate (WebDriver only); when URL is
+//                                     omitted, read it from STDIN
 //   text [SELECTOR]                   dump page (or element) text
 //   shot PATH.png                     screenshot to a host path
 //
@@ -42,7 +45,7 @@ const wdUrl = takeFlag("--wd");
 const [cmd, ...rest] = args;
 
 if ((!cdpUrl && !wdUrl) || !cmd) {
-  console.error("usage: host-drive.mjs (--cdp URL | --wd URL) <snapshot|click|fill|goto|text|shot> [args]");
+  console.error("usage: host-drive.mjs (--cdp URL | --wd URL) <snapshot|click|fill|press|goto|text|shot> [args]");
   process.exit(2);
 }
 
@@ -87,6 +90,14 @@ async function cdpMain() {
         const selector = rest.join(" ");
         await page.locator(selector).first().fill(stdinText());
         console.log(`filled: ${selector}`);
+        break;
+      }
+      case "press": {
+        const key = rest.at(-1);
+        const selector = rest.slice(0, -1).join(" ");
+        if (!selector || !key) throw new Error("press requires a selector and key");
+        await page.locator(selector).first().press(key);
+        console.log(`pressed ${key}: ${selector}`);
         break;
       }
       case "text": {
@@ -145,11 +156,15 @@ async function wdMain() {
   const s = await wdSession();
   switch (cmd) {
     case "goto":
-      await wd("POST", `/session/${s}/url`, { url: rest[0] });
-      // OAuth callback and authorization URLs carry short-lived codes, state,
-      // and PKCE material in their query strings. Keep those out of terminal
-      // transcripts while still proving which origin/path was adopted.
-      console.log(`at: ${safeUrlLabel(rest[0])}`);
+      {
+        const url = rest[0] || stdinText();
+        if (!url) throw new Error("goto requires a URL argument or URL on stdin");
+        await wd("POST", `/session/${s}/url`, { url });
+        // OAuth callback and authorization URLs carry short-lived codes, state,
+        // and PKCE material in their query strings. Keep those out of terminal
+        // transcripts while still proving which origin/path was adopted.
+        console.log(`at: ${safeUrlLabel(url)}`);
+      }
       break;
     case "snapshot": {
       const items = await wd("POST", `/session/${s}/execute/sync`, {
@@ -202,6 +217,17 @@ async function wdMain() {
         args: [{ "element-6066-11e4-a52e-4f735466cecf": id }, value],
       });
       console.log(`filled: ${selector} (${value.length} chars)`);
+      break;
+    }
+    case "press": {
+      const keyName = rest.at(-1);
+      const selector = rest.slice(0, -1).join(" ");
+      if (!selector || !keyName) throw new Error("press requires a selector and key");
+      const keys = { Enter: "\uE007", Tab: "\uE004", Escape: "\uE00C" };
+      const key = keys[keyName] || keyName;
+      const id = await wdFind(s, selector);
+      await wd("POST", `/session/${s}/element/${id}/value`, { text: key, value: [key] });
+      console.log(`pressed ${keyName}: ${selector}`);
       break;
     }
     case "text": {

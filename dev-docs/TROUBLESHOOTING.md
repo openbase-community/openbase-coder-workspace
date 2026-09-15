@@ -294,6 +294,12 @@ Agent-side diagnosis beyond the user doc:
 
 Remedy beyond the baseline: the classic low-disk cause is often Docker VM images under `~/Library/Containers/com.docker.docker` (multi-hundred-GB). After freeing disk and restarting `code-sync`, if a deleted file was resurrected, remove the stray untracked copies on **both** machines (SSH to the peer) or Syncthing round-trips them back.
 
+## Openbase Direct Stays In `NeedsLogin` Or Reports `invalid pre auth key`
+
+Openbase Direct (`netmesh-tsnet`) must submit an enrollment key to the same Headscale control plane that minted it. Production Cloud uses the production control plane; staging Cloud uses its isolated staging control plane. A mismatched `OPENBASE_TSNET_CONTROL_URL` causes `openbase-tunneld` to remain in `NeedsLogin`, with `invalid pre auth key` in its bounded recent log output, even though Openbase account login succeeded.
+
+Confirm `OPENBASE_CODER_CLI_WEB_BACKEND_URL` and `OPENBASE_TSNET_CONTROL_URL` in `~/.openbase/.env` point to the same environment. For a managed deployment, compare the latter with `openbase config get -a <cloud-app> HEADSCALE_CONTROL_URL` (never print `HEADSCALE_API_KEY`). Current installs persist the control URL returned alongside each enrollment key before starting the service, and a successful `openbase-coder login` finishes a Direct enrollment that setup deferred. To repair an older install, update first, then run `openbase-coder tailnet enroll`; do not copy a staging key or Headscale API credential into the production environment, or vice versa.
+
 ## Openbase VPN (netmesh) Companion Fails To Connect In A Tart / Virtualization.framework VM (SIP Disabled)
 
 ### Symptoms Seen

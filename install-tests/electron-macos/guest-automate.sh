@@ -125,8 +125,8 @@ case "$cmd" in
       -e 'end tell' \
       -e 'end tell'")"
     [[ "$OAUTH_URL" == https://* ]] || die "no HTTPS page is open in guest Safari"
-    node "$SCRIPT_DIR/driver/host-drive.mjs" \
-      --wd "http://127.0.0.1:$PORT" goto "$OAUTH_URL"
+    printf '%s' "$OAUTH_URL" | node "$SCRIPT_DIR/driver/host-drive.mjs" \
+      --wd "http://127.0.0.1:$PORT" goto
     step "adopted guest Safari OAuth page into the WebDriver-controlled window" ;;
 
   app-cdp)
