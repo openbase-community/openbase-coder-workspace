@@ -8,7 +8,7 @@ The recommended path for developing and testing Openbase Coder starts at the Git
 - `multi` (`uv tool install multi-workspace`)
 - A tailnet transport for phone access. Interactive developer setup offers the expert Tailscale transport, Openbase VPN, and Openbase Direct. Electron production onboarding is different: it offers only Openbase VPN or Direct.
 - Coding-backend login: `codex login` for the codex backend, and/or your normal Claude Code login (setup bridges it into Openbase's managed config automatically on macOS)
-- Only if you pick the **Openbase Netmesh (VPN)** tailnet transport: extra macOS build tools (Xcode, `xcodegen`, and Go) to build the VPN companion. You don't need these for the default Tailscale transport or the no-VPN embedded option.
+- Only on macOS, **Openbase VPN** uses the hardened VPN companion. Public checkouts download its signed prebuilt and need no extra build tools; an internal checkout with the private `netmesh-macos` source builds it with Xcode, `xcodegen`, and Go. The developer-only standalone Tailscale transport and Openbase Direct do not use this companion.
 
 Setup fails fast with the fix command if `uv`, `multi`, or pnpm is missing; the selected networking transport reports its own prerequisites. Picking the netmesh VPN likewise fails fast listing exactly which build tools are missing and how to install each (the authoritative list lives in that check, not here, so it can't drift). A missing `codex login` only warns (threads fail later until you log in).
 
@@ -57,7 +57,7 @@ When this developer install is sampled in a field test, use this runbook only fo
 
 ```bash
 openbase-coder version          # dev install, channel, update flags
-openbase-coder doctor           # services, ports, Tailscale, credentials, auth
+openbase-coder doctor           # services, ports, selected phone-access network, credentials, auth
 openbase-coder services status
 ```
 
@@ -90,7 +90,7 @@ To exercise the macOS install flows **without** disturbing your real install, us
 ```bash
 ./install-tests/run-all.sh                                              # developer install (install.sh), sandbox $HOME
 ./install-tests/electron-macos/bootstrap-golden.sh                      # one-time: bake the Tart golden VM
-./install-tests/electron-macos/run.sh --tailscale-authkey tskey-auth-...# Electron app flow in a disposable VM
+./install-tests/electron-macos/run.sh --tailscale-authkey tskey-auth-...# legacy local-build harness; standalone Tailscale sample
 ```
 
-The developer-install flow runs `cli/scripts/install.sh` in a throwaway sandbox `$HOME` (services skipped, Tailscale stubbed), so your install, PATH, and launchd services are untouched. The Electron flow runs the real onboarding — which activates the bundled CLI, installs launchd services, and configures Tailscale Serve — inside a disposable macOS VM (Tart), so it can't clobber this machine; because onboarding gates setup on Tailscale being connected, that run needs an ephemeral Tailscale auth key. The dev-**workspace** flow (`scripts/setup`) is a Linux concern and is not covered here. See `install-tests/README.md` and `install-tests/electron-macos/README.md`.
+The developer-install flow runs `cli/scripts/install.sh` in a throwaway sandbox `$HOME` (services skipped and networking stubbed), so your install, PATH, and launchd services are untouched. The `run.sh` Electron harness is a legacy local-build check that deliberately samples developer-only standalone Tailscale inside Tart, which is why that command needs an ephemeral Tailscale key. It is not the signed product's onboarding contract. A full signed-DMG field test starts with `manual-vm.sh`, then selects Openbase VPN or Openbase Direct through the real onboarding UI and follows the shared field-testing skill. The dev-**workspace** flow (`scripts/setup`) is separate from both harnesses. See `install-tests/README.md` and `install-tests/electron-macos/README.md`.
