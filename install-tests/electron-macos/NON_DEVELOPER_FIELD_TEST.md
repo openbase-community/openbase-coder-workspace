@@ -78,6 +78,8 @@ tail -n 200 ~/.openbase/logs/electron-main.log | grep 'netmesh-helper-launch' | 
 tail -n 200 ~/Library/Logs/OpenbaseNetmesh/companion.log | grep -E 'replace-helper|register:' | tail -n 20
 ```
 
+For an electron-updater add-on, begin from an installed lower staging version with Openbase closed, publish a higher timestamped staging build, then launch the app. Require the visible `Update ready` notice to name both versions, click `Restart to update` with Computer Use, and verify the installed bundle version after relaunch. For Openbase VPN, also require `netmesh-helper-launch-reconciled` or `netmesh-helper-launch-repaired`, a prompt `services status` result with both managed routes, the same restored VPN identity, and the phone's stopped-service warning to remain absent or clear automatically. A manual daemon kickstart, setup rerun, Recheck, or provider reset is a failed updater gate, not recovery evidence.
+
 After the first successful connection, reboot the disposable VM once. Pass only when the sampled transport restores its working route, the status command returns promptly, the local backend and LiveKit listeners recover, and the renderer leaves any temporary loading state without requiring a refocus, manual Recheck, or another setup run.
 
 ## 5. Return to the shared procedure
