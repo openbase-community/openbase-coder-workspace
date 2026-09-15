@@ -306,18 +306,18 @@ Inside a Tart (or any Virtualization.framework) macOS guest, the netmesh compani
 
 ### Fix
 
-Enable SIP on the golden clone once, from the GUI Recovery Terminal (no SSH there — Recovery has no Remote Login):
+Use the maintained SIP-enabled field-test source image. If a replacement source must be prepared, enable SIP once from the GUI Recovery Terminal (no SSH there — Recovery has no Remote Login):
 
 ```sh
-tart clone openbase-golden openbase-golden-sip     # keep a SIP-on variant
-tart run openbase-golden-sip --recovery            # boots to Recovery
+tart clone <base-source> <sip-enabled-source>
+tart run <sip-enabled-source> --recovery
 # In the Recovery window: Utilities -> Terminal, then:
 #   csrutil enable        (auth as admin/admin)
 #   reboot
 # After reboot, over SSH:  csrutil status  ->  enabled
 ```
 
-Then clone VPN-exercising field tests from `openbase-golden-sip`. See the `field-testing` skill and `install-tests/electron-macos/bootstrap-golden.sh` for the full golden-image procedure. (Openbase Direct would be the VM fallback that avoids netmesh entirely, but the standalone/desktop package currently omits `openbase-tunneld` — a separate real bug.)
+Then clone VPN-exercising field tests from that maintained SIP-enabled source. See the shared `field-testing` skill and `install-tests/electron-macos/README.md` for the current VM lifecycle. Openbase Direct avoids the VPN companion, and current desktop packages are required to include `openbase-tunneld`.
 
 ## `openbase-coder user say` Fails With "Unable to publish announcer message"
 

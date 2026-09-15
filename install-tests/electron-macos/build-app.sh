@@ -10,7 +10,7 @@
 # unsigned (identity=null) for speed — the app runs inside a disposable VM.
 #
 # Output: desktop/release/mac-arm64/<ProductName>.app  (path printed on the
-# last line as `APP=<path>` for run.sh to consume).
+# last line as `APP=<path>` for callers to consume).
 #
 # Flags:
 #   --livekit-bin PATH   livekit-server to bundle (default ~/.openbase/bin/livekit-server)

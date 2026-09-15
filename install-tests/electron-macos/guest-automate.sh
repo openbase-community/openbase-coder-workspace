@@ -138,8 +138,7 @@ case "$cmd" in
     # session with a CDP port. --remote-debugging-port is a debug-only launch
     # deviation from a Finder double-click; keep one pure launch in the run's
     # smoke pass and record this flag as a known deviation in the field log.
-    # Root can adopt the GUI (Aqua) audit session; a plain SSH user cannot
-    # (see run-driver.sh, which uses the same sudo-asuser-sudo pattern).
+    # Root can adopt the GUI (Aqua) audit session; a plain SSH user cannot.
     ssh_vm "$IP" "
       set -e
       EXE=\"\$(/usr/bin/defaults read '$APP/Contents/Info' CFBundleExecutable)\"
