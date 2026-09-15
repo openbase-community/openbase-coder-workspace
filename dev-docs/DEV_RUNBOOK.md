@@ -8,7 +8,7 @@ The recommended path for developing and testing Openbase Coder starts at the Git
 - `multi` (`uv tool install multi-workspace`)
 - A tailnet transport for phone access. Interactive developer setup offers the expert Tailscale transport, Openbase VPN, and Openbase Direct. Electron production onboarding is different: it offers only Openbase VPN or Direct.
 - Coding-backend login: `codex login` for the codex backend, and/or your normal Claude Code login (setup bridges it into Openbase's managed config automatically on macOS)
-- Only if you pick the **Openbase Netmesh (VPN)** tailnet transport: extra macOS build tools (Xcode, `xcodegen`, and Go) to build the VPN companion. You don't need these for the default Tailscale transport or the no-VPN embedded option.
+- Only on macOS, **Openbase VPN** uses the hardened VPN companion. Public checkouts download its signed prebuilt and need no extra build tools; an internal checkout with the private `netmesh-macos` source builds it with Xcode, `xcodegen`, and Go. The developer-only standalone Tailscale transport and Openbase Direct do not use this companion.
 
 Setup fails fast with the fix command if `uv`, `multi`, or pnpm is missing; the selected networking transport reports its own prerequisites. Picking the netmesh VPN likewise fails fast listing exactly which build tools are missing and how to install each (the authoritative list lives in that check, not here, so it can't drift). A missing `codex login` only warns (threads fail later until you log in).
 
