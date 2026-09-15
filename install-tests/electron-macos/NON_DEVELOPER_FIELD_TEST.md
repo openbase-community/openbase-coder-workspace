@@ -31,7 +31,7 @@ Record the clone provenance immediately. Do not reuse an earlier VM for a result
 
 Inside the VM, use `https://openbase.cloud/downloads?staging=true` for staging or `https://openbase.cloud/downloads` for production and click the page's normal download control. A direct release-bucket URL is a diagnostic fallback, not the complete user path; if it is needed, record the public download surface as untested and follow the fallback in the shared skill.
 
-Keep the DMG in `~/Downloads`, open it in Finder, drag Openbase to Applications, and launch it through the ordinary Gatekeeper confirmation. Do not strip quarantine or right-click-bypass Gatekeeper during a signed-channel field test.
+Keep the DMG in `~/Downloads`, open it in Finder, drag Openbase to Applications, and launch it through the ordinary Gatekeeper confirmation. On first launch, exercise the app's **Clean Up** action; macOS may ask Openbase to access Downloads before it can eject the installer disks and move the DMG to Trash, so allow that disposable-VM prompt and require the final cleanup-success message. Do not strip quarantine or right-click-bypass Gatekeeper during a signed-channel field test.
 
 Before onboarding, record artifact identity and verify the installed app:
 
