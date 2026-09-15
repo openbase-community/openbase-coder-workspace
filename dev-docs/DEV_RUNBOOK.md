@@ -57,7 +57,7 @@ When this developer install is sampled in a field test, use this runbook only fo
 
 ```bash
 openbase-coder version          # dev install, channel, update flags
-openbase-coder doctor           # services, ports, Tailscale, credentials, auth
+openbase-coder doctor           # services, ports, selected phone-access network, credentials, auth
 openbase-coder services status
 ```
 
@@ -90,7 +90,7 @@ To exercise the macOS install flows **without** disturbing your real install, us
 ```bash
 ./install-tests/run-all.sh                                              # developer install (install.sh), sandbox $HOME
 ./install-tests/electron-macos/bootstrap-golden.sh                      # one-time: bake the Tart golden VM
-./install-tests/electron-macos/run.sh --tailscale-authkey tskey-auth-...# Electron app flow in a disposable VM
+./install-tests/electron-macos/run.sh --tailscale-authkey tskey-auth-...# legacy local-build harness; standalone Tailscale sample
 ```
 
-The developer-install flow runs `cli/scripts/install.sh` in a throwaway sandbox `$HOME` (services skipped, Tailscale stubbed), so your install, PATH, and launchd services are untouched. The Electron flow runs the real onboarding — which activates the bundled CLI, installs launchd services, and configures Tailscale Serve — inside a disposable macOS VM (Tart), so it can't clobber this machine; because onboarding gates setup on Tailscale being connected, that run needs an ephemeral Tailscale auth key. The dev-**workspace** flow (`scripts/setup`) is a Linux concern and is not covered here. See `install-tests/README.md` and `install-tests/electron-macos/README.md`.
+The developer-install flow runs `cli/scripts/install.sh` in a throwaway sandbox `$HOME` (services skipped and networking stubbed), so your install, PATH, and launchd services are untouched. The `run.sh` Electron harness is a legacy local-build check that deliberately samples developer-only standalone Tailscale inside Tart, which is why that command needs an ephemeral Tailscale key. It is not the signed product's onboarding contract. A full signed-DMG field test starts with `manual-vm.sh`, then selects Openbase VPN or Openbase Direct through the real onboarding UI and follows the shared field-testing skill. The dev-**workspace** flow (`scripts/setup`) is separate from both harnesses. See `install-tests/README.md` and `install-tests/electron-macos/README.md`.

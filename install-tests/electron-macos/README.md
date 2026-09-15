@@ -3,13 +3,13 @@
 There are two distinct tracks:
 
 - This file documents the developer/local-build harness that automatically verifies Prerequisites → Setup in a disposable VM.
-- [NON_DEVELOPER_FIELD_TEST.md](NON_DEVELOPER_FIELD_TEST.md) documents the signed-DMG, clean-room field test through OAuth, Openbase VPN, physical-iPhone pairing, acoustic dispatcher response, Desktop permission, and a real Super Agent.
+- [NON_DEVELOPER_FIELD_TEST.md](NON_DEVELOPER_FIELD_TEST.md) documents the signed-DMG, clean-room field test through OAuth, either Openbase VPN or Openbase Direct, physical-iPhone pairing, acoustic dispatcher response, Desktop permission, and a real Super Agent.
 
 Tests the **macOS Electron app installation flow** — build the real bundled
 `Openbase Coder.app`, install it to `/Applications`, launch it, click through
 onboarding to run setup, and verify the resulting install — inside a **disposable
 macOS VM** ([Tart](https://tart.run)). Each run happens in a throwaway VM clone,
-so your real machine's install, launchd services, Tailscale routes, and ports
+so your real machine's install, launchd services, private-network routes, and ports
 7999/7880 are never touched.
 
 ## Why a VM (and not a sandboxed `$HOME` like the `install.sh` test)
@@ -20,7 +20,7 @@ That always:
 
 - registers launchd services under the fixed label `com.openbase.coder`
   (a per-user domain — `launchctl` ignores `$HOME`), and
-- reconfigures machine-level Tailscale Serve, and
+- configures machine-level phone-access networking, and
 - binds ports 7999 (console) and 7880 (LiveKit).
 
 All three collide with your live dev install no matter how `$HOME` is sandboxed.
@@ -45,8 +45,7 @@ Out of scope for this automated developer harness: **Login** (browser OAuth), **
   will install from that tap).
 - **Disk**: ~50 GB for the golden image (steady state ~31 GB). Apple caps **2**
   concurrently-running macOS VMs.
-- **`run.sh` (Electron flow)** needs an **ephemeral Tailscale auth key**
-  (onboarding gates setup on Tailscale being connected).
+- The legacy **`run.sh` local-build harness** deliberately samples the developer-only standalone Tailscale transport, so that harness needs an **ephemeral Tailscale auth key**. This is not a prerequisite for current signed Electron onboarding or a full field test, which instead selects Openbase VPN or Openbase Direct through the product UI.
 - **`run.sh`'s local build** (`build-app.sh`, only when you don't pass `--app`)
   needs the full desktop/CLI toolchain: **Xcode** (companion `xcodebuild`),
   **Go**, **uv**, **pnpm**, **Node ≥ 20**, and a **`~/.openbase/bin/livekit-server`**
@@ -74,15 +73,11 @@ Assistant clicking. It installs into the golden VM:
 - the **Tailscale client** (`tailscaled` + `tailscale`),
 - the driver's **Playwright** deps (prewarmed).
 
-It is safe to re-run; it skips a golden VM that already exists. (The onboarding's
-only external prerequisite is Tailscale — the bundled CLI covers the rest — so
-`uv`/`multi`/`pnpm` are NOT needed in the VM.)
+It is safe to re-run; it skips a golden VM that already exists. Tailscale is installed in this legacy golden solely because `run.sh` samples the standalone Tailscale transport; it is not a universal Electron onboarding prerequisite. The bundled CLI covers the remaining guest-side runtime, so `uv`/`multi`/`pnpm` are not needed in the VM.
 
-## Running a test (needs a Tailscale auth key)
+## Running the legacy local-build harness
 
-The desktop onboarding won't run setup until **Tailscale is connected**, so the
-throwaway VM must join a tailnet. Generate an **ephemeral + reusable** auth key
-at https://login.tailscale.com/admin/settings/keys and pass it:
+`run.sh` is a narrow developer harness for the standalone Tailscale sample; it does not model the transport choices in the signed product. For this harness, generate an **ephemeral + reusable** auth key at https://login.tailscale.com/admin/settings/keys and pass it:
 
 ```bash
 # Build the app on the host, then run the flow in a fresh VM clone
@@ -98,6 +93,8 @@ at https://login.tailscale.com/admin/settings/keys and pass it:
 
 The key can also be supplied via the `TS_AUTHKEY` env var. Ephemeral nodes
 auto-remove from your tailnet when the clone is deleted.
+
+Do not obtain a standalone Tailscale key for a signed-DMG field test. Use `manual-vm.sh`, follow [NON_DEVELOPER_FIELD_TEST.md](NON_DEVELOPER_FIELD_TEST.md), and select either Openbase VPN or Openbase Direct in onboarding. The shared field-testing skill owns the phone, passcode, acoustic, and Super Agent gates for both transports.
 
 ## Semantic guest control (pure images, runtime injection)
 
