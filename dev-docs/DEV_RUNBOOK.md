@@ -8,7 +8,7 @@ The recommended path for developing and testing Openbase Coder starts at the Git
 - `multi` (`uv tool install multi-workspace`)
 - A tailnet transport for phone access. Interactive developer setup offers the expert Tailscale transport, Openbase VPN, and Openbase Direct. Electron production onboarding is different: it offers only Openbase VPN or Direct.
 - Coding-backend login: `codex login` for the codex backend, and/or your normal Claude Code login (setup bridges it into Openbase's managed config automatically on macOS)
-- Only on macOS, **Openbase VPN** uses the hardened VPN companion. Public checkouts download its signed prebuilt and need no extra build tools; an internal checkout with the private `netmesh-macos` source builds it with Xcode, `xcodegen`, and Go. The developer-only standalone Tailscale transport and Openbase Direct do not use this companion.
+- Only if you pick **Openbase VPN**, and only on macOS: the hardened VPN companion is closed-source, but a public checkout downloads its signed prebuilt and needs no extra build tools. An internal checkout with the private `netmesh-macos` source builds the companion with Xcode, `xcodegen`, and Go. Openbase Direct and the expert standalone-Tailscale transport do not use this companion; Linux and Windows use the official Tailscale client instead of the macOS companion.
 
 Setup fails fast with the fix command if `uv`, `multi`, or pnpm is missing; the selected networking transport reports its own prerequisites. Picking the netmesh VPN likewise fails fast listing exactly which build tools are missing and how to install each (the authoritative list lives in that check, not here, so it can't drift). A missing `codex login` only warns (threads fail later until you log in).
 
@@ -35,6 +35,8 @@ OPENBASE_CODER_CLI_WEB_BACKEND_URL=https://app-staging.openbase.cloud ./scripts/
 ```
 
 Do not reuse production login tokens after changing the endpoint; run `openbase-coder login` against the selected Cloud. Verify the installed mix with the install-set-aware branch checker above, `openbase-coder version`, and the `OPENBASE_CODER_CLI_WEB_BACKEND_URL` entry in `~/.openbase/.env` (absence means the production default).
+
+The **Openbase VPN companion** is a separate axis from the Cloud endpoint and does **not** track the workspace branch. On a public checkout the companion channel is derived from `desktop/package.json`'s committed version, which is plain SemVer on both `develop` and `main` — so setup always pulls the production (`mac`) prebuilt. The `mac-staging` channel is only ever selected by a CI staging build whose version carries a `-staging.` suffix (injected at build time, never committed). The companion is control-plane-agnostic — it joins whichever headscale your enrollment key points at — so the `mac` companion works against staging Cloud too. Only if `develop` depends on an unreleased companion, override the source before selecting the transport: `OPENBASE_CODER_RELEASE_PREFIX=mac-staging ./scripts/setup` (or set a full `OPENBASE_NETMESH_COMPANION_URL=…`).
 
 ## 3. Authenticate
 
@@ -88,9 +90,8 @@ To test first-run behavior from scratch: stop services (`openbase-coder services
 To exercise the macOS install flows **without** disturbing your real install, use the installation-flow tests instead of archiving `~/.openbase`:
 
 ```bash
-./install-tests/run-all.sh                                              # developer install (install.sh), sandbox $HOME
-./install-tests/electron-macos/bootstrap-golden.sh                      # one-time: bake the Tart golden VM
-./install-tests/electron-macos/run.sh --tailscale-authkey tskey-auth-...# legacy local-build harness; standalone Tailscale sample
+./install-tests/run-all.sh # developer install (install.sh), sandbox $HOME
+./install-tests/electron-macos/manual-vm.sh --source <maintained-sip-enabled-source> --name <run-specific-name>
 ```
 
-The developer-install flow runs `cli/scripts/install.sh` in a throwaway sandbox `$HOME` (services skipped and networking stubbed), so your install, PATH, and launchd services are untouched. The `run.sh` Electron harness is a legacy local-build check that deliberately samples developer-only standalone Tailscale inside Tart, which is why that command needs an ephemeral Tailscale key. It is not the signed product's onboarding contract. A full signed-DMG field test starts with `manual-vm.sh`, then selects Openbase VPN or Openbase Direct through the real onboarding UI and follows the shared field-testing skill. The dev-**workspace** flow (`scripts/setup`) is separate from both harnesses. See `install-tests/README.md` and `install-tests/electron-macos/README.md`.
+The developer-install check runs `cli/scripts/install.sh` in a throwaway sandbox `$HOME` with services skipped and networking stubbed, so your install, PATH, and launchd services are untouched. A full Electron field test starts with `manual-vm.sh`, installs either the signed DMG or an explicitly sampled local developer build, selects Openbase VPN or Openbase Direct through the real onboarding UI, and follows the shared field-testing skill. Retain the just-tested VM for immediate targeted follow-ups; before a later request needs a new clone, delete stale disposable field-test clones while preserving maintained source images and any VM still needed for active evidence. The dev-**workspace** flow (`scripts/setup`) is separate. See `install-tests/README.md` and `install-tests/electron-macos/README.md`.

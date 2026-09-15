@@ -8,8 +8,6 @@
 # you download the real signed DMG for whichever channel you want and install it
 # by hand, exactly as a user would.
 #
-# For the automated pass/fail test, use ./run.sh instead.
-#
 # Flags:
 #   --app PATH        also drop a LOCAL prebuilt .app in the VM's ~/Downloads
 #                     (unsigned dev build; for testing a local build instead of a
@@ -51,8 +49,8 @@ die()  { printf '\033[31mFATAL\033[0m %s\n' "$*" >&2; exit 2; }
 SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10)
 ssh_vm() { sshpass -p "$VM_PASS" ssh "${SSH_OPTS[@]}" "$VM_USER@$VM_IP" "$@"; }
 
-command -v tart >/dev/null 2>&1 || die "tart not installed — run ./bootstrap-golden.sh (installs tart+sshpass)"
-command -v sshpass >/dev/null 2>&1 || die "sshpass not installed — run ./bootstrap-golden.sh"
+command -v tart >/dev/null 2>&1 || die "tart is required (https://tart.run)"
+command -v sshpass >/dev/null 2>&1 || die "sshpass is required (for example: brew install hudochenkov/sshpass/sshpass)"
 tart list 2>/dev/null | grep -q "[[:space:]]$NAME[[:space:]]" && die "VM '$NAME' already exists — delete it (tart delete $NAME) or pass --name."
 [ -n "$APP" ] && { [ -d "$APP" ] || die "app bundle not found: $APP"; }
 [ -n "$DISPLAY" ] || die "--display must not be empty"
