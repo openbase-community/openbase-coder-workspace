@@ -84,40 +84,31 @@ launch_menu_bar() {
     echo "The Swift menu-bar UI is available on macOS only; skipping it."
     return
   fi
-  for tool in xcodegen xcodebuild; do
-    if ! command -v "$tool" >/dev/null 2>&1; then
-      echo "'$tool' is required for the Swift menu-bar UI." >&2
-      exit 1
-    fi
-  done
-
   local project_dir="$ROOT_DIR/netmesh-macos"
-  if [ ! -d "$project_dir" ]; then
-    echo "The netmesh-macos repo is not present (private, internal install set)." >&2
-    echo "Contributors with access can run: multi sync --install-set internal" >&2
-    exit 1
+  if [ -d "$project_dir" ]; then
+    for tool in xcodegen xcodebuild; do
+      if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "'$tool' is required for the Swift menu-bar UI." >&2
+        exit 1
+      fi
+    done
   fi
   local vendor_dir="$project_dir/vendor/tailscale-bin"
-  if [ ! -x "$vendor_dir/tailscaled" ] || [ ! -x "$vendor_dir/tailscale" ]; then
+  if [ -d "$project_dir" ] && { [ ! -x "$vendor_dir/tailscaled" ] || [ ! -x "$vendor_dir/tailscale" ]; }; then
     if ! command -v go >/dev/null 2>&1; then
       echo "Go is required once to build the menu-bar UI's networking engine." >&2
       exit 1
     fi
-    "$project_dir/scripts/build-tailscale.sh"
   fi
 
-  (
-    cd "$project_dir"
-    xcodegen generate
-    xcodebuild \
-      -project OpenbaseNetmesh.xcodeproj \
-      -scheme OpenbaseNetmesh \
-      -configuration Debug \
-      -derivedDataPath DerivedData \
-      CODE_SIGNING_ALLOWED=NO \
-      build
-  )
-  open "$project_dir/DerivedData/Build/Products/Debug/OpenbaseNetmesh.app"
+  # Stage the signed menu-bar app exactly as dist:mac does (build from a
+  # netmesh-macos checkout when present, else keep/download the signed
+  # prebuilt). The desktop app's ensure loop refuses — and terminates as
+  # stale — adhoc-signed builds, because NetmeshHelper validates client
+  # code signatures, so an unsigned Debug build can never keep the menu
+  # bar alive.
+  pnpm --dir "$ROOT_DIR/desktop" run companion:stage:netmesh-menubar
+  open -g "$ROOT_DIR/desktop/companion-build/OpenbaseNetmesh.app"
   echo "Opened the Swift Openbase networking menu-bar UI."
 }
 
@@ -192,7 +183,7 @@ PLIST
 # RunningBoard. So each open either focuses the live dashboard through its
 # control server, or starts Electron via LaunchServices as its own instance
 # (own coalition), then exits. The Electron main process ensures the Swift
-# status menu-bar UI (ensureDevMenuBarApp in desktop/electron/main.cjs).
+# status menu-bar UI (ensureMenuBarApp in desktop/electron/main.cjs).
 CONTROL_FILE="\$HOME/.openbase/desktop-control.json"
 if [ -f "\$CONTROL_FILE" ]; then
   PORT=\$(/usr/bin/python3 -c "import json;print(json.load(open('\$CONTROL_FILE'))['port'])" 2>/dev/null)
