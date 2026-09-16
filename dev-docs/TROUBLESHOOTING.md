@@ -124,23 +124,25 @@ tail -n 160 ~/.openbase/logs/livekit-agent.log | rg -i 'registered worker|receiv
 tail -n 160 ~/.openbase/logs/livekit-server.log | rg -i 'assigned job|participant active|agent-|ice connection state change|dtls timeout|failed|error'
 ```
 
-Confirm Tailscale Serve still points at the correct local services:
+Confirm the Openbase VPN routes still point at the correct local services:
 
 ```sh
-tailscale serve status --json
+openbase-coder services status
 ```
 
 Expected shape:
 
 ```text
-18080 -> http://127.0.0.1:7999
-7880  -> 127.0.0.1:7880
+Openbase VPN routes:
+  openbase-api        reachable at http://<device>.net.obs.so:18080
+  livekit-server      tcp :7880 -> 127.0.0.1:7880
 ```
 
-Confirm LiveKit is still bound to the Tailscale IP:
+Confirm LiveKit is still bound to the VPN IP and preserves loopback candidates for the same-host voice worker:
 
 ```sh
 lsof -nP -iTCP:7880 -iTCP:7881 -iUDP:7882
+tail -n 200 ~/.openbase/logs/livekit-server.log | rg 'using explicit node IP for NAT1To1Ips'
 ```
 
 Expected:
@@ -153,9 +155,22 @@ TCP *:7881 (LISTEN)
 TCP 127.0.0.1:7880 (LISTEN)
 ```
 
+The startup log entry should report the VPN node IP and `advertiseInternalIP: true` (JSON logs quote the field name). If the bounded log window contains no startup entry, that alone does not indicate a configuration problem. Avoid dumping the LiveKit process command line: its `--keys` argument contains `LIVEKIT_API_SECRET` and, when configured, `LIVEKIT_CLIENT_API_SECRET`.
+
+The running LiveKit config must include `enable_loopback_candidate: true`, `advertise_internal_ip: true`, `127.0.0.1/32`, and the VPN addresses. An explicit `--node-ip` otherwise rewrites every host candidate to the VPN address; signaling and dispatch still succeed, but the same-Mac Python worker cannot reliably hairpin its media through the packet-tunnel VPN and exits with `wait_pc_connection timed out`. Server logs confirm this case when agent offers contain only VPN candidates and no `127.0.0.1` candidate.
+
 ### Fix
 
-**This is now self-healing.** The `sync-workers` service runs a `livekit_pool_watchdog` job (in `cli/openbase_coder_cli/services/livekit_pool_watchdog.py`) that tails `livekit-agent.log`, and on a newly-written `wait_pc_connection timed out` bounces `livekit-agent` automatically — escalating to bouncing `livekit-server` + `livekit-agent` if the signature recurs within 15 minutes. It also proactively recycles the idle agent every ~45 minutes so the stale pre-warmed pool never forms in the first place. Both paths are gated by an active-call guard (never bounces mid-call; a signature that fires during a live call is deferred and bounced once the call ends) and a rolling rate limit (max 3 bounces / 30 min).
+The current runtime generates `advertise_internal_ip: true` for kernel-VPN LiveKit mode. Update the CLI if the running config lacks it, then regenerate and restart the affected services:
+
+```sh
+openbase-coder services regenerate
+openbase-coder restart --service livekit-server
+```
+
+Restarting `livekit-server` already includes its dependent `livekit-agent`: the restart plan stops the agent before the server, then starts the server before the agent. The command schedules this sequence asynchronously; do not schedule a separate agent restart alongside it.
+
+The stale-pool variant is self-healing. The `sync-workers` service runs a `livekit_pool_watchdog` job (in `cli/openbase_coder_cli/services/livekit_pool_watchdog.py`) that tails `livekit-agent.log`, and on a newly-written `wait_pc_connection timed out` bounces `livekit-agent` automatically — escalating to bouncing `livekit-server` + `livekit-agent` if the signature recurs within 15 minutes. It also proactively recycles the idle agent every ~45 minutes so the stale pre-warmed pool never forms in the first place. Both paths are gated by an active-call guard (never bounces mid-call; a signature that fires during a live call is deferred and bounced once the call ends) and a rolling rate limit (max 3 bounces / 30 min). A bounce cannot repair a running LiveKit config that lacks the preserved loopback candidate, so confirm the config before treating the watchdog as recovery.
 
 Look for its activity in the sync-workers log:
 
@@ -229,7 +244,7 @@ Also check the livekit-agent: while the server was down it may have exhausted it
 
 ### Symptoms Seen
 
-`netmesh-ctl status` hangs indefinitely instead of erroring; the console shows the critical warning "This device's registration has no Tailscale identity"; `livekit-server.log` fills with `LIVEKIT_NODE_IP is required for Tailscale LiveKit signaling and media` and the service crash-loops (no listener on 7880, iOS calls can't connect); `openbase-coder setup` reports "The netmesh companion did not become ready: timed out" and `serve-set`/`status` netmesh-ctl invocations time out. Meanwhile the VPN data plane still works — the previously started root `tailscaled` keeps forwarding, so tailnet ping/SSH succeed, which makes the control-plane hang easy to misread.
+`netmesh-ctl status` hangs indefinitely instead of erroring; the console shows the critical warning "This device's registration has no Openbase VPN identity"; `livekit-server.log` fills with `LIVEKIT_NODE_IP is required for Tailscale LiveKit signaling and media` and the service crash-loops (no listener on 7880, iOS calls can't connect); `openbase-coder setup` reports "The netmesh companion did not become ready: timed out" and `serve-set`/`status` netmesh-ctl invocations time out. Meanwhile the VPN data plane still works — the previously started root `tailscaled` keeps forwarding, so tailnet ping/SSH succeed, which makes the control-plane hang easy to misread.
 
 ### Diagnosis
 
@@ -243,7 +258,7 @@ The tell is `last exit code = 78: EX_CONFIG` with a climbing `runs` count and `s
 
 ### Fix
 
-Re-register the helper against the current bundle once whatever was rebuilding the companion has finished: open the Openbase desktop app (its companion manager replaces the helper), or drive the companion's `/replace-helper` control path. Then confirm `launchctl print system/cloud.openbase.netmesh.helper` shows `state = running`, and restart `livekit-server` + `livekit-agent` if they were crash-looping. If LiveKit must come back before the helper can be fixed, pin `LIVEKIT_NODE_IP=<tailnet IPv4>` in `~/.openbase/.env` as a stopgap — and remove the pin afterwards (a pinned IP goes stale if the transport changes).
+Once whatever was rebuilding the companion has finished, run `openbase-coder tailnet set-provider netmesh`. Current CLI builds first try the version-gated helper replacement and automatically fall back to the explicit helper-only app-update repair when the old helper cannot authenticate the new control shim; the repair recycles only the companion control listener and helper registration, preserving the selected Openbase VPN transport. The desktop app performs the same repair during launch reconciliation. Then confirm `launchctl print system/cloud.openbase.netmesh.helper` shows `state = running`; the provider command reapplies Serve routes, restarts transport-dependent services, and republishes the device identity. If LiveKit must come back before the helper can be fixed, pin `LIVEKIT_NODE_IP=<tailnet IPv4>` in `~/.openbase/.env` as a stopgap — and remove the pin afterwards (a pinned IP goes stale if the transport changes).
 
 ## Dispatcher Amnesia ("I didn't start that agent") On The Claude Backend
 
