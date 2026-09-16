@@ -124,23 +124,25 @@ tail -n 160 ~/.openbase/logs/livekit-agent.log | rg -i 'registered worker|receiv
 tail -n 160 ~/.openbase/logs/livekit-server.log | rg -i 'assigned job|participant active|agent-|ice connection state change|dtls timeout|failed|error'
 ```
 
-Confirm Tailscale Serve still points at the correct local services:
+Confirm the Openbase VPN routes still point at the correct local services:
 
 ```sh
-tailscale serve status --json
+openbase-coder services status
 ```
 
 Expected shape:
 
 ```text
-18080 -> http://127.0.0.1:7999
-7880  -> 127.0.0.1:7880
+Openbase VPN routes:
+  openbase-api        reachable at http://<device>.net.obs.so:18080
+  livekit-server      tcp :7880 -> 127.0.0.1:7880
 ```
 
-Confirm LiveKit is still bound to the Tailscale IP:
+Confirm LiveKit is still bound to the VPN IP and preserves loopback candidates for the same-host voice worker:
 
 ```sh
 lsof -nP -iTCP:7880 -iTCP:7881 -iUDP:7882
+ps -ax -o pid=,command= | rg '[l]ivekit-server --dev'
 ```
 
 Expected:
@@ -153,9 +155,19 @@ TCP *:7881 (LISTEN)
 TCP 127.0.0.1:7880 (LISTEN)
 ```
 
+The running LiveKit config must include `enable_loopback_candidate: true`, `advertise_internal_ip: true`, `127.0.0.1/32`, and the VPN addresses. An explicit `--node-ip` otherwise rewrites every host candidate to the VPN address; signaling and dispatch still succeed, but the same-Mac Python worker cannot reliably hairpin its media through the packet-tunnel VPN and exits with `wait_pc_connection timed out`. Server logs confirm this case when agent offers contain only VPN candidates and no `127.0.0.1` candidate.
+
 ### Fix
 
-**This is now self-healing.** The `sync-workers` service runs a `livekit_pool_watchdog` job (in `cli/openbase_coder_cli/services/livekit_pool_watchdog.py`) that tails `livekit-agent.log`, and on a newly-written `wait_pc_connection timed out` bounces `livekit-agent` automatically — escalating to bouncing `livekit-server` + `livekit-agent` if the signature recurs within 15 minutes. It also proactively recycles the idle agent every ~45 minutes so the stale pre-warmed pool never forms in the first place. Both paths are gated by an active-call guard (never bounces mid-call; a signature that fires during a live call is deferred and bounced once the call ends) and a rolling rate limit (max 3 bounces / 30 min).
+The current runtime generates `advertise_internal_ip: true` for kernel-VPN LiveKit mode. Update the CLI if the running config lacks it, then regenerate and restart the affected services:
+
+```sh
+openbase-coder services regenerate
+openbase-coder restart --service livekit-server
+openbase-coder restart --service livekit-agent
+```
+
+The stale-pool variant is self-healing. The `sync-workers` service runs a `livekit_pool_watchdog` job (in `cli/openbase_coder_cli/services/livekit_pool_watchdog.py`) that tails `livekit-agent.log`, and on a newly-written `wait_pc_connection timed out` bounces `livekit-agent` automatically — escalating to bouncing `livekit-server` + `livekit-agent` if the signature recurs within 15 minutes. It also proactively recycles the idle agent every ~45 minutes so the stale pre-warmed pool never forms in the first place. Both paths are gated by an active-call guard (never bounces mid-call; a signature that fires during a live call is deferred and bounced once the call ends) and a rolling rate limit (max 3 bounces / 30 min). A bounce cannot repair a running LiveKit config that lacks the preserved loopback candidate, so confirm the config before treating the watchdog as recovery.
 
 Look for its activity in the sync-workers log:
 
