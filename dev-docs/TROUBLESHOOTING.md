@@ -142,7 +142,7 @@ Confirm LiveKit is still bound to the VPN IP and preserves loopback candidates f
 
 ```sh
 lsof -nP -iTCP:7880 -iTCP:7881 -iUDP:7882
-ps -ax -o pid=,command= | rg '[l]ivekit-server --dev'
+tail -n 200 ~/.openbase/logs/livekit-server.log | rg 'using explicit node IP for NAT1To1Ips'
 ```
 
 Expected:
@@ -155,6 +155,8 @@ TCP *:7881 (LISTEN)
 TCP 127.0.0.1:7880 (LISTEN)
 ```
 
+The startup log entry should report the VPN node IP and `advertiseInternalIP: true` (JSON logs quote the field name). If the bounded log window contains no startup entry, that alone does not indicate a configuration problem. Avoid dumping the LiveKit process command line: its `--keys` argument contains `LIVEKIT_API_SECRET` and, when configured, `LIVEKIT_CLIENT_API_SECRET`.
+
 The running LiveKit config must include `enable_loopback_candidate: true`, `advertise_internal_ip: true`, `127.0.0.1/32`, and the VPN addresses. An explicit `--node-ip` otherwise rewrites every host candidate to the VPN address; signaling and dispatch still succeed, but the same-Mac Python worker cannot reliably hairpin its media through the packet-tunnel VPN and exits with `wait_pc_connection timed out`. Server logs confirm this case when agent offers contain only VPN candidates and no `127.0.0.1` candidate.
 
 ### Fix
@@ -164,8 +166,9 @@ The current runtime generates `advertise_internal_ip: true` for kernel-VPN LiveK
 ```sh
 openbase-coder services regenerate
 openbase-coder restart --service livekit-server
-openbase-coder restart --service livekit-agent
 ```
+
+Restarting `livekit-server` already includes its dependent `livekit-agent`: the restart plan stops the agent before the server, then starts the server before the agent. The command schedules this sequence asynchronously; do not schedule a separate agent restart alongside it.
 
 The stale-pool variant is self-healing. The `sync-workers` service runs a `livekit_pool_watchdog` job (in `cli/openbase_coder_cli/services/livekit_pool_watchdog.py`) that tails `livekit-agent.log`, and on a newly-written `wait_pc_connection timed out` bounces `livekit-agent` automatically — escalating to bouncing `livekit-server` + `livekit-agent` if the signature recurs within 15 minutes. It also proactively recycles the idle agent every ~45 minutes so the stale pre-warmed pool never forms in the first place. Both paths are gated by an active-call guard (never bounces mid-call; a signature that fires during a live call is deferred and bounced once the call ends) and a rolling rate limit (max 3 bounces / 30 min). A bounce cannot repair a running LiveKit config that lacks the preserved loopback candidate, so confirm the config before treating the watchdog as recovery.
 
