@@ -29,6 +29,10 @@ numerous, cheap, and green before anything merges.
 Unit tests deliberately do **not** exercise the seams between repos, the
 installed product, or real voice/audio. That is what tiers 2 and 3 exist for.
 
+### Unit-test safety boundary
+
+Unit tests must never use saved user credentials, an installed product database, or production/staging account data. The CLI suite enforces temporary `OPENBASE_CODER_CLI_DATA_DIR` storage before collection, empty per-test credential paths and token-manager state, and a Python socket guard that fails external network calls. Loopback is allowed only for test-owned fixture servers, not the user's running services. This is not an OS sandbox: subprocesses and non-Python clients still require explicit mocks. Fix missing mocks when this guard fails; do not disable it or run tests against a live account. Real-service verification belongs to the dedicated-account workflows below.
+
 ## Tier 2 — Scripted E2E (regression pinning)
 
 The scripted E2E suite lives in `e2e-scripted/`. It drives a **real** iPhone
