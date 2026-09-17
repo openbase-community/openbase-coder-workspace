@@ -74,13 +74,18 @@ print(json.dumps(dict(db.execute('select name,agent_name from sessions where age
         command = "~/.local/bin/openbase-coder user say " + shlex.join([name, probe["text"]])
         try:
             result = subprocess.run([str(HELPER), "ssh", args.vm, command], text=True,
-                capture_output=True, timeout=60)
+                capture_output=True, timeout=75)
         except subprocess.TimeoutExpired:
             event("announcement_command_end", index=index, exit_code=None,
                 outcome="unconfirmed", reason="SSH command deadline; observe native state before any retry")
             return 1
         event("announcement_command_end", index=index, exit_code=result.returncode,
-            receipt=result.stdout[:500], outcome="accepted" if result.returncode == 0 else "unconfirmed")
+            receipt=result.stdout[:500], stderr_file=f"announcement-command-{index}-stderr.txt"
+                if result.stderr else None,
+            outcome="accepted" if result.returncode == 0 else "unconfirmed")
+        if result.stderr:
+            # Private run evidence, never copied into tracked documentation.
+            (args.directory / f"announcement-command-{index}-stderr.txt").write_text(result.stderr)
         return result.returncode
 
     with ThreadPoolExecutor(max_workers=len(probes)) as pool:

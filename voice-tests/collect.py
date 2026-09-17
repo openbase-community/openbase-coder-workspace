@@ -89,8 +89,10 @@ def main():
             lines.append(json.dumps(record))
     django = ssh("tail -c 2000000 ~/.openbase/logs/django-cli.log")
     for line in django.splitlines():
-        match = re.search(r"INFO (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d,\d+) \S+ (dispatch_timing stage=(?:ios_control_round_trip|ios_control_ack_received) .*)", line)
+        match = re.search(r"INFO (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d,\d+) \S+ (dispatch_timing stage=(?:ios_control_round_trip|ios_control_ack_received|announcer_\w+) .*)", line)
         if match:
+            if re.search(r"(?i)bearer\s|[?&](?:token|access_token|session_token)=|authorization[=:]", match[2]):
+                continue
             timestamp = datetime.strptime(match[1], "%Y-%m-%d %H:%M:%S,%f").replace(tzinfo=timezone.utc).isoformat()
             lines.append(json.dumps({"timestamp": timestamp, "message": match[2]}))
     (args.directory / "server.log").write_text("\n".join(lines) + "\n")
