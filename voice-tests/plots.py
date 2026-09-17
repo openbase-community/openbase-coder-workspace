@@ -44,7 +44,8 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         'competing_network_probe_start', 'competing_network_probe_end',
         'host_analysis_dependency_download_start', 'host_analysis_dependency_download_end',
         'scheduled_network_restore', 'competing_host_fixture_preparation', 'call_end_gesture_acknowledged',
-        'announcement_command_start', 'announcement_command_end', 'operator_stimulus_withheld')]
+        'announcement_command_start', 'announcement_command_end', 'operator_stimulus_withheld',
+        'speaker_route_verified')]
     assessment_path = directory / "assessment.json"
     assessment = json.loads(assessment_path.read_text()) if assessment_path.exists() else {}
     invalid = assessment.get("invalid_stimuli", [])
@@ -100,8 +101,15 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         for row in host_markers:
             x = row['capture_relative_s']
             if start <= x <= end:
-                axes[2].axvline(x, color='crimson', linestyle=':', linewidth=1)
-                axes[2].text(x, .6, row['event'], fontsize=8, rotation=20, clip_on=True)
+                probe = row['event'].startswith('announcement_command_')
+                color = 'slateblue' if probe and row.get('outcome') != 'unconfirmed' else 'crimson'
+                label = row['event']
+                if probe:
+                    phase = 'API submission' if row['event'].endswith('start') else row.get('outcome', 'receipt')
+                    label = f"Probe {row.get('index')} {phase}"
+                lane = .6 + .16 * (row.get('index', 0) % 2) if probe else .6
+                axes[2].axvline(x, color=color, linestyle=':', linewidth=1)
+                axes[2].text(x, lane, label, fontsize=8, rotation=20, clip_on=True)
         for axis, items, title, color in [(axes[3], emitted, "VM turn /\nlifecycle events", "darkorange"),
                 (axes[4], received, "Phone receipt /\nlifecycle handling", "seagreen"),
                 (axes[6], playback, "Phone playback\ndiagnostics", "purple")]:
@@ -123,7 +131,9 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
                     noisy = True
                 if label.startswith('IGNORED duplicate '):
                     metadata = row.get('metadata', {})
-                    key = (metadata.get('packet_id'), metadata.get('delivery_id'), metadata.get('created_at_unix_ms'), label)
+                    # Every receipt keeps its marker and raw table row; repeated
+                    # ignored labels need not obscure accepted transitions.
+                    key = (metadata.get('delivery_id'), label)
                     noisy = noisy or key in duplicate_labels
                     duplicate_labels.add(key)
                 if "deferred auto-unmute" in label:
