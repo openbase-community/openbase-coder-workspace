@@ -34,6 +34,9 @@ def read_jsonl(path: Path):
 def events(directory: Path) -> list[dict]:
     rows = list(read_jsonl(directory / "host-events.jsonl"))
     rows.extend(read_jsonl(directory / 'backend-tools.jsonl'))
+    for record in read_jsonl(directory / 'room-events.jsonl'):
+        rows.append({'source': 'server', 'unix_ms': unix_ms(record['timestamp']),
+            'event': record['event'], 'metadata': record['metadata']})
     alignment_path = directory / 'acoustic-alignment.json'
     if alignment_path.exists():
         alignment = json.loads(alignment_path.read_text())

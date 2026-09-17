@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import shlex
 import subprocess
+from guest import read_guest
 
 ROOT = Path(__file__).resolve().parents[1]
 GUEST = ROOT / "install-tests/electron-macos/guest-automate.sh"
@@ -40,9 +41,13 @@ def main():
     args.directory.mkdir(parents=True, exist_ok=True)
     state_path = args.directory / "network-state.json"
 
-    def sudo(command):
+    def sudo(command, *, read_only=False):
         # The existing Tart helper owns SSH. The guest password travels on stdin.
-        result = subprocess.run([str(GUEST), "ssh", args.vm, "sudo -S -- sh -c " + shlex.quote("set -e; " + command)],
+        guest_command = "sudo -S -- sh -c " + shlex.quote("set -e; " + command)
+        if read_only:
+            return read_guest(GUEST, args.vm, guest_command,
+                input=os.environ.get("VM_PASS", "admin") + "\n"), ""
+        result = subprocess.run([str(GUEST), "ssh", args.vm, guest_command],
             input=os.environ.get("VM_PASS", "admin") + "\n", text=True, capture_output=True, check=True, timeout=30)
         return result.stdout, result.stderr
 
@@ -52,18 +57,18 @@ def main():
     if args.action == "apply":
         if state_path.exists() and not json.loads(state_path.read_text()).get("restored_at"):
             raise ValueError("Restore the recorded network profile before applying another")
-        before, warnings = sudo("/sbin/pfctl -s info; /sbin/pfctl -s dummynet; /usr/sbin/dnctl list")
+        before, warnings = sudo("/sbin/pfctl -s info; /sbin/pfctl -s dummynet; /usr/sbin/dnctl list", read_only=True)
         if 'dummynet-anchor "com.apple/*"' not in before:
             raise ValueError("Guest lacks the standing Apple dummynet anchor; do not replace its main rules")
         if any(re.search(rf"(?m)^0*{pipe}:", before) for pipe in PIPES):
             raise ValueError("Reserved test pipe IDs already exist")
-        existing, _ = sudo(f"/sbin/pfctl -a {ANCHOR} -s dummynet")
+        existing, _ = sudo(f"/sbin/pfctl -a {ANCHOR} -s dummynet", read_only=True)
         if existing.strip():
             raise ValueError("Test anchor already has rules; preserve it and resolve ownership")
-        owner, _ = sudo(f"if [ -f {LEASE} ]; then cat {LEASE}; fi")
+        owner, _ = sudo(f"if [ -f {LEASE} ]; then cat {LEASE}; fi", read_only=True)
         if owner.strip():
             raise ValueError("A previous network profile still owns its restoration lease")
-        interface, _ = sudo("/sbin/route -n get default | awk '/interface:/{print $2}'")
+        interface, _ = sudo("/sbin/route -n get default | awk '/interface:/{print $2}'", read_only=True)
         interface = interface.strip()
         if not re.fullmatch(r"en\d+", interface):
             raise ValueError("Expected a Tart Ethernet interface")

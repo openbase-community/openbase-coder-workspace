@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import time
 from clock_probe import sample_vm_clock, calibration_from_samples
@@ -96,6 +97,18 @@ def main():
             timestamp = datetime.strptime(match[1], "%Y-%m-%d %H:%M:%S,%f").replace(tzinfo=timezone.utc).isoformat()
             lines.append(json.dumps({"timestamp": timestamp, "message": match[2]}))
     (args.directory / "server.log").write_text("\n".join(lines) + "\n")
+    # Sanitize inside the guest before transferring server debug records, which
+    # can contain TURN passwords and signaling tokens in nested payloads.
+    extractor = (ROOT / "voice-tests/room_events.py").read_text()
+    program = extractor + '\nfrom pathlib import Path\np=Path.home()/".openbase/logs/livekit-server.log"\n' + (
+        'if p.exists():\n'
+        ' with p.open("rb") as f:\n'
+        '  f.seek(max(0,p.stat().st_size-2000000))\n'
+        '  for line in f.read().decode(errors="replace").splitlines():\n'
+        '   record=room_event(line)\n'
+        '   if record is not None: print(json.dumps(record))\n')
+    (args.directory / "room-events.jsonl").write_text(ssh(
+        '~/Developer/openbase-coder-workspace/.venv/bin/python -c ' + shlex.quote(program)))
     print("Collected bounded timing records; VM clock uncertainty ±%.1f ms" % calibration["server"]["uncertainty_ms"])
 
 
