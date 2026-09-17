@@ -52,3 +52,20 @@ def valid_permit(permit: dict, nonce: str, now_ms: float | None = None) -> bool:
     return (permit.get("nonce") == nonce and permit.get("allow") is True
         and permit.get("microphone_enabled") is True and permit.get("phone_state") == "listening"
         and permit.get("speaker_verified") is True and 0 <= age <= 1500)
+
+
+def ios_speaker_enabled(source: str) -> bool:
+    tree = ET.fromstring(source)
+    application = next((e for e in tree.iter() if e.get('type') == 'XCUIElementTypeApplication'), None)
+    if application is None:
+        return False
+    width, height = float(application.get('width', 0)), float(application.get('height', 0))
+    for element in tree.iter():
+        if (element.get('type') == 'XCUIElementTypeButton' and element.get('label') == 'Speaker'
+            and element.get('value') == 'On' and element.get('visible') == 'true'
+            and element.get('enabled') == 'true'):
+            x, y = float(element.get('x', 0)), float(element.get('y', 0))
+            w, h = float(element.get('width', 0)), float(element.get('height', 0))
+            if w > 0 and h > 0 and 0 <= x + w / 2 < width and 0 <= y + h / 2 < height:
+                return True
+    return False

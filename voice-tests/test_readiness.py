@@ -1,9 +1,17 @@
 import unittest
 
-from readiness import ios_ready, android_ready, valid_permit
+from readiness import ios_ready, android_ready, valid_permit, ios_speaker_enabled
 
 
 class ReadinessTests(unittest.TestCase):
+    def test_ios_speaker_approval_cannot_promote_off_missing_or_hidden_state(self):
+        source = '<AppiumAUT><XCUIElementTypeApplication type="XCUIElementTypeApplication" width="390" height="844"><XCUIElementTypeButton type="XCUIElementTypeButton" label="Speaker" value="On" visible="true" enabled="true" x="267" y="710" width="64" height="87"/></XCUIElementTypeApplication></AppiumAUT>'
+        self.assertTrue(ios_speaker_enabled(source))
+        self.assertFalse(ios_speaker_enabled(source.replace('value="On"', 'value="Off"')))
+        self.assertFalse(ios_speaker_enabled(source.replace('value="On"', '')))
+        self.assertFalse(ios_speaker_enabled(source.replace('visible="true"', 'visible="false"')))
+        self.assertFalse(ios_speaker_enabled(source.replace('y="710"', 'y="900"')))
+
     def test_android_requires_connected_room_and_live_mic_in_viewport(self):
         nodes = ['<node bounds="[0,0][1080,2400]" displayed="true" enabled="true">']
         for text in ("Listening…", "connected", "active"):

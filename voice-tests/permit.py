@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import time
 
-from readiness import ios_ready, android_ready
+from readiness import ios_ready, android_ready, ios_speaker_enabled
 
 
 def main():
@@ -19,6 +19,8 @@ def main():
     age_ms = (time.time() - args.snapshot.stat().st_mtime) * 1000
     request = json.loads(args.request.read_text())
     ready = {"ios": ios_ready, "android": android_ready}[args.platform](args.snapshot.read_text())
+    if args.platform == 'ios':
+        ready = ready and ios_speaker_enabled(args.snapshot.read_text())
     if not 0 <= age_ms <= 1500 or not ready:
         reason = "Snapshot is stale, not listening, or microphone is muted; no stimulus permitted"
         with (args.request.parent.parent / "host-events.jsonl").open("a") as output:

@@ -11,7 +11,7 @@ import time
 
 from guest import read_guest
 from finish import pending_backend_work
-from readiness import ios_ready, android_ready
+from readiness import ios_ready, android_ready, ios_speaker_enabled
 
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "install-tests/electron-macos/guest-automate.sh"
@@ -35,6 +35,8 @@ def main():
     if pending_backend_work(args.vm):
         raise ValueError("Wait for actual backend work to finish before an ordinary playback probe")
     ready = {"ios": ios_ready, "android": android_ready}[args.platform]
+    if args.platform == 'ios' and not ios_speaker_enabled(args.snapshot.read_text()):
+        raise ValueError('Require visible Speaker value On; observer approval cannot override Off or missing state')
     if not 0 <= time.time() - args.snapshot.stat().st_mtime <= 1.5 or not ready(args.snapshot.read_text()):
         raise ValueError("Fresh native Listening is required before these ordinary playback probes")
     events = args.directory / "host-events.jsonl"
