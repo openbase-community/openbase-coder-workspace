@@ -51,6 +51,7 @@ Repeat with constrained guest bandwidth, latency, and loss before spending the r
 python3 voice-tests/capture.py .local/field-tests/scenario.json \
   .reports/voice-run/ios-smoke --credentials-file <private-env-file> --vm <run-vm>
 uv run --with matplotlib python voice-tests/timeline.py .reports/voice-run/ios-smoke
+python3 voice-tests/assess.py .reports/voice-run/ios-smoke --terminal-phrase "complete answer delivered"
 python3 -m unittest discover -s voice-tests -p 'test_*.py'
 ```
 
@@ -66,6 +67,10 @@ python3 voice-tests/permit.py <run>/gates/request-0.json \
 ```
 
 Never refresh an old snapshot's modification time to satisfy the gate. A permit expires after 1.5 seconds and belongs to one request nonce. A rejected or missing permit produces no stimulus; the recorder continues so failed tests retain acoustic and sample-clock evidence. This gate reduces harness mistakes but cannot prevent an announcement racing after observation: classify that race from the native journal and recording. Use `mode: "overlap"` only for an explicitly intentional interruption scenario, and keep it distinct from ordinary steering coverage. Cartesia emits floating-point WAV; use `ffprobe` for stimulus durations rather than Python's PCM-only `wave` reader.
+
+Do not end a call just because the recording deadline passed. A delayed backend result can begin TTS at the end of the capture; preserve the call and start another passive capture if needed. Pull a fresh native journal, obtain a new listening snapshot, and run `python3 voice-tests/finish.py <run> <fresh-snapshot.xml> --platform <ios-or-android>` before teardown. It requires the current call's accepted safe-to-unmute and actual mic-enable acknowledgement, plus fresh native Listening and Mute controls. A failed check means keep the call active. Record actual teardown request/acknowledgement timestamps; a later announcement can still race the observation. An agent ending the call during app speech is a harness error, never an app TTS-cutoff finding.
+
+The assessment helper measures the terminal phrase only after the completed host stimulus, so words spoken in the test question cannot satisfy response completion. It retains clock and ASR uncertainty, reports uncertain boundaries without a pass, and does not infer early TTS truncation from a missing phrase alone. Keep manual acoustic findings and the generated `timing-assessment.json` together; an existing harness failure cannot be overridden by these measurements.
 
 The dedicated iOS field-test variant writes already-redacted diagnostics to Documents/`voice-timing.jsonl`; the normal app does not enable persistence or file sharing. The Android fieldTest variant writes whitelisted voice events to its external-files `voice-timing.jsonl`. Both rotate at 16 MiB, retaining one `.previous` file. Pull both files through Appium MCP after every scenario, before rotation can discard them: iOS uses `@<field-test-bundle-id>:documents/voice-timing.jsonl`, Android uses `/sdcard/Android/data/<field-test-package>/files/voice-timing.jsonl`. Save iOS records as `ios.jsonl` and Android records as `android.jsonl`; normalization accepts direct journal entries and deduplicates overlapping iOS uploads. Check persistence failures and the first/last retained timestamps. The in-memory iOS upload buffer contains only 1,000 entries and can lose the beginning of a single long call; it is a fallback, not adequate evidence for a missing interval.
 
