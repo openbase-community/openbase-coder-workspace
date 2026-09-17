@@ -126,6 +126,11 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
             for index, row in enumerate(visible):
                 x, lane = row["capture_relative_s"], index % 4
                 label = row.get("metadata", {}).get("event", row["event"])
+                if row['event'] in ('session_close', 'announcer_playout_interrupted') or row['event'].startswith('observed livekit_room'):
+                    metadata = row.get('metadata', {})
+                    identity = metadata.get('roomID') or metadata.get('observed_room_id')
+                    if identity:
+                        label += ' [' + identity + ']'
                 if row.get("diagnostic_message") == "ignored stale voice lifecycle event":
                     label = "IGNORED stale " + label
                 if row.get("diagnostic_message") == "ignored duplicate voice lifecycle event":

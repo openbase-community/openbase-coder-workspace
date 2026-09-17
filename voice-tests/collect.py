@@ -11,6 +11,7 @@ import time
 from clock_probe import sample_vm_clock, calibration_from_samples
 from guest import read_guest
 from provider_failures import failure_record
+from evidence import merge_jsonl
 
 ROOT = Path(__file__).resolve().parents[1]
 GUEST = ROOT / "install-tests/electron-macos/guest-automate.sh"
@@ -96,7 +97,7 @@ def main():
                 continue
             timestamp = datetime.strptime(match[1], "%Y-%m-%d %H:%M:%S,%f").replace(tzinfo=timezone.utc).isoformat()
             lines.append(json.dumps({"timestamp": timestamp, "message": match[2]}))
-    (args.directory / "server.log").write_text("\n".join(lines) + "\n")
+    merge_jsonl(args.directory / "server.log", "\n".join(lines) + "\n")
     # Sanitize inside the guest before transferring server debug records, which
     # can contain TURN passwords and signaling tokens in nested payloads.
     extractor = (ROOT / "voice-tests/room_events.py").read_text()
@@ -107,7 +108,7 @@ def main():
         '  for line in f.read().decode(errors="replace").splitlines():\n'
         '   record=room_event(line)\n'
         '   if record is not None: print(json.dumps(record))\n')
-    (args.directory / "room-events.jsonl").write_text(ssh(
+    merge_jsonl(args.directory / "room-events.jsonl", ssh(
         '~/Developer/openbase-coder-workspace/.venv/bin/python -c ' + shlex.quote(program)))
     print("Collected bounded timing records; VM clock uncertainty ±%.1f ms" % calibration["server"]["uncertainty_ms"])
 
