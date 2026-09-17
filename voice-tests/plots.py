@@ -33,7 +33,7 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         or r['source']=='server' and r['event'].startswith('observed super_agents_')]
     received = [r for r in rows if r["source"] in ("ios", "android")
         and (r.get("diagnostic_message", r["event"]) in (
-            "received voice lifecycle event", "voice lifecycle received", "ignored stale voice lifecycle event")
+            "received voice lifecycle event", "voice lifecycle received", "ignored stale voice lifecycle event", "ignored duplicate voice lifecycle event")
             or r["event"].startswith("CLI websocket"))]
     playback = [r for r in rows if r["source"] in ("ios", "android") and "remote audio" in r["event"]]
     host = [r for r in rows if r["source"] == "host" and "playback_process" in r["event"]]
@@ -110,6 +110,8 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
                 label = row.get("metadata", {}).get("event", row["event"])
                 if row.get("diagnostic_message") == "ignored stale voice lifecycle event":
                     label = "IGNORED stale " + label
+                if row.get("diagnostic_message") == "ignored duplicate voice lifecycle event":
+                    label = "IGNORED duplicate " + label
                 axis.plot(x, lane, "|", color=color, markersize=14)
                 error = row.get("clock_uncertainty_ms", 0) / 1000
                 if error:
