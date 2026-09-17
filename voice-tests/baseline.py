@@ -14,6 +14,8 @@ def validate_observed_provenance(provenance: dict, observed: dict, source: str) 
     if not 0 <= age <= 1800:
         raise ValueError("Observe the prepared runtime within thirty minutes of sealing")
     names = {"workspace": ".", "cli": "cli", "super-agents": "super-agents"}
+    if "skills" in provenance["revisions"]:
+        names["skills"] = "skills"
     allowed = provenance.get("allowed_tracked_patches", {})
     for name, guest_name in names.items():
         record = observed["vm_source"][guest_name]

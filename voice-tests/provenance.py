@@ -36,12 +36,12 @@ def main():
     import inspect
     program = "import subprocess,hashlib,json\nfrom pathlib import Path\n" + inspect.getsource(source_record)
     program += "\nroot=Path(" + repr(args.guest_workspace) + ").expanduser()\n"
-    program += "print(json.dumps({name:source_record(root/name) for name in ('.','cli','super-agents')}))"
+    program += "print(json.dumps({name:source_record(root/name) for name in ('.','cli','super-agents','skills')}))"
     command = '"$HOME"/' + shlex.quote(args.guest_workspace[2:] + "/.venv/bin/python") + " -c " + shlex.quote(program)
     remote = read_guest(GUEST, args.vm, command)
     record = {"observed_at": datetime.now(timezone.utc).isoformat(), "vm": args.vm,
         "vm_source": json.loads(remote),
-        "host_source": {name: source_record(ROOT / name) for name in (".", "cli", "super-agents", "allauth-client-swift", "ios", "android")},
+        "host_source": {name: source_record(ROOT / name) for name in (".", "cli", "super-agents", "skills", "allauth-client-swift", "ios", "android")},
         "limitation": "Host source revisions do not prove which mobile binary is installed. Record signed build and Appium installation evidence separately."}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(record, indent=2) + "\n")
