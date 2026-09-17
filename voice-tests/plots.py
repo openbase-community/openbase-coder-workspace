@@ -157,7 +157,7 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
             axis.grid(axis="x", alpha=.25)
             axis.set_yticks([])
         fig.suptitle(f"{directory.name} · {start:.0f}–{end:.0f} seconds · {assessment.get('status', 'evidence; not a pass assertion')}\n"
-            f"Uncalibrated clocks: {', '.join(uncalibrated) or 'none'}. Error bars show clock bounds. ASR words ≈ ±400 ms. Playback process ≠ audible onset.", fontsize=12)
+            f"Uncalibrated clocks: {', '.join(uncalibrated) or 'none'}. Excluded clock probes: {len(calibration.get('device_clock_sample_errors', []))}. Error bars show clock bounds. ASR ≈ ±400 ms. Process ≠ audible onset.", fontsize=12)
         fig.tight_layout()
         fig.savefig(directory / f"{name}.svg")
         fig.savefig(directory / f"{name}.png", dpi=120)

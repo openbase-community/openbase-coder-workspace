@@ -93,6 +93,14 @@ class TimingEvidenceTests(unittest.TestCase):
         self.assertEqual(recent['offset_ms'], -3.5)
         self.assertEqual(recent['uncertainty_ms'], 1.5)
 
+    def test_invalid_appium_clock_observation_cannot_calibrate_a_phone(self):
+        bad = dict(source='ios', device_unix_ms=None, host_before_unix_ms=1000,
+            host_after_unix_ms=1002)
+        self.assertEqual(device_clock_bounds([bad]), {})
+        good = dict(source='ios', device_unix_ms=1005, host_before_unix_ms=1000,
+            host_after_unix_ms=1002)
+        self.assertEqual(device_clock_bounds([bad, good]), device_clock_bounds([good]))
+
     def test_clock_envelope_keeps_drift_between_probe_batches(self):
         samples = [
             {"lower_ms": 4, "upper_ms": 6, "host_before_ms": 1000, "host_after_ms": 1002},

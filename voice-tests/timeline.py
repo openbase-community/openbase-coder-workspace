@@ -7,6 +7,7 @@ import ast
 import csv
 from datetime import datetime
 import json
+import math
 from pathlib import Path
 import re
 from clock_probe import calibration_from_samples
@@ -116,10 +117,17 @@ def phone_clock_bounds(rows: list[dict], *, window: tuple[float, float] | None =
     return {"offset_ms": (lower + upper) / 2, "uncertainty_ms": (upper - lower) / 2, "lower_ms": lower, "upper_ms": upper}
 
 
+def valid_device_clock_sample(sample):
+    fields = ('device_unix_ms', 'host_before_unix_ms', 'host_after_unix_ms')
+    return (all(isinstance(sample.get(key), (int, float)) and not isinstance(sample[key], bool)
+        and math.isfinite(sample[key]) for key in fields)
+        and sample['host_after_unix_ms'] >= sample['host_before_unix_ms'])
+
+
 def device_clock_bounds(samples: list[dict], *, window=None) -> dict:
     result = {}
     for source in {s["source"] for s in samples}:
-        matching = sorted([s for s in samples if s["source"] == source
+        matching = sorted([s for s in samples if s["source"] == source and valid_device_clock_sample(s)
             and (window is None or window[0] <= s["host_before_unix_ms"] <= window[1])],
             key=lambda s: s["host_before_unix_ms"])
         if not matching:
@@ -171,7 +179,12 @@ def main() -> None:
                 "method": "causal server/phone control brackets plus nearby SSH offset envelope"}
     samples_path = directory / "device-clock-samples.json"
     if samples_path.exists():
-        direct = device_clock_bounds(json.loads(samples_path.read_text()),
+        device_samples = json.loads(samples_path.read_text())
+        calibration['device_clock_sample_errors'] = [
+            {'source': sample.get('source'), 'host_before_unix_ms': sample.get('host_before_unix_ms'),
+                'reason': 'Invalid or missing Appium timestamp; excluded without guessing'}
+            for sample in device_samples if not valid_device_clock_sample(sample)]
+        direct = device_clock_bounds(device_samples,
             window=(origin - 120_000, origin + duration * 1000 + 120_000))
         for source, bound in direct.items():
             if source in calibration:
