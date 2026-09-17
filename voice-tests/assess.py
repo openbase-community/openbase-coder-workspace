@@ -10,18 +10,23 @@ def normalized(text):
     return re.sub(r"[^a-z0-9]", "", text.lower())
 
 
-def assess(rows, words, terminal_phrase, asr_uncertainty_ms=400):
-    ends = [r['capture_relative_s'] for r in rows if r['event'] == 'playback_process_end']
+def assess(rows, words, terminal_phrase, asr_uncertainty_ms=400, stimulus_index=None):
+    ends = [r['capture_relative_s'] for r in rows if r['event'] == 'playback_process_end'
+        and (stimulus_index is None or r.get('index') == stimulus_index)]
     if not ends:
         return {'status': 'harness_error', 'finding': 'No completed host stimulus'}
     input_end = max(ends)
+    next_inputs = [r['capture_relative_s'] for r in rows if r['event'] == 'playback_process_start'
+        and r['capture_relative_s'] > input_end]
+    window_end = min(next_inputs) if next_inputs else float('inf')
     phrase = [normalized(t) for t in terminal_phrase.split()]
     candidates = []
     for index in range(len(words) - len(phrase) + 1):
         span = words[index:index + len(phrase)]
-        if span[0]['start'] / 1000 > input_end and [normalized(w['text']) for w in span] == phrase:
+        if span[0]['start'] / 1000 > input_end and span[-1]['end'] / 1000 < window_end and [normalized(w['text']) for w in span] == phrase:
             candidates.append(span)
     result = {'terminal_phrase': terminal_phrase, 'host_stimulus_end_s': input_end,
+        'stimulus_index': stimulus_index, 'response_window_end_s': None if not next_inputs else window_end,
         'asr_boundary_uncertainty_ms': asr_uncertainty_ms,
         'limitation': 'ASR ±400 ms is an approximate analysis allowance, not a guaranteed bound. Negative boundaries require waveform/independent alignment review. A missing marker alone does not prove TTS truncation.'}
     if not candidates:
@@ -31,12 +36,12 @@ def assess(rows, words, terminal_phrase, asr_uncertainty_ms=400):
     result.update(terminal_word_end_s=end, terminal_occurrences=len(candidates))
     mutes = [r for r in rows if r['event'] == 'applied mute state'
         and str(r.get('metadata', {}).get('microphone_enabled')).lower() == 'false'
-        and r['capture_relative_s'] > input_end]
+        and input_end < r['capture_relative_s'] < window_end]
     if not mutes:
         return {**result, 'status': 'complete_marker_missing_native_mute_evidence'}
     live = [r for r in rows if r['source'] == mutes[-1]['source'] and r['event'] == 'applied mute state'
         and str(r.get('metadata', {}).get('microphone_enabled')).lower() == 'true'
-        and r['capture_relative_s'] > mutes[-1]['capture_relative_s']]
+        and mutes[-1]['capture_relative_s'] < r['capture_relative_s'] < window_end]
     if not live:
         return {**result, 'status': 'complete_marker_unmute_not_observed'}
     unmute = live[0]
@@ -60,16 +65,18 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('directory', type=Path)
     parser.add_argument('--terminal-phrase', required=True)
+    parser.add_argument('--stimulus-index', type=int, help='Assess only the response before the next host stimulus')
     args = parser.parse_args()
     path = args.directory
     rows = json.loads((path / 'timeline-events.json').read_text())
     words = json.loads((path / 'transcript.json').read_text()).get('words') or []
-    result = assess(rows, words, args.terminal_phrase)
+    result = assess(rows, words, args.terminal_phrase, stimulus_index=args.stimulus_index)
     prior = path / 'assessment.json'
     prior_status = json.loads(prior.read_text()).get('status', '') if prior.exists() else ''
     if prior_status == 'harness_error' or 'harness' in prior_status:
         result.update(status=prior_status, finding='Retained original harness failure; timing measurements cannot override it')
-    (path / 'timing-assessment.json').write_text(json.dumps(result, indent=2) + '\n')
+    filename = 'timing-assessment.json' if args.stimulus_index is None else f'timing-assessment-stimulus-{args.stimulus_index}.json'
+    (path / filename).write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps(result, indent=2))
 
 

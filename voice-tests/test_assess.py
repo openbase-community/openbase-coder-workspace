@@ -31,3 +31,20 @@ class AcousticAssessmentTests(unittest.TestCase):
         del rows[-1]['clock_uncertainty_ms']
         self.assertEqual(assess(rows, self.words(), 'velvet orchard complete')['status'],
             'complete_marker_unmute_clock_uncalibrated')
+
+    def test_later_turn_cannot_hide_earlier_premature_unmute(self):
+        rows = self.rows(-.7)
+        rows[0]['index'] = 0
+        rows += [dict(source='host', event='playback_process_start', capture_relative_s=30, index=1),
+            dict(source='host', event='playback_process_end', capture_relative_s=31, index=1),
+            dict(source='ios', event='applied mute state', capture_relative_s=32,
+                metadata={'microphone_enabled': False}),
+            dict(source='ios', event='applied mute state', capture_relative_s=50.9,
+                metadata={'microphone_enabled': True}, clock_uncertainty_ms=30)]
+        words = self.words() + self.words(50000)
+        first = assess(rows, words, 'velvet orchard complete', stimulus_index=0)
+        self.assertEqual(first['status'], 'premature_unmute_candidate_requires_waveform_review')
+        self.assertEqual(first['terminal_word_end_s'], 20)
+        self.assertEqual(first['response_window_end_s'], 30)
+        self.assertEqual(assess(rows, words, 'velvet orchard complete')['status'],
+            'complete_marker_and_protected_unmute_observed')
