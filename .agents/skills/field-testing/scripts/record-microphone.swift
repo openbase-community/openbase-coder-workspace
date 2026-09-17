@@ -20,10 +20,12 @@ func deviceMetadata(_ device: AudioDeviceID) -> [String: Any] {
     var result: [String: Any] = ["device_id": device]
     for (selector, key) in [(kAudioObjectPropertyName, "name"), (kAudioDevicePropertyDeviceUID, "uid")] {
         var address = AudioObjectPropertyAddress(mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
-        var value: CFString = "" as CFString
-        var valueSize = UInt32(MemoryLayout<CFString>.size)
-        if AudioObjectGetPropertyData(device, &address, 0, nil, &valueSize, &value) == noErr {
-            result[key] = value as String
+        // Core Audio returns an owned CFObject through an opaque pointer.
+        var value: Unmanaged<CFString>?
+        var valueSize = UInt32(MemoryLayout.size(ofValue: value))
+        if AudioObjectGetPropertyData(device, &address, 0, nil, &valueSize, &value) == noErr,
+           let value {
+            result[key] = value.takeRetainedValue() as String
         }
     }
     return result
