@@ -10,6 +10,16 @@ from clock_probe import ClockTransportError, sample_vm_clock
 
 
 class TimingEvidenceTests(unittest.TestCase):
+    def test_vm_room_generations_are_retained_for_reconnect_interpretation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            row = {"timestamp": "2026-09-17T07:55:48Z", "room_id": "new-room", "job_id": "new-job", "pid": 1,
+                "message": "dispatch_timing stage=agent_session_start_complete"}
+            Path(temp, "server.log").write_text(json.dumps(row) + "\n")
+            metadata = events(Path(temp))[0]["metadata"]
+            self.assertEqual(metadata["observed_room_id"], "new-room")
+            self.assertEqual(metadata["observed_job_id"], "new-job")
+
+
     def test_acoustic_lease_rejects_competing_work_and_releases_after_failure(self):
         from acoustic_session import acoustic_session
         with tempfile.TemporaryDirectory() as temp:

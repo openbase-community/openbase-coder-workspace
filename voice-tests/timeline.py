@@ -80,6 +80,9 @@ def events(directory: Path) -> list[dict]:
             except (ValueError, SyntaxError):
                 # Keep generic metadata if a bounded log tail truncated the quoted excerpt.
                 pass
+        for key in ("room_id", "job_id", "pid"):
+            if key in record:
+                fields["observed_" + key] = record[key]
         rows.append({"source": "server", "unix_ms": unix_ms(record["timestamp"]),
             "event": fields.get("stage", "dispatch_timing"), "metadata": fields})
     for record in read_jsonl(directory / "android.jsonl"):

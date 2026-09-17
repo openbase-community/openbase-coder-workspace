@@ -29,7 +29,7 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         "turn_start_response", "turn_wait_start", "voice_turn_result", "tts_stream_first_audio", "tts_stream_flush",
         "tts_provider_partial_failure", "tts_provider_inference_failure", "tts_provider_connection_failure",
         "tts_provider_retry", "stt_provider_retry", "stt_provider_connection_closed",
-        "voice_session_unrecoverable_failure", "voice_worker_recovery_exit")
+        "voice_session_unrecoverable_failure", "voice_worker_recovery_exit", "agent_session_start_complete")
         or r['source']=='server' and r['event'].startswith('observed super_agents_')]
     received = [r for r in rows if r["source"] in ("ios", "android")
         and (r.get("diagnostic_message", r["event"]) in (
@@ -42,7 +42,8 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         'readiness_gate_rejected', 'scenario_aborted', 'network_restored', 'network_restore',
         'vm_desktop_permission_allowed', 'call_teardown_acknowledged',
         'competing_network_probe_start', 'competing_network_probe_end',
-        'host_analysis_dependency_download_start', 'host_analysis_dependency_download_end')]
+        'host_analysis_dependency_download_start', 'host_analysis_dependency_download_end',
+        'scheduled_network_restore', 'competing_host_fixture_preparation', 'call_end_gesture_acknowledged')]
     assessment_path = directory / "assessment.json"
     assessment = json.loads(assessment_path.read_text()) if assessment_path.exists() else {}
     invalid = assessment.get("invalid_stimuli", [])
