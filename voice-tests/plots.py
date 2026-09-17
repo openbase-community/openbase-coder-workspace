@@ -83,8 +83,13 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
                 error = row.get("clock_uncertainty_ms", 0) / 1000
                 if error:
                     axis.errorbar(x, lane, xerr=error, color=color, alpha=.35)
-                if detailed and "RTP stats" not in label:
-                    axis.text(x, lane + .1, label, fontsize=8, rotation=25, clip_on=True)
+                noisy = any(word in label for word in ('RTP stats', 'mute_keepalive', 'silence gap', 'playback sample'))
+                if detailed and not noisy:
+                    short = label.replace('decoded remote audio ', 'PCM ').replace('remote audio ', 'audio ')
+                    delivery = row.get('metadata', {}).get('delivery_id', '')
+                    if delivery:
+                        short += ' [' + delivery[-5:] + ']'
+                    axis.text(x, lane + .1, short, fontsize=8, rotation=25, clip_on=True)
             axis.set_ylim(-.3, 4)
             axis.set_ylabel(title)
         if microphone:
