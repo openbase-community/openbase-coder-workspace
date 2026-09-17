@@ -223,7 +223,7 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
             label = 'UNKNOWN — input callbacks received; sample format unmeasured' if visible_input else 'MISSING — no phone input callback samples'
             axes[7].text(start + .3, .4, label, color='gray', clip_on=True)
         axes[7].set_ylim(0, 1)
-        axes[7].set_ylabel('Phone input peak\npostprocessing\n(not sent ACK)')
+        axes[7].set_ylabel('Phone input peak\nSDK capture stage\n(not sent ACK)')
         visible_output = [r for r in output_path if start <= r['capture_relative_s'] <= end]
         if visible_output:
             for key, color, label in [('system_output_volume', 'navy', 'System volume'),

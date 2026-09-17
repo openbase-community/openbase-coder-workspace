@@ -100,7 +100,9 @@ def events(directory: Path) -> list[dict]:
             "event": fields.get("stage", "dispatch_timing"), "metadata": fields})
     for record in read_jsonl(directory / "android.jsonl"):
         if "unix_ms" in record:
-            rows.append({**record, "source": "android"})
+            callback = record.get('metadata', {}).get('callback_unix_ms') if record.get('event') == 'local audio capture callback' else None
+            rows.append({**record, "source": "android",
+                "unix_ms": float(callback) if callback is not None else record['unix_ms']})
     return sorted(rows, key=lambda row: row["unix_ms"])
 
 
