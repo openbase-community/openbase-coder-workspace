@@ -236,18 +236,20 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         visible_input = [r for r in input_capture if start <= r['capture_relative_s'] <= end]
         numeric_input = [r for r in visible_input if r.get('metadata', {}).get('peak') not in (None, 'unknown')]
         if numeric_input:
+            def input_dbfs(row):
+                return 20 * math.log10(max(float(row['metadata']['peak']), 1e-5))
             axes[7].scatter([r['capture_relative_s'] for r in numeric_input],
-                [float(r['metadata']['peak']) for r in numeric_input], s=12, color='teal')
+                [input_dbfs(r) for r in numeric_input], s=12, color='teal')
             for row in numeric_input:
                 error = row.get('clock_uncertainty_ms', 0) / 1000
                 if error:
-                    axes[7].errorbar(row['capture_relative_s'], float(row['metadata']['peak']), xerr=error,
+                    axes[7].errorbar(row['capture_relative_s'], input_dbfs(row), xerr=error,
                         color='teal', alpha=.25)
         else:
             label = 'UNKNOWN — input callbacks received; sample format unmeasured' if visible_input else 'MISSING — no phone input callback samples'
-            axes[7].text(start + .3, .4, label, color='gray', clip_on=True)
-        axes[7].set_ylim(0, 1)
-        axes[7].set_ylabel('Phone input peak\nSDK capture stage\n(not sent ACK)')
+            axes[7].text(start + .3, -50, label, color='gray', clip_on=True)
+        axes[7].set_ylim(-100, 0)
+        axes[7].set_ylabel('Input peak dBFS\nSDK capture stage\n(not sent ACK)')
         visible_output = [r for r in output_path if start <= r['capture_relative_s'] <= end]
         if visible_output:
             for key, color, label in [('system_output_volume', 'navy', 'System volume'),
@@ -290,7 +292,7 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
             axis.grid(axis="x", alpha=.25)
             axis.set_yticks([])
         axes[5].set_yticks([0, 1, 2, 3], ['LIVE', 'MUTED', 'IDLE', 'UNKNOWN'])
-        axes[7].set_yticks([0, .5, 1])
+        axes[7].set_yticks([-100, -50, 0])
         axes[8].set_yticks([0, .5, 1])
         fig.suptitle(f"{directory.name} · {start:.0f}–{end:.0f} seconds · {assessment.get('status', 'evidence; not a pass assertion')}\n"
             f"Uncalibrated clocks: {', '.join(uncalibrated) or 'none'}. Excluded probes: {len(calibration.get('device_clock_sample_errors', []))} invalid phone, {calibration.get('device_clock_outside_window_count', 0)} distant phone, {calibration.get('server_clock_outside_window_count', 0)} distant VM. Error bars: clock bounds. ASR ≈ ±400 ms. Process ≠ audible onset.", fontsize=12)
