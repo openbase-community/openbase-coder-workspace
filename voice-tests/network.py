@@ -132,7 +132,7 @@ def main():
                 owned_restore(state['enable_token'], restore))
             state["restored_at"] = datetime.now(timezone.utc).isoformat()
             state_path.write_text(json.dumps(state, indent=2) + "\n")
-    output, warnings = sudo(f"/sbin/pfctl -s info; /sbin/pfctl -a {ANCHOR} -s dummynet; /usr/sbin/dnctl list")
+    output, warnings = sudo(f"/sbin/pfctl -s info; /sbin/pfctl -a {ANCHOR} -s dummynet; /usr/sbin/dnctl list", read_only=True)
     (args.directory / f"network-{args.action}.txt").write_text(output + warnings)
     print(f"Guest network {args.action} recorded; configured values are not measurements")
 

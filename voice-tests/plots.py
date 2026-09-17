@@ -213,12 +213,23 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         html.escape(str(r.get('clock_uncertainty_ms', 'uncalibrated'))),
         html.escape(json.dumps(r.get('metadata', {}), sort_keys=True))) for r in rows
         if 0 <= r['capture_relative_s'] <= duration)
+    coverage_path = directory / 'speech-coverage.json'
+    coverage_table = ''
+    if coverage_path.exists():
+        coverage = json.loads(coverage_path.read_text())
+        coverage_table = '<h2>Complete announcement text alignment</h2><p>' + html.escape(coverage['limitation']) + '</p><table><tr><th>Thread</th><th>Expected ASR words matched</th><th>Evidence</th></tr>'
+        for probe in coverage['probes']:
+            percentage = probe.get('coverage_percent')
+            coverage_table += '<tr><td>%s</td><td>%s</td><td>%s</td></tr>' % (
+                html.escape(probe['thread']), 'unknown' if percentage is None else '%.1f%%' % percentage,
+                html.escape(probe['status']))
+        coverage_table += '</table><p><a href="speech-coverage.json">Per-word expected text and actual ASR times</a></p>'
     (directory / "timeline.html").write_text('<!doctype html><meta charset="utf-8"><title>Voice timing evidence</title>'
         '<style>body{font:16px system-ui;margin:2rem;background:#f5f5f5}img{width:100%;background:white}h2{margin-top:3rem}</style>'
         f'<h1>{html.escape(directory.name)}</h1><p>{html.escape(assessment.get("finding", "Recorded evidence; evaluate native clocks and audible boundaries."))}</p>'
         '<p>Overview, followed by 20-second windows. All event markers remain visible; routine heartbeat and repeated duplicate labels are abbreviated for readability. '
         '<a href="timeline-events.json">Event JSON</a> · <a href="timeline-events.csv">Event CSV</a></p><img src="timeline.svg" alt="Overview">'
-        '<h2>Words registered by VM STT</h2><p>Final-transcript receipt times; excerpts can be bounded. Compare these with the room-audio word spans.</p><table><tr><th>Capture time</th><th>Registered text</th></tr>'+transcripts+'</table>' + ''.join(pages)
+        + coverage_table + '<h2>Words registered by VM STT</h2><p>Final-transcript receipt times; excerpts can be bounded. Compare these with the room-audio word spans.</p><table><tr><th>Capture time</th><th>Registered text</th></tr>'+transcripts+'</table>' + ''.join(pages)
         + '<details><summary>Search every registered event</summary><input id="event-search" placeholder="Filter event, source or delivery ID" style="width:90%;padding:.6rem">'
         '<table id="event-table"><thead><tr><th>Capture seconds</th><th>Source</th><th>Event</th><th>Clock ±ms</th><th>Metadata</th></tr></thead><tbody>'
         + event_table + '</tbody></table></details><script>document.getElementById("event-search").addEventListener("input", function(){'
