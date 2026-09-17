@@ -13,6 +13,13 @@ ROOT = Path(__file__).resolve().parents[1]
 GUEST = ROOT / "install-tests/electron-macos/guest-automate.sh"
 ANCHOR = "com.apple/openbase-voice-field-test"
 PIPES = (30341, 30342)
+LEASE = "/tmp/openbase-voice-network-owner"
+
+
+def owned_restore(token, restore):
+    # A delayed timer from an old profile must never flush a newer profile.
+    return (f'if [ "$(cat {LEASE} 2>/dev/null)" = {shlex.quote(token)} ]; then '
+        f"{restore}; /sbin/pfctl -X {token}; rm -f {LEASE}; fi")
 
 
 def main():
@@ -39,7 +46,9 @@ def main():
             input=os.environ.get("VM_PASS", "admin") + "\n", text=True, capture_output=True, check=True, timeout=30)
         return result.stdout, result.stderr
 
-    restore = f"/sbin/pfctl -a {ANCHOR} -F all; /usr/sbin/dnctl pipe delete {PIPES[0]}; /usr/sbin/dnctl pipe delete {PIPES[1]}"
+    restore = (f"/sbin/pfctl -a {ANCHOR} -F all; "
+        f"/usr/sbin/dnctl pipe delete {PIPES[0]} 2>/dev/null || true; "
+        f"/usr/sbin/dnctl pipe delete {PIPES[1]} 2>/dev/null || true")
     if args.action == "apply":
         if state_path.exists() and not json.loads(state_path.read_text()).get("restored_at"):
             raise ValueError("Restore the recorded network profile before applying another")
@@ -51,6 +60,9 @@ def main():
         existing, _ = sudo(f"/sbin/pfctl -a {ANCHOR} -s dummynet")
         if existing.strip():
             raise ValueError("Test anchor already has rules; preserve it and resolve ownership")
+        owner, _ = sudo(f"if [ -f {LEASE} ]; then cat {LEASE}; fi")
+        if owner.strip():
+            raise ValueError("A previous network profile still owns its restoration lease")
         interface, _ = sudo("/sbin/route -n get default | awk '/interface:/{print $2}'")
         interface = interface.strip()
         if not re.fullmatch(r"en\d+", interface):
@@ -78,7 +90,8 @@ def main():
             if not match:
                 raise RuntimeError("PF enable reference token was not returned")
             token = match[1]
-            rollback = restore + f"; /sbin/pfctl -X {token}"
+            sudo(f"printf %s {shlex.quote(token)} > {LEASE}")
+            rollback = owned_restore(token, restore)
             script = f"sleep {args.safety_seconds}; {rollback}"
             pid, _ = sudo("nohup sh -c " + shlex.quote(script) + " </dev/null >/tmp/openbase-voice-network-rollback.log 2>&1 & echo $!")
             state = {"vm": args.vm, "interface": interface, "anchor": ANCHOR, "pipe_ids": PIPES,
@@ -92,7 +105,13 @@ def main():
             (args.directory / "network-apply.txt").write_text(output + warnings)
         except Exception:
             # Genuine rollback: a partially applied profile must not strand the guest.
-            sudo(restore + (f"; /sbin/pfctl -X {token}" if token else ""))
+            if token:
+                # Lease creation may have succeeded even if its SSH acknowledgement failed.
+                # Missing lease is also ours here: no profile rules have been loaded yet.
+                sudo(f'if [ ! -f {LEASE} ]; then printf %s {shlex.quote(token)} > {LEASE}; fi; ' +
+                    owned_restore(token, restore))
+            else:
+                sudo(restore)
             if state:
                 sudo(f"kill {state['rollback_pid']} 2>/dev/null || true")
                 state["restored_at"] = datetime.now(timezone.utc).isoformat()
@@ -104,8 +123,8 @@ def main():
         if state["vm"] != args.vm:
             raise ValueError("Network state belongs to another guest")
         if not state.get("restored_at"):
-            sudo(f"kill {state['rollback_pid']} 2>/dev/null || true; " + restore +
-                f"; /sbin/pfctl -X {state['enable_token']} || /sbin/pfctl -s References")
+            sudo(f"kill {state['rollback_pid']} 2>/dev/null || true; " +
+                owned_restore(state['enable_token'], restore))
             state["restored_at"] = datetime.now(timezone.utc).isoformat()
             state_path.write_text(json.dumps(state, indent=2) + "\n")
     output, warnings = sudo(f"/sbin/pfctl -s info; /sbin/pfctl -a {ANCHOR} -s dummynet; /usr/sbin/dnctl list")

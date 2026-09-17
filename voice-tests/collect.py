@@ -8,6 +8,7 @@ import re
 import subprocess
 import time
 from clock_probe import sample_vm_clock, calibration_from_samples
+from guest import read_guest
 
 ROOT = Path(__file__).resolve().parents[1]
 GUEST = ROOT / "install-tests/electron-macos/guest-automate.sh"
@@ -22,7 +23,7 @@ def main():
     args.directory.mkdir(parents=True, exist_ok=True)
 
     def ssh(command):
-        return subprocess.check_output([str(GUEST), "ssh", args.vm, command], text=True, stderr=subprocess.PIPE)
+        return read_guest(GUEST, args.vm, command)
 
     samples = sample_vm_clock(GUEST, args.vm)
     previous_calibration = args.directory / "clock-calibration.json"
@@ -36,7 +37,8 @@ def main():
             return int(ssh("stat -f %z ~/.openbase/logs/ios-app.log 2>/dev/null || echo 0").strip())
         try:
             previous = size()
-            ssh("~/.local/bin/openbase-coder user ios upload-logs")
+            subprocess.check_output([str(GUEST), "ssh", args.vm,
+                "~/.local/bin/openbase-coder user ios upload-logs"], text=True, stderr=subprocess.PIPE)
             deadline = time.monotonic() + 15
             while size() <= previous:
                 if time.monotonic() >= deadline:
@@ -56,7 +58,12 @@ def main():
             record = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if "dispatch_timing" in record.get("message", ""):
+        message = record.get("message", "")
+        provider_stall = re.fullmatch(r"AssemblyAI no (?:messages received for \d+s|audio frames sent for [\d.]+s) session=[\w-]+", message)
+        if provider_stall:
+            lines.append(json.dumps({"timestamp": record["timestamp"],
+                "message": "dispatch_timing stage=stt_provider_stall detail=" + message.replace(" ", "_")}))
+        elif "dispatch_timing" in message:
             # Reject credential-bearing records rather than relying on an incomplete secret regex.
             if re.search(r"(?i)bearer\s|[?&](?:token|access_token|session_token)=|authorization[=:]", record["message"]):
                 continue

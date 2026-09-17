@@ -7,6 +7,22 @@ from pathlib import Path
 import subprocess
 
 
+def validate_observed_provenance(provenance: dict, observed: dict, source: str) -> None:
+    if observed.get("vm") != source:
+        raise ValueError("Observed runtime belongs to another VM")
+    age = (datetime.now(timezone.utc) - datetime.fromisoformat(observed["observed_at"])).total_seconds()
+    if not 0 <= age <= 1800:
+        raise ValueError("Observe the prepared runtime within thirty minutes of sealing")
+    names = {"workspace": ".", "cli": "cli", "super-agents": "super-agents"}
+    allowed = provenance.get("allowed_tracked_patches", {})
+    for name, guest_name in names.items():
+        record = observed["vm_source"][guest_name]
+        if provenance["revisions"].get(name) != record["head"]:
+            raise ValueError(f"Reviewed {name} revision differs from the observed guest")
+        if record["tracked_dirty"] and allowed.get(guest_name) != record["tracked_patch_sha256"]:
+            raise ValueError(f"Unreviewed tracked guest patch in {name}")
+
+
 def inventory() -> dict:
     return {item["Name"]: item for item in json.loads(subprocess.check_output(["tart", "list", "--format", "json"]))}
 
@@ -18,6 +34,7 @@ def main() -> None:
     parser.add_argument("destination")
     parser.add_argument("--manifest", type=Path, required=True, help="Ignored operational fixture manifest")
     parser.add_argument("--provenance", type=Path, help="Seal only: JSON containing source revisions and preflight evidence")
+    parser.add_argument("--observed-runtime", type=Path, help="Seal only: fresh provenance.py output from the actual guest")
     args = parser.parse_args()
     state = inventory()
     if args.destination in state:
@@ -31,6 +48,11 @@ def main() -> None:
         required = ("revisions", "doctor_passed", "cloud_environment", "fixture_account", "desktop_permission_reset")
         if any(key not in provenance for key in required) or not provenance["doctor_passed"]:
             raise ValueError("Provenance lacks required prepared-fixture gates")
+        if not args.observed_runtime:
+            raise ValueError("Seal requires observed guest runtime, not requested revisions")
+        observed = json.loads(args.observed_runtime.read_text())
+        validate_observed_provenance(provenance, observed, args.source)
+        provenance["observed_runtime"] = observed
         if args.manifest.exists():
             raise ValueError("Manifest already exists; create a versioned baseline")
     else:

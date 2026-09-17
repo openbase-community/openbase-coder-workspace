@@ -8,6 +8,17 @@ from clock_probe import calibration_from_samples
 
 
 class TimingEvidenceTests(unittest.TestCase):
+    def test_phone_clock_drift_uses_envelope_and_excludes_old_probes(self):
+        samples = [dict(source='android', device_unix_ms=1005, host_before_unix_ms=1000,
+            host_after_unix_ms=1002), dict(source='android', device_unix_ms=7997,
+            host_before_unix_ms=8000, host_after_unix_ms=8002)]
+        bound = device_clock_bounds(samples)['android']
+        self.assertEqual(bound['offset_ms'], .5)
+        self.assertEqual(bound['uncertainty_ms'], 5.5)
+        recent = device_clock_bounds(samples, window=(7000, 9000))['android']
+        self.assertEqual(recent['offset_ms'], -3.5)
+        self.assertEqual(recent['uncertainty_ms'], 1.5)
+
     def test_clock_envelope_keeps_drift_between_probe_batches(self):
         samples = [
             {"lower_ms": 4, "upper_ms": 6, "host_before_ms": 1000, "host_after_ms": 1002},

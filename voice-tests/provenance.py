@@ -8,6 +8,7 @@ from pathlib import Path
 import shlex
 import subprocess
 import re
+from guest import read_guest
 
 ROOT = Path(__file__).resolve().parents[1]
 GUEST = ROOT / "install-tests/electron-macos/guest-automate.sh"
@@ -37,7 +38,7 @@ def main():
     program += "\nroot=Path(" + repr(args.guest_workspace) + ").expanduser()\n"
     program += "print(json.dumps({name:source_record(root/name) for name in ('.','cli','super-agents')}))"
     command = '"$HOME"/' + shlex.quote(args.guest_workspace[2:] + "/.venv/bin/python") + " -c " + shlex.quote(program)
-    remote = subprocess.check_output([str(GUEST), "ssh", args.vm, command], text=True)
+    remote = read_guest(GUEST, args.vm, command)
     record = {"observed_at": datetime.now(timezone.utc).isoformat(), "vm": args.vm,
         "vm_source": json.loads(remote),
         "host_source": {name: source_record(ROOT / name) for name in (".", "cli", "super-agents", "allauth-client-swift", "ios", "android")},

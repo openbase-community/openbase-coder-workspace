@@ -18,15 +18,18 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
     with wave.open(str(directory / "room.wav")) as wav:
         rate = wav.getframerate()
         samples = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2").astype(float) / 32768
-    microphone = [r for r in rows if r["event"] == "applied mute state"
-        and str(r.get("metadata", {}).get("microphone_enabled")).lower() in ("true", "false")]
+    microphone = [r for r in rows if (r["event"] == "applied mute state"
+        and str(r.get("metadata", {}).get("microphone_enabled")).lower() in ("true", "false"))
+        or r["event"] in ("LiveKit room connection state changed", "call state changed")]
     emitted = [r for r in rows if r["source"] == "server" and r["event"] in (
-        "voice_lifecycle_packet_published", "stt_final_transcript", "voice_delivery_cancelled", "livekit_llm_input_committed")]
+        "voice_lifecycle_packet_published", "stt_final_transcript", "voice_delivery_cancelled", "livekit_llm_input_committed", "stt_provider_stall")]
     received = [r for r in rows if r["source"] in ("ios", "android")
         and (r.get("diagnostic_message", r["event"]) in (
             "received voice lifecycle event", "voice lifecycle received", "ignored stale voice lifecycle event"))]
     playback = [r for r in rows if r["source"] in ("ios", "android") and "remote audio" in r["event"]]
     host = [r for r in rows if r["source"] == "host" and "playback_process" in r["event"]]
+    host_markers = [r for r in rows if r['source'] == 'host' and r['event'] in (
+        'readiness_gate_rejected', 'scenario_aborted', 'network_restored', 'network_restore')]
     assessment_path = directory / "assessment.json"
     assessment = json.loads(assessment_path.read_text()) if assessment_path.exists() else {}
     invalid = assessment.get("invalid_stimuli", [])
@@ -61,6 +64,11 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
                 label = f"Host stimulus {row.get('index')}" + (" — HARNESS ERROR" if row.get("index") in invalid else "")
                 axes[2].text(x, .3, label, fontsize=9, color=color, clip_on=True)
         axes[2].set_ylabel("Host stimulus\nprocess interval")
+        for row in host_markers:
+            x = row['capture_relative_s']
+            if start <= x <= end:
+                axes[2].axvline(x, color='crimson', linestyle=':', linewidth=1)
+                axes[2].text(x, .6, row['event'], fontsize=8, rotation=20, clip_on=True)
         for axis, items, title, color in [(axes[3], emitted, "VM turn /\nlifecycle events", "darkorange"),
                 (axes[4], received, "Phone receipt /\nlifecycle handling", "seagreen"),
                 (axes[6], playback, "Phone playback\ndiagnostics", "purple")]:
@@ -80,7 +88,14 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
             axis.set_ylabel(title)
         if microphone:
             x = [r["capture_relative_s"] for r in microphone]
-            y = [1 if str(r["metadata"]["microphone_enabled"]).lower() == "false" else 0 for r in microphone]
+            def mic_state(row):
+                if row['event'] == 'applied mute state':
+                    return 1 if str(row['metadata']['microphone_enabled']).lower() == 'false' else 0
+                metadata = row.get('metadata', {})
+                if metadata.get('connected') is False or metadata.get('to') in ('.disconnected', '.disconnecting'):
+                    return 2
+                return 3
+            y = [mic_state(r) for r in microphone]
             unknown_end = max(0, min(duration, x[0]))
             if start < unknown_end:
                 axes[5].axvspan(start, min(end, unknown_end), facecolor="none", edgecolor="gray", hatch="///")
@@ -88,8 +103,8 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
             axes[5].step(x + [duration], y + [y[-1]], where="post", color="crimson")
             for timestamp, state in zip(x, y):
                 if start <= timestamp <= end:
-                    axes[5].text(timestamp, state + .12, "MUTED" if state else "LIVE", fontsize=8, clip_on=True)
-            axes[5].set_ylim(-.3, 1.5)
+                    axes[5].text(timestamp, state + .12, ['LIVE', 'MUTED', 'IDLE', 'UNKNOWN'][state], fontsize=8, clip_on=True)
+            axes[5].set_ylim(-.3, 3.8)
         else:
             axes[5].text(start + .3, .4, "MISSING — no phone microphone application records", color="crimson")
         axes[5].set_ylabel("Phone mic\nactually applied")

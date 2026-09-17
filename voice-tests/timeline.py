@@ -35,7 +35,7 @@ def events(directory: Path) -> list[dict]:
     for record in list(read_jsonl(directory / "ios.jsonl")) + list(read_jsonl(directory / "ios-upload.jsonl")):
         entry = record.get("entry", record)
         message = entry.get("message", "")
-        if not any(word in message.lower() for word in ("lifecycle", "mute state", "auto-mute", "auto-unmute", "remote audio", "received app control command", "local microphone publish returned")):
+        if not any(word in message.lower() for word in ("lifecycle", "mute state", "auto-mute", "auto-unmute", "remote audio", "received app control command", "local microphone publish returned", "room connection state changed")):
             continue
         identity = json.dumps(entry, sort_keys=True)
         if identity in seen:
@@ -89,16 +89,29 @@ def phone_clock_bounds(rows: list[dict], *, window: tuple[float, float] | None =
     return {"offset_ms": (lower + upper) / 2, "uncertainty_ms": (upper - lower) / 2, "lower_ms": lower, "upper_ms": upper}
 
 
-def device_clock_bounds(samples: list[dict]) -> dict:
+def device_clock_bounds(samples: list[dict], *, window=None) -> dict:
     result = {}
     for source in {s["source"] for s in samples}:
-        matching = [s for s in samples if s["source"] == source]
-        lower = max(s["device_unix_ms"] - s["host_after_unix_ms"] for s in matching)
-        upper = min(s["device_unix_ms"] + s.get("timestamp_resolution_ms", 1) - s["host_before_unix_ms"] for s in matching)
-        if lower > upper:
-            raise ValueError("Device clock bounds conflict; do not merge this run")
+        matching = sorted([s for s in samples if s["source"] == source
+            and (window is None or window[0] <= s["host_before_unix_ms"] <= window[1])],
+            key=lambda s: s["host_before_unix_ms"])
+        if not matching:
+            continue
+        batches = []
+        for sample in matching:
+            if not batches or sample['host_before_unix_ms'] - batches[-1][-1]['host_after_unix_ms'] > 1000:
+                batches.append([])
+            batches[-1].append(sample)
+        intervals = []
+        for batch in batches:
+            lower = max(s["device_unix_ms"] - s["host_after_unix_ms"] for s in batch)
+            upper = min(s["device_unix_ms"] + s.get("timestamp_resolution_ms", 1) - s["host_before_unix_ms"] for s in batch)
+            if lower > upper:
+                raise ValueError("Device clock bounds conflict within a probe batch")
+            intervals.append((lower, upper))
+        lower, upper = min(x[0] for x in intervals), max(x[1] for x in intervals)
         result[source] = {"offset_ms": (lower + upper) / 2, "uncertainty_ms": (upper - lower) / 2,
-            "method": "causal Appium device-time request/response brackets"}
+            "method": "envelope of causal Appium/native clock probe batches; assumes no larger excursion between probes"}
     return result
 
 
@@ -131,7 +144,8 @@ def main() -> None:
                 "method": "causal server/phone control brackets plus nearby SSH offset envelope"}
     samples_path = directory / "device-clock-samples.json"
     if samples_path.exists():
-        direct = device_clock_bounds(json.loads(samples_path.read_text()))
+        direct = device_clock_bounds(json.loads(samples_path.read_text()),
+            window=(origin - 120_000, origin + duration * 1000 + 120_000))
         for source, bound in direct.items():
             if source in calibration:
                 existing = calibration[source]
@@ -154,7 +168,8 @@ def main() -> None:
         raw = list(read_jsonl(filename))
         # Only a direct durable journal can establish continuous pre-capture history.
         direct = bool(raw) and all("entry" not in r for r in raw)
-        before = [r for r in rows if r["source"] == source and r["event"] == "applied mute state" and r["unix_ms"] < origin]
+        before = [r for r in rows if r["source"] == source and r["event"] in (
+            "applied mute state", "LiveKit room connection state changed", "call state changed") and r["unix_ms"] < origin]
         if direct and before:
             prior_microphones.append(before[-1])
     rows = prior_microphones + [r for r in rows if 0 <= (r["unix_ms"] - origin) / 1000 <= duration + 2]
