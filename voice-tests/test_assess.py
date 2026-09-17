@@ -3,6 +3,17 @@ from assess import assess
 
 
 class AcousticAssessmentTests(unittest.TestCase):
+    def test_simultaneous_announcements_share_playback_window(self):
+        rows = self.rows(.9)
+        rows[0] = dict(source='host', event='announcement_command_start', capture_relative_s=10, index=0)
+        rows.insert(1, dict(source='host', event='announcement_command_start', capture_relative_s=10.001, index=1))
+        result = assess(rows, self.words(), 'velvet orchard complete', stimulus_index=1,
+            origin_event='announcement_command_start')
+        self.assertEqual(result['status'], 'complete_marker_and_protected_unmute_observed')
+        self.assertEqual(result['origin_s'], 10.001)
+        self.assertIsNone(result['host_stimulus_end_s'])
+        self.assertIsNone(result['response_window_end_s'])
+
     def rows(self, gap, clock=30):
         return [dict(source='host', event='playback_process_end', capture_relative_s=10),
             dict(source='ios', event='applied mute state', capture_relative_s=11,

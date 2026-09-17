@@ -43,7 +43,8 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         'vm_desktop_permission_allowed', 'call_teardown_acknowledged',
         'competing_network_probe_start', 'competing_network_probe_end',
         'host_analysis_dependency_download_start', 'host_analysis_dependency_download_end',
-        'scheduled_network_restore', 'competing_host_fixture_preparation', 'call_end_gesture_acknowledged')]
+        'scheduled_network_restore', 'competing_host_fixture_preparation', 'call_end_gesture_acknowledged',
+        'announcement_command_start', 'announcement_command_end', 'operator_stimulus_withheld')]
     assessment_path = directory / "assessment.json"
     assessment = json.loads(assessment_path.read_text()) if assessment_path.exists() else {}
     invalid = assessment.get("invalid_stimuli", [])
