@@ -15,6 +15,8 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
     origin = clock["first_sample_unix_ms"]
     duration = clock["duration_ms"] / 1000
     words = json.loads((directory / "transcript.json").read_text()).get("words") or []
+    secondary_path = directory / "secondary-transcript.json"
+    secondary = json.loads(secondary_path.read_text()).get("words", []) if secondary_path.exists() else []
     with wave.open(str(directory / "room.wav")) as wav:
         rate = wav.getframerate()
         samples = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2").astype(float) / 32768
@@ -30,7 +32,8 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
     host = [r for r in rows if r["source"] == "host" and "playback_process" in r["event"]]
     host_markers = [r for r in rows if r['source'] == 'host' and r['event'] in (
         'readiness_gate_rejected', 'scenario_aborted', 'network_restored', 'network_restore',
-        'vm_desktop_permission_allowed', 'call_teardown_acknowledged')]
+        'vm_desktop_permission_allowed', 'call_teardown_acknowledged',
+        'competing_network_probe_start', 'competing_network_probe_end')]
     assessment_path = directory / "assessment.json"
     assessment = json.loads(assessment_path.read_text()) if assessment_path.exists() else {}
     invalid = assessment.get("invalid_stimuli", [])
@@ -51,8 +54,14 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
             axes[1].broken_barh([(x, max(.02, stop - x))], (lane, .7), facecolors="steelblue")
             if detailed:
                 axes[1].text(x, lane + .76, word["text"], fontsize=8, rotation=30, clip_on=True)
-        axes[1].set_ylim(0, 4.2)
-        axes[1].set_ylabel("Recognized\nacoustic words")
+        for word in secondary:
+            x, stop = word["start"] / 1000, word["end"] / 1000
+            if x <= end and stop >= start:
+                axes[1].broken_barh([(x, max(.02, stop - x))], (3, .6), facecolors="seagreen", alpha=.6)
+                if detailed:
+                    axes[1].text(x, 3.65, "DG " + word["text"], fontsize=7, rotation=30, clip_on=True)
+        axes[1].set_ylim(0, 4.7 if secondary else 4.2)
+        axes[1].set_ylabel("ASR words\nblue: primary\ngreen: secondary")
         for row in host:
             if row["event"] != "playback_process_start":
                 continue
@@ -83,7 +92,7 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
                 error = row.get("clock_uncertainty_ms", 0) / 1000
                 if error:
                     axis.errorbar(x, lane, xerr=error, color=color, alpha=.35)
-                noisy = any(word in label for word in ('RTP stats', 'mute_keepalive', 'silence gap', 'playback sample'))
+                noisy = any(word in label for word in ('RTP stats', 'mute_keepalive', 'silence gap', 'playback sample', 'before playback'))
                 if detailed and not noisy:
                     short = label.replace('decoded remote audio ', 'PCM ').replace('remote audio ', 'audio ')
                     if row['event'] == 'stt_final_transcript':

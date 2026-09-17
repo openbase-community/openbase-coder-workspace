@@ -15,10 +15,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('vm')
     parser.add_argument('directory', type=Path)
+    parser.add_argument("--download-bytes", type=int, default=1000000)
+    parser.add_argument("--upload-bytes", type=int, default=1000000)
     args = parser.parse_args()
+    if not all(10000 <= size <= 10000000 for size in (args.download_bytes, args.upload_bytes)):
+        raise ValueError("Probe sizes must be between ten thousand and ten million bytes")
     args.directory.mkdir(parents=True, exist_ok=True)
     rows = []
-    for direction, size in (('download', 1000000), ('upload', 1000000)):
+    for direction, size in (('download', args.download_bytes), ('upload', args.upload_bytes)):
         endpoint = 'https://speed.cloudflare.com/' + ('__down?bytes=' + str(size) if direction == 'download' else '__up')
         command = ['curl', '--silent', '--show-error', '--fail', '--max-time', '45', '--output', '/dev/null',
             '--write-out', '%{json}', endpoint]

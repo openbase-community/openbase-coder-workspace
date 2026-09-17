@@ -33,23 +33,38 @@ def main():
     calibration["measured_at"] = datetime.now(timezone.utc).isoformat()
     (args.directory / "clock-calibration.json").write_text(json.dumps(calibration, indent=2) + "\n")
     if args.ios:
+        attempt = {"source":"host", "event":"ios_diagnostics_upload_requested", "unix_ms":time.time_ns()/1e6}
         def size():
             return int(ssh("stat -f %z ~/.openbase/logs/ios-app.log 2>/dev/null || echo 0").strip())
         try:
             previous = size()
-            subprocess.check_output([str(GUEST), "ssh", args.vm,
-                "~/.local/bin/openbase-coder user ios upload-logs"], text=True, stderr=subprocess.PIPE)
+            command = subprocess.run([str(GUEST), "ssh", args.vm,
+                "~/.local/bin/openbase-coder user ios upload-logs"], text=True, capture_output=True, timeout=20)
+            attempt['receipt_confirmed'] = command.returncode == 0
+            attempt['command_exit_code'] = command.returncode
+            identifier = re.search(r'ios-app-control-[a-f0-9]{32}', command.stdout)
+            if identifier:
+                attempt['command_id'] = identifier[0]
             deadline = time.monotonic() + 15
             while size() <= previous:
                 if time.monotonic() >= deadline:
-                    raise TimeoutError("iPhone acknowledged the command but no diagnostics upload completed")
+                    raise TimeoutError("No diagnostics append observed after the request; receipt may be unconfirmed")
                 time.sleep(.5)
             # An upload must never overwrite the more complete native journal.
             target = "ios-upload.jsonl" if (args.directory / "ios.jsonl").exists() else "ios.jsonl"
             (args.directory / target).write_text(ssh("tail -c 1500000 ~/.openbase/logs/ios-app.log"))
-        except (subprocess.CalledProcessError, TimeoutError) as error:
+            attempt.update(event='ios_diagnostics_append_observed', completed_unix_ms=time.time_ns()/1e6,
+                limitation='An append after the request provides diagnostics, but an unconfirmed receipt does not identify which command caused it.')
+            error_path = args.directory / 'collection-errors.json'
+            if error_path.exists():
+                attempt['prior_error'] = json.loads(error_path.read_text())
+                error_path.write_text('{}\n')
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, TimeoutError) as error:
+            attempt.update(event='ios_diagnostics_upload_unavailable', error=type(error).__name__)
             (args.directory / "collection-errors.json").write_text(json.dumps({"ios_upload": type(error).__name__,
                 "finding": "Upload unavailable; collecting VM records anyway. Obtain the native journal through Appium."}, indent=2) + "\n")
+        with (args.directory/'collection-attempts.jsonl').open('a') as output:
+            output.write(json.dumps(attempt)+'\n')
     # Only needed timing records enter the report. Never collect raw ASGI access URLs.
     livekit = ssh("tail -c 2000000 ~/.openbase/logs/livekit-agent.log")
     lines = []
@@ -70,7 +85,7 @@ def main():
             lines.append(json.dumps(record))
     django = ssh("tail -c 2000000 ~/.openbase/logs/django-cli.log")
     for line in django.splitlines():
-        match = re.search(r"INFO (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d,\d+) \S+ (dispatch_timing stage=ios_control_round_trip .*)", line)
+        match = re.search(r"INFO (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d,\d+) \S+ (dispatch_timing stage=(?:ios_control_round_trip|ios_control_ack_received) .*)", line)
         if match:
             timestamp = datetime.strptime(match[1], "%Y-%m-%d %H:%M:%S,%f").replace(tzinfo=timezone.utc).isoformat()
             lines.append(json.dumps({"timestamp": timestamp, "message": match[2]}))
