@@ -17,13 +17,13 @@ def step(arguments, evidence):
         subprocess.run([sys.executable,*arguments],stdout=log,stderr=subprocess.STDOUT,check=True)
 
 
-def network_preflight(vm, evidence, profile):
+def network_preflight(vm, evidence, profile, *, measurement_bytes=25000):
     step([str(ROOT/'voice-tests/network.py'),'apply',vm,str(evidence),*profile],evidence)
     state=json.loads((evidence/'network-state.json').read_text())
     if state.get('vm')!=vm or state.get('restored_at'):
         raise ValueError('Confirmed current shaping ownership is required')
     step([str(ROOT/'voice-tests/measure_network.py'),vm,str(evidence),
-        '--download-bytes','100000','--upload-bytes','100000'],evidence)
+        '--download-bytes',str(measurement_bytes),'--upload-bytes',str(measurement_bytes)],evidence)
 
 
 def main():
@@ -39,6 +39,7 @@ def main():
     parser.add_argument('--loss',type=float,default=.02)
     parser.add_argument('--after-recorder-s',type=float,default=230)
     parser.add_argument('--safety-seconds',type=int,default=900)
+    parser.add_argument('--measurement-bytes',type=int,default=25000)
     args=parser.parse_args()
     if args.vm not in json.loads(args.manifest.read_text())['clones']:
         raise ValueError('A declared disposable run clone is required')
@@ -58,7 +59,7 @@ def main():
             network_preflight(args.vm,args.network_directory,[
                 '--down-kbit',str(args.down_kbit),'--up-kbit',str(args.up_kbit),
                 '--delay-ms',str(args.delay_ms),'--loss',str(args.loss),
-                '--safety-seconds',str(args.safety_seconds)])
+                '--safety-seconds',str(args.safety_seconds)],measurement_bytes=args.measurement_bytes)
             with (args.network_directory/'scheduled-recovery.log').open('w') as log:
                 recovery=subprocess.Popen([sys.executable,str(ROOT/'voice-tests/network_recovery.py'),
                     args.vm,str(args.network_directory),str(args.output),
