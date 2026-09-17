@@ -26,6 +26,8 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
     emitted = [r for r in rows if r["source"] == "server" and r["event"] in (
         "voice_lifecycle_packet_published", "stt_final_transcript", "voice_delivery_cancelled", "livekit_llm_input_committed", "stt_provider_stall", "stt_provider_warning",
         "voice_request_received", "voice_delivery_backend_work_preserved_after_consumer_cancel",
+        "announcer_say_start", "announcer_playout_end", "announcer_audio_playout_end",
+        "announcer_synthesis_incomplete", "voice_delivery_tts_failed",
         "turn_start_response", "turn_wait_start", "voice_turn_result", "tts_stream_first_audio", "tts_stream_flush", "tts_stream_audio_gap", "tts_stream_iter_end", "voice_delivery_playout_release_deferred", "super_agent_steer_interrupt_ack", "super_agent_steer_correction_sent", "super_agent_tool_policy_connected",
         "tts_provider_partial_failure", "tts_provider_inference_failure", "tts_provider_connection_failure",
         "tts_provider_retry", "stt_provider_retry", "stt_provider_connection_closed",
