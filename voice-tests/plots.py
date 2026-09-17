@@ -86,6 +86,8 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
                 noisy = any(word in label for word in ('RTP stats', 'mute_keepalive', 'silence gap', 'playback sample'))
                 if detailed and not noisy:
                     short = label.replace('decoded remote audio ', 'PCM ').replace('remote audio ', 'audio ')
+                    if row['event'] == 'stt_final_transcript':
+                        short = 'STT: ' + row.get('metadata', {}).get('text_excerpt', '')[:45]
                     delivery = row.get('metadata', {}).get('delivery_id', '')
                     if delivery:
                         short += ' [' + delivery[-5:] + ']'
@@ -133,7 +135,11 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         name = f"detail-{index:02}"
         draw(start, end, name, True)
         pages.append(f'<h2>{start:.0f}–{end:.0f} seconds</h2><img src="{name}.svg" alt="Detailed timing lanes">')
+    transcripts = ''.join('<tr><td>%.3f s</td><td>%s</td></tr>' % (r['capture_relative_s'],
+        html.escape(r.get('metadata',{}).get('text_excerpt',''))) for r in rows
+        if r['event']=='stt_final_transcript' and 0 <= r['capture_relative_s'] <= duration)
     (directory / "timeline.html").write_text('<!doctype html><meta charset="utf-8"><title>Voice timing evidence</title>'
         '<style>body{font:16px system-ui;margin:2rem;background:#f5f5f5}img{width:100%;background:white}h2{margin-top:3rem}</style>'
         f'<h1>{html.escape(directory.name)}</h1><p>{html.escape(assessment.get("finding", "Recorded evidence; evaluate native clocks and audible boundaries."))}</p>'
-        '<p>Overview, followed by readable 20-second windows. Native timestamps and metadata are in timeline-events.json/CSV.</p><img src="timeline.svg" alt="Overview">' + ''.join(pages))
+        '<p>Overview, followed by readable 20-second windows. Native timestamps and metadata are in timeline-events.json/CSV.</p><img src="timeline.svg" alt="Overview">'
+        '<h2>Words registered by VM STT</h2><p>Final-transcript receipt times; excerpts can be bounded. Compare these with the room-audio word spans.</p><table><tr><th>Capture time</th><th>Registered text</th></tr>'+transcripts+'</table>' + ''.join(pages))

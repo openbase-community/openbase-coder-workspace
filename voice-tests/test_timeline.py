@@ -10,6 +10,15 @@ from clock_probe import ClockTransportError, sample_vm_clock
 
 
 class TimingEvidenceTests(unittest.TestCase):
+    def test_registered_transcript_preserves_spaces_and_quoted_words(self):
+        with tempfile.TemporaryDirectory() as temp:
+            text = "Speak the exact words dual garden component."
+            record = {'timestamp':'2026-09-17T06:31:03.392Z',
+                'message':'dispatch_timing stage=stt_final_transcript text_excerpt='+repr(text)}
+            Path(temp,'server.log').write_text(json.dumps(record)+'\n')
+            rows = events(Path(temp))
+            self.assertEqual(rows[0]['metadata']['text_excerpt'],text)
+
     def test_clock_transport_retry_preserves_failed_observation(self):
         failure = {'ssh_exit_code':255,'authentication_rejected':True}
         samples = [{'lower_ms':0,'upper_ms':1}]

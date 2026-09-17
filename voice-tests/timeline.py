@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import csv
 from datetime import datetime
 import json
@@ -56,6 +57,13 @@ def events(directory: Path) -> list[dict]:
         if "dispatch_timing" not in message or not record.get("timestamp"):
             continue
         fields = dict(re.findall(r"(\w+)=([^\s]*)", message))
+        excerpt = re.search(r"text_excerpt=(.*)$", message)
+        if excerpt:
+            try:
+                fields['text_excerpt'] = ast.literal_eval(excerpt[1])
+            except (ValueError, SyntaxError):
+                # Keep generic metadata if a bounded log tail truncated the quoted excerpt.
+                pass
         rows.append({"source": "server", "unix_ms": unix_ms(record["timestamp"]),
             "event": fields.get("stage", "dispatch_timing"), "metadata": fields})
     for record in read_jsonl(directory / "android.jsonl"):
