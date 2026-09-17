@@ -26,11 +26,32 @@ def calibration_from_samples(samples):
         "samples": samples, "batches": intervals}
 
 
+class ClockTransportError(RuntimeError):
+    def __init__(self, evidence):
+        super().__init__('VM clock SSH transport failed')
+        self.evidence = evidence
+
+
 def sample_vm_clock(guest_helper, vm, count=10):
+    failures = []
+    for attempt in range(3):
+        try:
+            samples = _sample_vm_clock_once(guest_helper, vm, count)
+            if failures:
+                samples[0]['startup_retry_events'] = failures
+            return samples
+        except ClockTransportError as error:
+            failures.append(error.evidence)
+            if attempt == 2:
+                raise
+            time.sleep(.2)
+
+
+def _sample_vm_clock_once(guest_helper, vm, count):
     program = "import sys,time\nprint('READY',flush=True)\nfor line in sys.stdin:\n print(time.time_ns()/1e6,flush=True)"
     command = "~/Developer/openbase-coder-workspace/.venv/bin/python -u -c " + shlex.quote(program)
     process = subprocess.Popen([str(guest_helper), "ssh", vm, command], stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1)
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
     selector = selectors.DefaultSelector()
     selector.register(process.stdout, selectors.EVENT_READ)
     def read():
@@ -38,6 +59,12 @@ def sample_vm_clock(guest_helper, vm, count=10):
             raise TimeoutError("VM clock channel did not respond")
         line = process.stdout.readline().strip()
         if not line:
+            code = process.wait(timeout=5)
+            if code == 255:
+                stderr = process.stderr.read(1024)
+                raise ClockTransportError({'host_observed_unix_ms':time.time_ns()/1e6,
+                    'ssh_exit_code':code,'authentication_rejected':'Permission denied' in stderr,
+                    'finding':'Clock probe channel closed; retry only this read-only observation'})
             raise RuntimeError("VM clock channel closed")
         return line
     try:

@@ -2,12 +2,28 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from timeline import device_clock_bounds, events, phone_clock_bounds, unix_ms
 from clock_probe import calibration_from_samples
+from clock_probe import ClockTransportError, sample_vm_clock
 
 
 class TimingEvidenceTests(unittest.TestCase):
+    def test_clock_transport_retry_preserves_failed_observation(self):
+        failure = {'ssh_exit_code':255,'authentication_rejected':True}
+        samples = [{'lower_ms':0,'upper_ms':1}]
+        with patch('clock_probe._sample_vm_clock_once', side_effect=[ClockTransportError(failure), samples]) as probe:
+            result = sample_vm_clock('helper','fixture')
+        self.assertEqual(probe.call_count,2)
+        self.assertEqual(result[0]['startup_retry_events'],[failure])
+
+    def test_clock_program_error_is_not_retried(self):
+        with patch('clock_probe._sample_vm_clock_once', side_effect=RuntimeError('bad clock program')) as probe:
+            with self.assertRaises(RuntimeError):
+                sample_vm_clock('helper','fixture')
+        self.assertEqual(probe.call_count,1)
+
     def test_phone_clock_drift_uses_envelope_and_excludes_old_probes(self):
         samples = [dict(source='android', device_unix_ms=1005, host_before_unix_ms=1000,
             host_after_unix_ms=1002), dict(source='android', device_unix_ms=7997,
