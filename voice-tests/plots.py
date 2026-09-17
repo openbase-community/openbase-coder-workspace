@@ -1,5 +1,4 @@
 """Readable acoustic and lifecycle timelines, including turn-sized detail views."""
-import html
 import json
 import math
 from pathlib import Path
@@ -74,6 +73,16 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         db = 20 * math.log10(max(rms, 1e-12))
         axes[0].text(start + .2, .72, f"Fixed full-scale amplitude; interval RMS {db:.1f} dBFS",
             fontsize=8, clip_on=True)
+        hop = max(1, rate // 50)
+        count = len(segment) // hop
+        if count:
+            envelope = np.sqrt(np.mean(segment[:count * hop].reshape(count, hop) ** 2, axis=1))
+            level_axis = axes[0].twinx()
+            level_axis.plot((first + np.arange(count) * hop) / rate,
+                20 * np.log10(np.maximum(envelope, 1e-12)), color='teal', linewidth=.6, alpha=.7)
+            level_axis.set_ylim(-90, 0)
+            level_axis.set_yticks([-80, -40, 0])
+            level_axis.set_ylabel('20 ms RMS\ndBFS', fontsize=8)
         axes[0].set_ylabel("Recorded\nroom sound")
         for index, word in enumerate(words):
             x, stop = word["start"] / 1000, word["end"] / 1000
@@ -253,32 +262,5 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         name = f"detail-{index:02}"
         draw(start, end, name, True)
         pages.append(f'<h2>{start:.0f}–{end:.0f} seconds</h2><img src="{name}.svg" alt="Detailed timing lanes">')
-    transcripts = ''.join('<tr><td>%.3f s</td><td>%s</td></tr>' % (r['capture_relative_s'],
-        html.escape(r.get('metadata',{}).get('text_excerpt',''))) for r in rows
-        if r['event']=='stt_final_transcript' and 0 <= r['capture_relative_s'] <= duration)
-    event_table = ''.join('<tr><td>%.3f</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>' % (
-        r['capture_relative_s'], html.escape(r['source']), html.escape(r['event']),
-        html.escape(str(r.get('clock_uncertainty_ms', 'uncalibrated'))),
-        html.escape(json.dumps(r.get('metadata', {}), sort_keys=True))) for r in rows
-        if 0 <= r['capture_relative_s'] <= duration)
-    coverage_path = directory / 'speech-coverage.json'
-    coverage_table = ''
-    if coverage_path.exists():
-        coverage = json.loads(coverage_path.read_text())
-        coverage_table = '<h2>Complete announcement text alignment</h2><p>' + html.escape(coverage['limitation']) + '</p><table><tr><th>Thread</th><th>Expected ASR words matched</th><th>Evidence</th></tr>'
-        for probe in coverage['probes']:
-            percentage = probe.get('coverage_percent')
-            coverage_table += '<tr><td>%s</td><td>%s</td><td>%s</td></tr>' % (
-                html.escape(probe['thread']), 'unknown' if percentage is None else '%.1f%%' % percentage,
-                html.escape(probe['status']))
-        coverage_table += '</table><p><a href="speech-coverage.json">Per-word expected text and actual ASR times</a></p>'
-    (directory / "timeline.html").write_text('<!doctype html><meta charset="utf-8"><title>Voice timing evidence</title>'
-        '<style>body{font:16px system-ui;margin:2rem;background:#f5f5f5}img{width:100%;background:white}h2{margin-top:3rem}</style>'
-        f'<h1>{html.escape(directory.name)}</h1><p>{html.escape(assessment.get("finding", "Recorded evidence; evaluate native clocks and audible boundaries."))}</p>'
-        '<p>Overview, followed by 20-second windows. All event markers remain visible; routine heartbeat and repeated duplicate labels are abbreviated for readability. '
-        '<a href="timeline-events.json">Event JSON</a> · <a href="timeline-events.csv">Event CSV</a></p><img src="timeline.svg" alt="Overview">'
-        + coverage_table + '<h2>Words registered by VM STT</h2><p>Final-transcript receipt times; excerpts can be bounded. Compare these with the room-audio word spans.</p><table><tr><th>Capture time</th><th>Registered text</th></tr>'+transcripts+'</table>' + ''.join(pages)
-        + '<details><summary>Search every registered event</summary><input id="event-search" placeholder="Filter event, source or delivery ID" style="width:90%;padding:.6rem">'
-        '<table id="event-table"><thead><tr><th>Capture seconds</th><th>Source</th><th>Event</th><th>Clock ±ms</th><th>Metadata</th></tr></thead><tbody>'
-        + event_table + '</tbody></table></details><script>document.getElementById("event-search").addEventListener("input", function(){'
-        'const q=this.value.toLowerCase();for(const r of document.querySelectorAll("#event-table tbody tr")){r.hidden=!r.textContent.toLowerCase().includes(q)}});</script>')
+    from timeline_report import write_report
+    write_report(directory, rows, words, secondary, pages, assessment, duration)
