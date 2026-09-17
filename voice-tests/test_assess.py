@@ -24,7 +24,7 @@ class AcousticAssessmentTests(unittest.TestCase):
         self.assertEqual(assess(self.rows(.9), self.words(), 'velvet orchard complete')['status'],
             'complete_marker_and_protected_unmute_observed')
         self.assertEqual(assess(self.rows(-.7), self.words(), 'velvet orchard complete')['status'],
-            'premature_unmute_observed')
+            'premature_unmute_candidate_requires_waveform_review')
 
     def test_uncalibrated_clock_does_not_satisfy_timing(self):
         rows = self.rows(1)

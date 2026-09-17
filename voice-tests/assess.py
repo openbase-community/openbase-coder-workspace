@@ -23,7 +23,7 @@ def assess(rows, words, terminal_phrase, asr_uncertainty_ms=400):
             candidates.append(span)
     result = {'terminal_phrase': terminal_phrase, 'host_stimulus_end_s': input_end,
         'asr_boundary_uncertainty_ms': asr_uncertainty_ms,
-        'limitation': 'ASR boundaries require waveform review for finer claims. A missing marker alone does not prove TTS truncation.'}
+        'limitation': 'ASR ±400 ms is an approximate analysis allowance, not a guaranteed bound. Negative boundaries require waveform/independent alignment review. A missing marker alone does not prove TTS truncation.'}
     if not candidates:
         return {**result, 'status': 'terminal_marker_not_observed'}
     terminal = candidates[-1]
@@ -48,7 +48,7 @@ def assess(rows, words, terminal_phrase, asr_uncertainty_ms=400):
     result.update(phone_clock_uncertainty_ms=unmute['clock_uncertainty_ms'],
         unmute_gap_lower_ms=gap - uncertainty, unmute_gap_upper_ms=gap + uncertainty)
     if gap + uncertainty < 0:
-        status = 'premature_unmute_observed'
+        status = 'premature_unmute_candidate_requires_waveform_review'
     elif gap - uncertainty > 0:
         status = 'complete_marker_and_protected_unmute_observed'
     else:
