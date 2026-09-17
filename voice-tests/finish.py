@@ -4,8 +4,24 @@ import argparse
 import json
 from pathlib import Path
 import time
+import shlex
 from readiness import ios_ready, android_ready
 from timeline import events
+from guest import read_guest
+
+
+def pending_backend_work(vm):
+    program = """import glob,json,sqlite3
+from pathlib import Path
+stores=glob.glob(str(Path.home())+'/.local/share/super-agents-*/state.sqlite3')
+if len(stores)!=1: raise RuntimeError('Expected exactly one dedicated fixture backend store')
+db=sqlite3.connect('file:'+stores[0]+'?mode=ro',uri=True)
+rows=db.execute("select s.name,t.id,t.status from turns t join sessions s on s.id=t.session_id where t.status in ('running','waiting','queued','starting')").fetchall()
+print(json.dumps([{'thread':r[0],'turn_id':r[1],'status':r[2]} for r in rows]))
+"""
+    root = Path(__file__).resolve().parents[1]
+    return json.loads(read_guest(root/'install-tests/electron-macos/guest-automate.sh',vm,
+        '~/Developer/openbase-coder-workspace/.venv/bin/python -c '+shlex.quote(program)))
 
 
 def native_release_ready(rows, platform):
@@ -35,17 +51,20 @@ def main():
     parser.add_argument('directory', type=Path)
     parser.add_argument('snapshot', type=Path)
     parser.add_argument('--platform', choices=('ios', 'android'), required=True)
+    parser.add_argument('--vm', required=True, help='Require the dedicated fixture backend and background agents to be idle')
     args = parser.parse_args()
+    pending = pending_backend_work(args.vm)
     fresh = 0 <= time.time() - args.snapshot.stat().st_mtime <= 1.5
     listening = {'ios': ios_ready, 'android': android_ready}[args.platform](args.snapshot.read_text())
     released = native_release_ready(events(args.directory), args.platform)
     proof = {'observed_at_unix_ms': time.time_ns() / 1e6, 'fresh_listening': fresh and listening,
-        'native_release_acknowledged': released, 'allow_teardown': fresh and listening and released,
+        'native_release_acknowledged': released, 'pending_backend_work':pending,
+        'allow_teardown': fresh and listening and released and not pending,
         'limitation': 'A future announcement can race this observation; preserve teardown timestamps and room evidence.'}
     (args.directory / 'teardown-readiness.json').write_text(json.dumps(proof, indent=2) + '\n')
     print(json.dumps(proof))
     if not proof['allow_teardown']:
-        raise RuntimeError('Do not end the call: fresh listening and native completion evidence are required')
+        raise RuntimeError('Do not end the call: fresh listening, native completion, and an idle fixture backend are required')
 
 
 if __name__ == '__main__':
