@@ -34,13 +34,14 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         "turn_start_response", "turn_wait_start", "voice_turn_result", "tts_stream_first_audio", "tts_stream_flush", "tts_stream_audio_gap", "tts_stream_iter_end", "voice_delivery_playout_release_deferred", "super_agent_steer_interrupt_ack", "super_agent_steer_correction_sent", "super_agent_tool_policy_connected",
         "tts_provider_partial_failure", "tts_provider_inference_failure", "tts_provider_connection_failure",
         "tts_provider_retry", "stt_provider_retry", "stt_provider_connection_closed",
-        "voice_session_unrecoverable_failure", "voice_worker_recovery_exit", "agent_session_start_complete")
+        "voice_session_unrecoverable_failure", "voice_worker_recovery_exit", "agent_session_start_complete", "session_close", "session_error")
         or r['source']=='server' and r['event'].startswith('observed super_agents_')]
     received = [r for r in rows if r["source"] in ("ios", "android")
         and (r.get("diagnostic_message", r["event"]) in (
             "received voice lifecycle event", "voice lifecycle received", "ignored stale voice lifecycle event", "ignored duplicate voice lifecycle event",
             "scheduling lifecycle stuck-muted recovery unmute", "scheduled auto-unmute",
-            "scheduled lifecycle auto-unmute", "auto-unmute task did not apply")
+            "scheduled lifecycle auto-unmute", "auto-unmute task did not apply",
+            "abandoned announcement after audio participant departed")
             or r["event"].startswith("CLI websocket"))]
     playback = [r for r in rows if r["source"] in ("ios", "android") and "remote audio" in r["event"]]
     host = [r for r in rows if r["source"] == "host" and "playback_process" in r["event"]]
