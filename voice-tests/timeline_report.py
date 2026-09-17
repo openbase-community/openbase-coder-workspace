@@ -25,6 +25,17 @@ def cleanup_plot(rows, duration):
 
 
 def write_report(directory, rows, words, secondary, pages, assessment, duration):
+    from secondary_evidence import secondary_readings
+    attempts, _ = secondary_readings(directory)
+    independent_table = '<h2>Independent ASR attempts</h2><p>Every original and explicitly gain-adjusted reading remains separate. Gain applies only to the submitted ASR clip; the room waveform above is unchanged. Empty readings and disagreement cannot establish TTS truncation.</p><table><tr><th>Artifact</th><th>Clip start / actual seconds</th><th>Provider processed seconds</th><th>ASR gain / clipped samples</th><th>Words</th></tr>'
+    for attempt in attempts:
+        independent_table += '<tr><td><a href="%s">%s</a></td><td>%s / %s</td><td>%s</td><td>%s dB / %s</td><td>%d</td></tr>' % (
+            html.escape(attempt['artifact']), html.escape(attempt['artifact']),
+            attempt.get('clip_start_s'), attempt.get('actual_clip_seconds', 'not recorded'),
+            attempt.get('provider_processed_seconds', 'not recorded'),
+            attempt.get('analysis_gain_db', 0), attempt.get('clipped_samples', 'not recorded'),
+            len(attempt.get('words', [])))
+    independent_table += '</table>'
     unrelated_rooms = sum(r.get('case_room_scope') == 'unrelated_room' for r in rows)
     room_scope_note = '<p>%d unrelated room observations are retained in the searchable event table and JSON, and excluded from this call’s plotted lifecycle lane. Room scope follows the accepted announcement receipt or native current-room name; reconnect generations with that same name remain visible.</p>' % unrelated_rooms
     cleanup_events = {'recorder_ready', 'recording_complete', 'call_end_gesture_acknowledged'}
@@ -60,7 +71,7 @@ def write_report(directory, rows, words, secondary, pages, assessment, duration)
     for provider, items in [('Primary', words), ('Secondary', secondary)]:
         for word in items:
             acoustic_words += '<tr><td>%s</td><td><button data-seek="%.3f">%.3f</button></td><td>%.3f</td><td>%s</td></tr>' % (
-                provider, word['start'] / 1000, word['start'] / 1000, word['end'] / 1000, html.escape(word['text']))
+                html.escape(word.get('analysis_label', provider)), word['start'] / 1000, word['start'] / 1000, word['end'] / 1000, html.escape(word['text']))
     acoustic_words += '</table></details>'
     (directory / "timeline.html").write_text('<!doctype html><meta charset="utf-8"><title>Voice timing evidence</title>'
         '<style>body{font:16px system-ui;margin:2rem;background:#f5f5f5}img{width:100%;background:white}h2{margin-top:3rem}</style>'
@@ -69,7 +80,7 @@ def write_report(directory, rows, words, secondary, pages, assessment, duration)
         '<audio id="room-audio" controls preload="metadata" src="room.wav"></audio><span id="seek-status"></span></div>'
         '<p>Overview, followed by 20-second windows. All event markers remain visible; routine heartbeat and repeated duplicate labels are abbreviated for readability. '
         '<a href="timeline-events.json">Event JSON</a> · <a href="timeline-events.csv">Event CSV</a></p><img src="timeline.svg" alt="Overview">'
-        + room_scope_note + cleanup_table + coverage_table + acoustic_words + '<h2>Words registered by VM STT</h2><p>Final-transcript receipt times; excerpts can be bounded. Compare these with the room-audio word spans.</p><table><tr><th>Capture time</th><th>Registered text</th></tr>'+transcripts+'</table>' + ''.join(pages)
+        + room_scope_note + cleanup_table + coverage_table + independent_table + acoustic_words + '<h2>Words registered by VM STT</h2><p>Final-transcript receipt times; excerpts can be bounded. Compare these with the room-audio word spans.</p><table><tr><th>Capture time</th><th>Registered text</th></tr>'+transcripts+'</table>' + ''.join(pages)
         + '<details><summary>Search every registered event</summary><input id="event-search" placeholder="Filter event, source or delivery ID" style="width:90%;padding:.6rem">'
         '<table id="event-table"><thead><tr><th>Capture seconds</th><th>Source</th><th>Event</th><th>Clock ±ms</th><th>Metadata</th></tr></thead><tbody>'
         + event_table + '</tbody></table></details><script>document.getElementById("event-search").addEventListener("input", function(){'

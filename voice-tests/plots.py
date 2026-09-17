@@ -3,6 +3,7 @@ import json
 import math
 from pathlib import Path
 import wave
+from secondary_evidence import secondary_readings
 
 
 def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
@@ -14,8 +15,7 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
     origin = clock["first_sample_unix_ms"]
     duration = clock["duration_ms"] / 1000
     words = json.loads((directory / "transcript.json").read_text()).get("words") or []
-    secondary_path = directory / "secondary-transcript.json"
-    secondary = json.loads(secondary_path.read_text()).get("words", []) if secondary_path.exists() else []
+    _, secondary = secondary_readings(directory)
     with wave.open(str(directory / "room.wav")) as wav:
         rate = wav.getframerate()
         samples = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2").astype(float) / 32768
@@ -96,10 +96,11 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         for word in secondary:
             x, stop = word["start"] / 1000, word["end"] / 1000
             if x <= end and stop >= start:
-                axes[1].broken_barh([(x, max(.02, stop - x))], (3, .6), facecolors="seagreen", alpha=.6)
+                lane = word['analysis_lane']
+                axes[1].broken_barh([(x, max(.02, stop - x))], (lane, .6), facecolors="seagreen", alpha=.6)
                 if detailed:
-                    axes[1].text(x, 3.65, "DG " + word["text"], fontsize=7, rotation=30, clip_on=True)
-        axes[1].set_ylim(0, 4.7 if secondary else 4.2)
+                    axes[1].text(x, lane + .65, word['analysis_label'] + " " + word["text"], fontsize=7, rotation=30, clip_on=True)
+        axes[1].set_ylim(0, max(w['analysis_lane'] for w in secondary) + 1.7 if secondary else 4.2)
         axes[1].set_ylabel("ASR words\nblue: primary\ngreen: secondary")
         for row in host:
             if row["event"] != "playback_process_start":
