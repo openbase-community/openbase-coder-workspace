@@ -149,6 +149,11 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
             for timestamp, state in zip(x, y):
                 if start <= timestamp <= end:
                     axes[5].text(timestamp, state + .12, ['LIVE', 'MUTED', 'IDLE', 'UNKNOWN'][state], fontsize=8, clip_on=True)
+            for row, timestamp, state in zip(microphone, x, y):
+                if start <= timestamp <= end:
+                    error = row.get('clock_uncertainty_ms', 0) / 1000
+                    if error:
+                        axes[5].errorbar(timestamp, state, xerr=error, color='crimson', alpha=.4, capsize=3)
             axes[5].set_ylim(-.3, 3.8)
         else:
             axes[5].text(start + .3, .4, "MISSING — no phone microphone application records", color="crimson")
