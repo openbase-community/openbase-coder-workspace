@@ -12,6 +12,8 @@ import subprocess
 import shutil
 import time
 import uuid
+import sys
+from acoustic_session import acoustic_session
 
 from segment_fixture import synthesize_fixture
 from readiness import valid_permit
@@ -172,4 +174,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if "--help" in sys.argv or "-h" in sys.argv:
+        main()
+    else:
+        with acoustic_session(ROOT / ".local/field-tests/acoustic-session.lock"):
+            main()

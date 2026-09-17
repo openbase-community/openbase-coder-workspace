@@ -10,6 +10,20 @@ from clock_probe import ClockTransportError, sample_vm_clock
 
 
 class TimingEvidenceTests(unittest.TestCase):
+    def test_acoustic_lease_rejects_competing_work_and_releases_after_failure(self):
+        from acoustic_session import acoustic_session
+        with tempfile.TemporaryDirectory() as temp:
+            lease = Path(temp, "session.lock")
+            with self.assertRaises(ValueError):
+                with acoustic_session(lease):
+                    with self.assertRaises(RuntimeError):
+                        with acoustic_session(lease):
+                            self.fail("Competing fixture work entered")
+                    raise ValueError("Session failed")
+            with acoustic_session(lease):
+                pass
+
+
     def test_partial_provider_failure_preserves_duration_without_raw_secrets(self):
         from provider_failures import failure_record
         value = failure_record({"timestamp": "2026-09-17T07:40:28Z",
