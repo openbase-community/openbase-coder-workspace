@@ -29,6 +29,24 @@ def native_release_ready(rows, platform):
     lifecycle = [r for r in native if r.get('diagnostic_message', r['event']) in
         ('received voice lifecycle event', 'voice lifecycle received')
         and r.get('metadata', {}).get('disposition', 'accepted') == 'accepted']
+    unique_lifecycle = []
+    seen_packets = set()
+    for row in lifecycle:
+        packet = row.get('metadata', {}).get('packet_id')
+        if packet and packet in seen_packets:
+            continue
+        if packet:
+            seen_packets.add(packet)
+        metadata = row.get('metadata', {})
+        if metadata.get('event') == 'agent_audio_finished' and unique_lifecycle:
+            previous = unique_lifecycle[-1].get('metadata', {})
+            if (previous.get('event') == 'safe_to_unmute'
+                and metadata.get('delivery_id') == previous.get('delivery_id')
+                and metadata.get('created_at_unix_ms') is not None
+                and metadata.get('created_at_unix_ms') == previous.get('created_at_unix_ms')):
+                continue
+        unique_lifecycle.append(row)
+    lifecycle = unique_lifecycle
     mics = [r for r in native if r['event'] == 'applied mute state']
     if not lifecycle or not mics:
         return False

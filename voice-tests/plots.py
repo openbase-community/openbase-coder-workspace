@@ -26,7 +26,7 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
     emitted = [r for r in rows if r["source"] == "server" and r["event"] in (
         "voice_lifecycle_packet_published", "stt_final_transcript", "voice_delivery_cancelled", "livekit_llm_input_committed", "stt_provider_stall", "stt_provider_warning",
         "voice_request_received", "voice_delivery_backend_work_preserved_after_consumer_cancel",
-        "turn_start_response", "turn_wait_start", "voice_turn_result", "tts_stream_first_audio", "tts_stream_flush", "tts_stream_audio_gap",
+        "turn_start_response", "turn_wait_start", "voice_turn_result", "tts_stream_first_audio", "tts_stream_flush", "tts_stream_audio_gap", "tts_stream_iter_end", "voice_delivery_playout_release_deferred",
         "tts_provider_partial_failure", "tts_provider_inference_failure", "tts_provider_connection_failure",
         "tts_provider_retry", "stt_provider_retry", "stt_provider_connection_closed",
         "voice_session_unrecoverable_failure", "voice_worker_recovery_exit", "agent_session_start_complete")
@@ -156,6 +156,7 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         for axis in axes:
             axis.grid(axis="x", alpha=.25)
             axis.set_yticks([])
+        axes[5].set_yticks([0, 1, 2, 3], ['LIVE', 'MUTED', 'IDLE', 'UNKNOWN'])
         fig.suptitle(f"{directory.name} · {start:.0f}–{end:.0f} seconds · {assessment.get('status', 'evidence; not a pass assertion')}\n"
             f"Uncalibrated clocks: {', '.join(uncalibrated) or 'none'}. Excluded clock probes: {len(calibration.get('device_clock_sample_errors', []))}. Error bars show clock bounds. ASR ≈ ±400 ms. Process ≠ audible onset.", fontsize=12)
         fig.tight_layout()
