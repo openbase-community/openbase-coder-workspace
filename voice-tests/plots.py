@@ -35,7 +35,7 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         "tts_provider_partial_failure", "tts_provider_inference_failure", "tts_provider_connection_failure",
         "tts_provider_retry", "stt_provider_retry", "stt_provider_connection_closed",
         "voice_session_unrecoverable_failure", "voice_worker_recovery_exit", "agent_session_start_complete", "session_close", "session_error")
-        or r['source']=='server' and r['event'].startswith('observed super_agents_')]
+        or r['source']=='server' and r['event'].startswith(('observed super_agents_', 'observed livekit_room'))]
     received = [r for r in rows if r["source"] in ("ios", "android")
         and (r.get("diagnostic_message", r["event"]) in (
             "received voice lifecycle event", "voice lifecycle received", "ignored stale voice lifecycle event", "ignored duplicate voice lifecycle event",

@@ -53,7 +53,7 @@ def events(directory: Path) -> list[dict]:
     for record in list(read_jsonl(directory / "ios.jsonl")) + list(read_jsonl(directory / "ios-upload.jsonl")):
         entry = record.get("entry", record)
         message = entry.get("message", "")
-        if not any(word in message.lower() for word in ("lifecycle", "mute state", "auto-mute", "auto-unmute", "remote audio", "received app control command", "local microphone publish returned", "room connection state changed", "cli websocket")):
+        if not any(word in message.lower() for word in ("lifecycle", "mute state", "auto-mute", "auto-unmute", "remote audio", "received app control command", "local microphone publish returned", "room connection state changed", "cli websocket", "audio participant departed")):
             continue
         identity = json.dumps(entry, sort_keys=True)
         if identity in seen:
