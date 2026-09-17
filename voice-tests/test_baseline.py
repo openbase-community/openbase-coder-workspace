@@ -1,7 +1,7 @@
 import copy
 from datetime import datetime, timezone
 import unittest
-from baseline import validate_observed_provenance
+from baseline import validate_observed_provenance, validate_fixture_assets
 
 
 class BaselineTests(unittest.TestCase):
@@ -33,3 +33,10 @@ class BaselineTests(unittest.TestCase):
         provenance, observed = self.fixture()
         observed["observed_at"] = "2000-01-01T00:00:00+00:00"
         with self.assertRaises(ValueError): validate_observed_provenance(provenance, observed, "prepared")
+
+    def test_clone_assets_must_exist_and_match_the_sealed_digest(self):
+        expected = {"Desktop/orange/briefing.md": "reviewed"}
+        with self.assertRaises(ValueError): validate_fixture_assets(expected, {})
+        with self.assertRaises(ValueError):
+            validate_fixture_assets(expected, {"Desktop/orange/briefing.md": {"exists": True, "sha256": "changed"}})
+        validate_fixture_assets(expected, {"Desktop/orange/briefing.md": {"exists": True, "sha256": "reviewed"}})

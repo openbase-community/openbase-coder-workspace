@@ -16,6 +16,7 @@ def validate_observed_provenance(provenance: dict, observed: dict, source: str) 
     names = {"workspace": ".", "cli": "cli", "super-agents": "super-agents"}
     if "skills" in provenance["revisions"]:
         names["skills"] = "skills"
+    validate_fixture_assets(provenance.get("test_assets", {}), observed.get("vm_assets", {}))
     allowed = provenance.get("allowed_tracked_patches", {})
     for name, guest_name in names.items():
         record = observed["vm_source"][guest_name]
@@ -23,6 +24,13 @@ def validate_observed_provenance(provenance: dict, observed: dict, source: str) 
             raise ValueError(f"Reviewed {name} revision differs from the observed guest")
         if record["tracked_dirty"] and allowed.get(guest_name) != record["tracked_patch_sha256"]:
             raise ValueError(f"Unreviewed tracked guest patch in {name}")
+
+
+def validate_fixture_assets(expected, observed):
+    for path, digest in expected.items():
+        actual = observed.get(path, {})
+        if not actual.get("exists") or actual.get("sha256") != digest:
+            raise ValueError(f"Prepared fixture asset missing or changed: {path}")
 
 
 def inventory() -> dict:
