@@ -32,6 +32,21 @@ def read_jsonl(path: Path):
 
 def events(directory: Path) -> list[dict]:
     rows = list(read_jsonl(directory / "host-events.jsonl"))
+    alignment_path = directory / 'acoustic-alignment.json'
+    if alignment_path.exists():
+        alignment = json.loads(alignment_path.read_text())
+        origin = json.loads((directory/'capture-clock.json').read_text())['first_sample_unix_ms']
+        for stimulus in alignment['stimuli']:
+            if not stimulus.get('trusted'):
+                continue
+            for boundary in ('signal_start_s', 'signal_end_s'):
+                if boundary in stimulus:
+                    rows.append({'source':'host', 'unix_ms':origin+stimulus[boundary]*1000,
+                        'event':'estimated acoustic fixture '+boundary.removesuffix('_s'),
+                        'metadata':{'index':stimulus['index'],
+                            'normalized_correlation':stimulus['normalized_correlation'],
+                            'display_allowance_ms':alignment['display_allowance_ms'],
+                            'limitation':alignment['limitation']}})
     seen = set()
     for record in list(read_jsonl(directory / "ios.jsonl")) + list(read_jsonl(directory / "ios-upload.jsonl")):
         entry = record.get("entry", record)

@@ -10,6 +10,15 @@ from clock_probe import ClockTransportError, sample_vm_clock
 
 
 class TimingEvidenceTests(unittest.TestCase):
+    def test_untrusted_acoustic_match_is_not_rendered_as_evidence(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory=Path(temp)
+            (directory/'capture-clock.json').write_text(json.dumps({'first_sample_unix_ms':1000}))
+            (directory/'acoustic-alignment.json').write_text(json.dumps({
+                'display_allowance_ms':10,'limitation':'Not calibrated',
+                'stimuli':[{'index':0,'trusted':False,'signal_start_s':1}]}))
+            self.assertEqual(events(directory),[])
+
     def test_registered_transcript_preserves_spaces_and_quoted_words(self):
         with tempfile.TemporaryDirectory() as temp:
             text = "Speak the exact words dual garden component."

@@ -31,10 +31,12 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
             or r["event"].startswith("CLI websocket"))]
     playback = [r for r in rows if r["source"] in ("ios", "android") and "remote audio" in r["event"]]
     host = [r for r in rows if r["source"] == "host" and "playback_process" in r["event"]]
+    acoustic = [r for r in rows if r['source']=='host' and r['event'].startswith('estimated acoustic fixture')]
     host_markers = [r for r in rows if r['source'] == 'host' and r['event'] in (
         'readiness_gate_rejected', 'scenario_aborted', 'network_restored', 'network_restore',
         'vm_desktop_permission_allowed', 'call_teardown_acknowledged',
-        'competing_network_probe_start', 'competing_network_probe_end')]
+        'competing_network_probe_start', 'competing_network_probe_end',
+        'host_analysis_dependency_download_start', 'host_analysis_dependency_download_end')]
     assessment_path = directory / "assessment.json"
     assessment = json.loads(assessment_path.read_text()) if assessment_path.exists() else {}
     invalid = assessment.get("invalid_stimuli", [])
@@ -74,7 +76,19 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
             if start <= x <= end:
                 label = f"Host stimulus {row.get('index')}" + (" — HARNESS ERROR" if row.get("index") in invalid else "")
                 axes[2].text(x, .3, label, fontsize=9, color=color, clip_on=True)
-        axes[2].set_ylabel("Host stimulus\nprocess interval")
+        for row in acoustic:
+            if row['event'] != 'estimated acoustic fixture signal_start':
+                continue
+            x=row['capture_relative_s']
+            stops=[r['capture_relative_s'] for r in acoustic
+                if r['event']=='estimated acoustic fixture signal_end'
+                and r['metadata']['index']==row['metadata']['index']]
+            if not stops:
+                continue
+            axes[2].broken_barh([(x,min(stops)-x)],(.03,.13),facecolors='teal')
+            if detailed and start<=x<=end:
+                axes[2].text(x,.82,'Room waveform match (estimate)',fontsize=8,color='teal',clip_on=True)
+        axes[2].set_ylabel("Host process /\nwaveform estimate")
         for row in host_markers:
             x = row['capture_relative_s']
             if start <= x <= end:
