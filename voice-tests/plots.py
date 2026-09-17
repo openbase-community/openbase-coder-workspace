@@ -26,7 +26,7 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
     emitted = [r for r in rows if r["source"] == "server" and r["event"] in (
         "voice_lifecycle_packet_published", "stt_final_transcript", "voice_delivery_cancelled", "livekit_llm_input_committed", "stt_provider_stall", "stt_provider_warning",
         "voice_request_received", "voice_delivery_backend_work_preserved_after_consumer_cancel",
-        "turn_start_response", "turn_wait_start", "voice_turn_result", "tts_stream_first_audio", "tts_stream_flush", "tts_stream_audio_gap", "tts_stream_iter_end", "voice_delivery_playout_release_deferred",
+        "turn_start_response", "turn_wait_start", "voice_turn_result", "tts_stream_first_audio", "tts_stream_flush", "tts_stream_audio_gap", "tts_stream_iter_end", "voice_delivery_playout_release_deferred", "super_agent_steer_interrupt_ack", "super_agent_steer_correction_sent",
         "tts_provider_partial_failure", "tts_provider_inference_failure", "tts_provider_connection_failure",
         "tts_provider_retry", "stt_provider_retry", "stt_provider_connection_closed",
         "voice_session_unrecoverable_failure", "voice_worker_recovery_exit", "agent_session_start_complete")
@@ -105,8 +105,9 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
                 (axes[4], received, "Phone receipt /\nlifecycle handling", "seagreen"),
                 (axes[6], playback, "Phone playback\ndiagnostics", "purple")]:
             visible = [r for r in items if start <= r["capture_relative_s"] <= end]
+            duplicate_labels = set()
             for index, row in enumerate(visible):
-                x, lane = row["capture_relative_s"], index % 3
+                x, lane = row["capture_relative_s"], index % 4
                 label = row.get("metadata", {}).get("event", row["event"])
                 if row.get("diagnostic_message") == "ignored stale voice lifecycle event":
                     label = "IGNORED stale " + label
@@ -117,6 +118,13 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
                 if error:
                     axis.errorbar(x, lane, xerr=error, color=color, alpha=.35)
                 noisy = any(word in label for word in ('RTP stats', 'mute_keepalive', 'silence gap', 'playback sample', 'before playback'))
+                if label.startswith('CLI websocket heartbeat') and not any(word in label for word in ('timeout', 'timed out', 'failed', 'error')):
+                    noisy = True
+                if label.startswith('IGNORED duplicate '):
+                    metadata = row.get('metadata', {})
+                    key = (metadata.get('packet_id'), metadata.get('delivery_id'), metadata.get('created_at_unix_ms'), label)
+                    noisy = noisy or key in duplicate_labels
+                    duplicate_labels.add(key)
                 if "deferred auto-unmute" in label:
                     same = [item for item in visible if item["event"] == row["event"]
                         and item.get("metadata", {}).get("delivery_id") == row.get("metadata", {}).get("delivery_id")]
@@ -128,8 +136,8 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
                     delivery = row.get('metadata', {}).get('delivery_id', '')
                     if delivery:
                         short += ' [' + delivery[-5:] + ']'
-                    axis.text(x, lane + .1, short, fontsize=8, rotation=25, clip_on=True)
-            axis.set_ylim(-.3, 4)
+                    axis.text(x, lane + .1, short, fontsize=8, rotation=15, clip_on=True)
+            axis.set_ylim(-.3, 6)
             axis.set_ylabel(title)
         if microphone:
             x = [r["capture_relative_s"] for r in microphone]
@@ -181,8 +189,18 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
     transcripts = ''.join('<tr><td>%.3f s</td><td>%s</td></tr>' % (r['capture_relative_s'],
         html.escape(r.get('metadata',{}).get('text_excerpt',''))) for r in rows
         if r['event']=='stt_final_transcript' and 0 <= r['capture_relative_s'] <= duration)
+    event_table = ''.join('<tr><td>%.3f</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>' % (
+        r['capture_relative_s'], html.escape(r['source']), html.escape(r['event']),
+        html.escape(str(r.get('clock_uncertainty_ms', 'uncalibrated'))),
+        html.escape(json.dumps(r.get('metadata', {}), sort_keys=True))) for r in rows
+        if 0 <= r['capture_relative_s'] <= duration)
     (directory / "timeline.html").write_text('<!doctype html><meta charset="utf-8"><title>Voice timing evidence</title>'
         '<style>body{font:16px system-ui;margin:2rem;background:#f5f5f5}img{width:100%;background:white}h2{margin-top:3rem}</style>'
         f'<h1>{html.escape(directory.name)}</h1><p>{html.escape(assessment.get("finding", "Recorded evidence; evaluate native clocks and audible boundaries."))}</p>'
-        '<p>Overview, followed by readable 20-second windows. Native timestamps and metadata are in timeline-events.json/CSV.</p><img src="timeline.svg" alt="Overview">'
-        '<h2>Words registered by VM STT</h2><p>Final-transcript receipt times; excerpts can be bounded. Compare these with the room-audio word spans.</p><table><tr><th>Capture time</th><th>Registered text</th></tr>'+transcripts+'</table>' + ''.join(pages))
+        '<p>Overview, followed by 20-second windows. All event markers remain visible; routine heartbeat and repeated duplicate labels are abbreviated for readability. '
+        '<a href="timeline-events.json">Event JSON</a> · <a href="timeline-events.csv">Event CSV</a></p><img src="timeline.svg" alt="Overview">'
+        '<h2>Words registered by VM STT</h2><p>Final-transcript receipt times; excerpts can be bounded. Compare these with the room-audio word spans.</p><table><tr><th>Capture time</th><th>Registered text</th></tr>'+transcripts+'</table>' + ''.join(pages)
+        + '<details><summary>Search every registered event</summary><input id="event-search" placeholder="Filter event, source or delivery ID" style="width:90%;padding:.6rem">'
+        '<table id="event-table"><thead><tr><th>Capture seconds</th><th>Source</th><th>Event</th><th>Clock ±ms</th><th>Metadata</th></tr></thead><tbody>'
+        + event_table + '</tbody></table></details><script>document.getElementById("event-search").addEventListener("input", function(){'
+        'const q=this.value.toLowerCase();for(const r of document.querySelectorAll("#event-table tbody tr")){r.hidden=!r.textContent.toLowerCase().includes(q)}});</script>')
