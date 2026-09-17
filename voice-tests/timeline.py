@@ -32,6 +32,7 @@ def read_jsonl(path: Path):
 
 def events(directory: Path) -> list[dict]:
     rows = list(read_jsonl(directory / "host-events.jsonl"))
+    rows.extend(read_jsonl(directory / 'backend-tools.jsonl'))
     alignment_path = directory / 'acoustic-alignment.json'
     if alignment_path.exists():
         alignment = json.loads(alignment_path.read_text())

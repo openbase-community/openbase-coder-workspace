@@ -10,6 +10,13 @@ from clock_probe import ClockTransportError, sample_vm_clock
 
 
 class TimingEvidenceTests(unittest.TestCase):
+    def test_backend_tool_observation_retains_its_actual_clock_and_thread(self):
+        with tempfile.TemporaryDirectory() as temp:
+            row={'source':'server','unix_ms':1250,'event':'observed super_agents_start_turn',
+                'metadata':{'thread':'demo','timing_basis':'Local adapter observation'}}
+            Path(temp,'backend-tools.jsonl').write_text(json.dumps(row)+'\n')
+            self.assertEqual(events(Path(temp)),[row])
+
     def test_untrusted_acoustic_match_is_not_rendered_as_evidence(self):
         with tempfile.TemporaryDirectory() as temp:
             directory=Path(temp)

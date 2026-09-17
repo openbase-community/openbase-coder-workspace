@@ -24,7 +24,10 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         and str(r.get("metadata", {}).get("microphone_enabled")).lower() in ("true", "false"))
         or r["event"] in ("LiveKit room connection state changed", "call state changed")]
     emitted = [r for r in rows if r["source"] == "server" and r["event"] in (
-        "voice_lifecycle_packet_published", "stt_final_transcript", "voice_delivery_cancelled", "livekit_llm_input_committed", "stt_provider_stall", "stt_provider_warning")]
+        "voice_lifecycle_packet_published", "stt_final_transcript", "voice_delivery_cancelled", "livekit_llm_input_committed", "stt_provider_stall", "stt_provider_warning",
+        "voice_request_received", "voice_delivery_backend_work_preserved_after_consumer_cancel",
+        "turn_start_response", "turn_wait_start", "voice_turn_result", "tts_stream_first_audio", "tts_stream_flush")
+        or r['source']=='server' and r['event'].startswith('observed super_agents_')]
     received = [r for r in rows if r["source"] in ("ios", "android")
         and (r.get("diagnostic_message", r["event"]) in (
             "received voice lifecycle event", "voice lifecycle received", "ignored stale voice lifecycle event")

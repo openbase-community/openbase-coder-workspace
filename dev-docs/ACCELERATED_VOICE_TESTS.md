@@ -94,6 +94,8 @@ Preinstall analysis dependencies before joining the acoustic call. After a compl
 
 For each scenario, report user speech end → turn acceptance → mic mute, server audio start/finish → device receipt → audible first/last word, mic unmute relative to audible end, introduction ordering, steer acceptance/target/result, duplicate instructions, gaps, and missing/clipped words. Device-side microphone application and playback-level events corroborate the room recording. If any source is missing, coarse, or uncalibrated, state the resulting limit instead of passing the timing requirement.
 
+Retain normalized backend tool observations in a capture's optional `backend-tools.jsonl` using `source: "server"`, the actual VM `unix_ms`, an event such as `observed super_agents_start_turn`, and metadata with its target thread and timing basis. The renderer applies the VM clock correction and places these beside request/lifecycle events. An adapter's timestamped tool invocation is not a remote acceptance acknowledgement; label that distinction and corroborate actual turn creation/status separately.
+
 ## Known setup roadblocks
 
 - A cached `OpenbaseFieldTest.app` may be unsigned. Rebuild for the physical-device destination with `-allowProvisioningUpdates`, then install through Appium. A cached APK can contain older behavior even when its real netmesh library is present; rebuild before claiming current-source coverage.
