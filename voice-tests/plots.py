@@ -27,7 +27,8 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         "voice_lifecycle_packet_published", "stt_final_transcript", "voice_delivery_cancelled", "livekit_llm_input_committed", "stt_provider_stall", "stt_provider_warning")]
     received = [r for r in rows if r["source"] in ("ios", "android")
         and (r.get("diagnostic_message", r["event"]) in (
-            "received voice lifecycle event", "voice lifecycle received", "ignored stale voice lifecycle event"))]
+            "received voice lifecycle event", "voice lifecycle received", "ignored stale voice lifecycle event")
+            or r["event"].startswith("CLI websocket"))]
     playback = [r for r in rows if r["source"] in ("ios", "android") and "remote audio" in r["event"]]
     host = [r for r in rows if r["source"] == "host" and "playback_process" in r["event"]]
     host_markers = [r for r in rows if r['source'] == 'host' and r['event'] in (
@@ -93,6 +94,10 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
                 if error:
                     axis.errorbar(x, lane, xerr=error, color=color, alpha=.35)
                 noisy = any(word in label for word in ('RTP stats', 'mute_keepalive', 'silence gap', 'playback sample', 'before playback'))
+                if "deferred auto-unmute" in label:
+                    same = [item for item in visible if item["event"] == row["event"]
+                        and item.get("metadata", {}).get("delivery_id") == row.get("metadata", {}).get("delivery_id")]
+                    noisy = row is not same[0] and row is not same[-1]
                 if detailed and not noisy:
                     short = label.replace('decoded remote audio ', 'PCM ').replace('remote audio ', 'audio ')
                     if row['event'] == 'stt_final_transcript':

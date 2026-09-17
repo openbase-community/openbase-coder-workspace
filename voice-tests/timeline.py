@@ -36,13 +36,13 @@ def events(directory: Path) -> list[dict]:
     for record in list(read_jsonl(directory / "ios.jsonl")) + list(read_jsonl(directory / "ios-upload.jsonl")):
         entry = record.get("entry", record)
         message = entry.get("message", "")
-        if not any(word in message.lower() for word in ("lifecycle", "mute state", "auto-mute", "auto-unmute", "remote audio", "received app control command", "local microphone publish returned", "room connection state changed")):
+        if not any(word in message.lower() for word in ("lifecycle", "mute state", "auto-mute", "auto-unmute", "remote audio", "received app control command", "local microphone publish returned", "room connection state changed", "cli websocket")):
             continue
         identity = json.dumps(entry, sort_keys=True)
         if identity in seen:
             continue
         seen.add(identity)
-        metadata = entry.get("metadata", {})
+        metadata = {**entry.get("metadata", {}), "component": entry.get("component", "")}
         if message == "local microphone publish returned":
             metadata = {**metadata, "microphone_enabled": metadata.get("enabled")}
             message = "applied mute state"

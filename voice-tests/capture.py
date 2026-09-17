@@ -41,6 +41,7 @@ def main() -> None:
     parser.add_argument("output", type=Path, help="Ignored report artifact directory")
     parser.add_argument("--credentials-file", type=Path)
     parser.add_argument("--reuse-stimuli", type=Path, help="Replay exact WAV fixtures from a prior capture with identical stimulus texts")
+    parser.add_argument("--prepare-only", action="store_true", help="Synthesize immutable reusable fixtures without recording or playing them")
     parser.add_argument("--vm", help="Bracket the recording with causal guest clock probes")
     args = parser.parse_args()
     scenario = json.loads(args.scenario.read_text())
@@ -62,11 +63,15 @@ def main() -> None:
     args.output.mkdir(parents=True, exist_ok=False)
     (args.output / "scenario.json").write_text(json.dumps(scenario, indent=2) + "\n")
     stimulus_durations = []
-    segment_evidence = []
+    reuse_provenance = json.loads((args.reuse_stimuli / "stimulus-provenance.json").read_text()) if args.reuse_stimuli else {}
+    segment_evidence = reuse_provenance.get("segmented_fixtures", [])
     for index, stimulus in enumerate(stimuli):
         target = args.output / f"stimulus-{index}.wav"
         if args.reuse_stimuli:
             shutil.copyfile(args.reuse_stimuli / target.name, target)
+            expected = next((item["sha256"] for item in reuse_provenance.get("fixtures", []) if item["index"] == index), None)
+            if expected and hashlib.sha256(target.read_bytes()).hexdigest() != expected:
+                raise ValueError("Reused stimulus WAV differs from its retained digest")
         else:
             def synthesize(text, path):
                 probe.synthesize_cartesia(text=text, api_key=cartesia,
@@ -84,6 +89,9 @@ def main() -> None:
         "reused": bool(args.reuse_stimuli), "segmented_fixtures": segment_evidence, "fixtures": [{"index": i, "duration_s": d,
             "sha256": hashlib.sha256((args.output / f"stimulus-{i}.wav").read_bytes()).hexdigest()}
             for i, d in enumerate(stimulus_durations)]}, indent=2) + "\n")
+    if args.prepare_only:
+        print("Prepared reusable fixtures; no recording or acoustic playback started")
+        return
     native = args.output / "room.native.wav"
     clock = args.output / "capture-clock.json"
     events = args.output / "host-events.jsonl"
