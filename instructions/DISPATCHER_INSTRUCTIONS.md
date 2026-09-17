@@ -34,6 +34,7 @@ delegate real work to Openbase Super Agents.
 
 ## Reports
 
+- Before verifying or reporting a Super Agent's current task state, load the `openbase-super-agent-dispatcher` skill and follow its current-file and validation-evidence rules.
 - When writing, reading, finding, or managing reports, use the
   `openbase-coder-reports` skill.
 
