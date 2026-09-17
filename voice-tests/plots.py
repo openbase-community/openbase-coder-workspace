@@ -20,7 +20,8 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         samples = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2").astype(float) / 32768
     microphone = [r for r in rows if r["event"] == "applied mute state"
         and str(r.get("metadata", {}).get("microphone_enabled")).lower() in ("true", "false")]
-    emitted = [r for r in rows if r["source"] == "server" and r["event"] == "voice_lifecycle_packet_published"]
+    emitted = [r for r in rows if r["source"] == "server" and r["event"] in (
+        "voice_lifecycle_packet_published", "stt_final_transcript", "voice_delivery_cancelled", "livekit_llm_input_committed")]
     received = [r for r in rows if r["source"] in ("ios", "android") and r.get("metadata", {}).get("created_at_unix_ms")]
     playback = [r for r in rows if r["source"] in ("ios", "android") and "remote audio" in r["event"]]
     host = [r for r in rows if r["source"] == "host" and "playback_process" in r["event"]]
@@ -58,7 +59,7 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
                 label = f"Host stimulus {row.get('index')}" + (" — HARNESS ERROR" if row.get("index") in invalid else "")
                 axes[2].text(x, .3, label, fontsize=9, color=color, clip_on=True)
         axes[2].set_ylabel("Host stimulus\nprocess interval")
-        for axis, items, title, color in [(axes[3], emitted, "VM emitted\nlifecycle", "darkorange"),
+        for axis, items, title, color in [(axes[3], emitted, "VM turn /\nlifecycle events", "darkorange"),
                 (axes[4], received, "Phone received\nlifecycle", "seagreen"),
                 (axes[6], playback, "Phone playback\ndiagnostics", "purple")]:
             visible = [r for r in items if start <= r["capture_relative_s"] <= end]
@@ -69,7 +70,7 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
                 error = row.get("clock_uncertainty_ms", 0) / 1000
                 if error:
                     axis.errorbar(x, lane, xerr=error, color=color, alpha=.35)
-                if detailed:
+                if detailed and "RTP stats" not in label:
                     axis.text(x, lane + .1, label, fontsize=8, rotation=25, clip_on=True)
             axis.set_ylim(-.3, 4)
             axis.set_ylabel(title)

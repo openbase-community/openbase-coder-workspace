@@ -4,9 +4,28 @@ import tempfile
 import unittest
 
 from timeline import device_clock_bounds, events, phone_clock_bounds, unix_ms
+from clock_probe import calibration_from_samples
 
 
 class TimingEvidenceTests(unittest.TestCase):
+    def test_clock_envelope_keeps_drift_between_probe_batches(self):
+        samples = [
+            {"lower_ms": 4, "upper_ms": 6, "host_before_ms": 1000, "host_after_ms": 1002},
+            {"lower_ms": 4.5, "upper_ms": 5.5, "host_before_ms": 1003, "host_after_ms": 1004},
+            {"lower_ms": -4, "upper_ms": -2, "host_before_ms": 8000, "host_after_ms": 8002},
+        ]
+        bound = calibration_from_samples(samples)["server"]
+        self.assertEqual(bound["offset_ms"], .75)
+        self.assertEqual(bound["uncertainty_ms"], 4.75)
+
+    def test_clock_jump_inside_probe_batch_is_rejected(self):
+        samples = [
+            {"lower_ms": 4, "upper_ms": 6, "host_before_ms": 1000, "host_after_ms": 1002},
+            {"lower_ms": 9, "upper_ms": 11, "host_before_ms": 1003, "host_after_ms": 1004},
+        ]
+        with self.assertRaises(ValueError):
+            calibration_from_samples(samples)
+
     def test_direct_clock_brackets_do_not_assume_symmetric_delay(self):
         samples = [{"source": "android", "device_unix_ms": 1120,
             "host_before_unix_ms": 1000, "host_after_unix_ms": 1050}]

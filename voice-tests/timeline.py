@@ -8,6 +8,7 @@ from datetime import datetime
 import json
 from pathlib import Path
 import re
+from clock_probe import calibration_from_samples
 
 
 def unix_ms(timestamp: str) -> float:
@@ -31,16 +32,19 @@ def read_jsonl(path: Path):
 def events(directory: Path) -> list[dict]:
     rows = list(read_jsonl(directory / "host-events.jsonl"))
     seen = set()
-    for record in read_jsonl(directory / "ios.jsonl"):
+    for record in list(read_jsonl(directory / "ios.jsonl")) + list(read_jsonl(directory / "ios-upload.jsonl")):
         entry = record.get("entry", record)
         message = entry.get("message", "")
-        if not any(word in message.lower() for word in ("lifecycle", "mute state", "auto-mute", "auto-unmute", "remote audio", "received app control command")):
+        if not any(word in message.lower() for word in ("lifecycle", "mute state", "auto-mute", "auto-unmute", "remote audio", "received app control command", "local microphone publish returned")):
             continue
         identity = json.dumps(entry, sort_keys=True)
         if identity in seen:
             continue
         seen.add(identity)
         metadata = entry.get("metadata", {})
+        if message == "local microphone publish returned":
+            metadata = {**metadata, "microphone_enabled": metadata.get("enabled")}
+            message = "applied mute state"
         stamp = entry.get("timestamp")
         if not stamp:
             continue
@@ -59,7 +63,7 @@ def events(directory: Path) -> list[dict]:
     return sorted(rows, key=lambda row: row["unix_ms"])
 
 
-def phone_clock_bounds(rows: list[dict]) -> dict | None:
+def phone_clock_bounds(rows: list[dict], *, window: tuple[float, float] | None = None) -> dict | None:
     """Bound device minus server offset using causal send/receipt/ack ordering."""
     receipts = {r.get("metadata", {}).get("command_id"): r for r in rows
         if r["source"] == "ios" and r["event"] == "received app control command"}
@@ -68,6 +72,8 @@ def phone_clock_bounds(rows: list[dict]) -> dict | None:
         meta = row.get("metadata", {})
         receipt = receipts.get(meta.get("command_id"))
         if row["event"] != "ios_control_round_trip" or not receipt or meta.get("delivered") != "True":
+            continue
+        if window and not window[0] <= float(meta["server_sent_unix_ms"]) <= window[1]:
             continue
         lower = receipt["unix_ms"] - float(meta["server_ack_unix_ms"])
         upper = receipt["unix_ms"] + receipt.get("timestamp_resolution_ms", 1) - float(meta["server_sent_unix_ms"])
@@ -107,12 +113,21 @@ def main() -> None:
     duration = clock["duration_ms"] / 1000
     rows = events(directory)
     calibration = json.loads((directory / "clock-calibration.json").read_text()) if (directory / "clock-calibration.json").exists() else {}
-    phone_bounds = phone_clock_bounds(rows)
+    if "samples" in calibration:
+        nearby = [s for s in calibration["samples"]
+            if origin - 120_000 <= s["host_before_ms"] <= origin + duration * 1000 + 120_000]
+        calibration.pop("server", None)
+        if nearby:
+            calibration["server"] = calibration_from_samples(nearby)["server"]
+    # Historical log uploads can span hours of ordinary device clock drift.
+    # Calibrate from commands near this capture, not unrelated old calls.
+    phone_bounds = phone_clock_bounds(rows, window=(origin - 120_000, origin + duration * 1000 + 120_000))
     if phone_bounds:
         server = calibration.get("server")
         if server:
             calibration["ios"] = {"offset_ms": server["offset_ms"] + phone_bounds["offset_ms"],
-                "uncertainty_ms": server["uncertainty_ms"] + phone_bounds["uncertainty_ms"]}
+                "uncertainty_ms": server["uncertainty_ms"] + phone_bounds["uncertainty_ms"],
+                "method": "causal server/phone control brackets plus nearby SSH offset envelope"}
     samples_path = directory / "device-clock-samples.json"
     if samples_path.exists():
         direct = device_clock_bounds(json.loads(samples_path.read_text()))
@@ -124,6 +139,7 @@ def main() -> None:
                 if lower > upper:
                     raise ValueError("Direct and server-mediated device clock bounds conflict")
                 bound.update(offset_ms=(lower + upper) / 2, uncertainty_ms=(upper - lower) / 2)
+                bound["method"] += "; intersected with server-mediated control brackets"
             calibration[source] = bound
     for row in rows:
         correction = calibration.get(row["source"])
@@ -131,7 +147,16 @@ def main() -> None:
             row["native_unix_ms"] = row["unix_ms"]
             row["unix_ms"] -= correction["offset_ms"]
             row["clock_uncertainty_ms"] = correction["uncertainty_ms"]
-    rows = [r for r in rows if -2 <= (r["unix_ms"] - origin) / 1000 <= duration + 2]
+    prior_microphones = []
+    for source in ("ios", "android"):
+        filename = directory / (source + ".jsonl")
+        raw = list(read_jsonl(filename))
+        # Only a direct durable journal can establish continuous pre-capture history.
+        direct = bool(raw) and all("entry" not in r for r in raw)
+        before = [r for r in rows if r["source"] == source and r["event"] == "applied mute state" and r["unix_ms"] < origin]
+        if direct and before:
+            prior_microphones.append(before[-1])
+    rows = prior_microphones + [r for r in rows if 0 <= (r["unix_ms"] - origin) / 1000 <= duration + 2]
     (directory / "clock-bounds.json").write_text(json.dumps({"host_mapping": clock["wall_mapping"], "calibration": calibration, "phone_minus_server": phone_bounds}, indent=2) + "\n")
     for row in rows:
         row["capture_relative_s"] = (row["unix_ms"] - origin) / 1000

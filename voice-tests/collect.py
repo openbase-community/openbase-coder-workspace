@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import subprocess
 import time
+from clock_probe import sample_vm_clock, calibration_from_samples
 
 ROOT = Path(__file__).resolve().parents[1]
 GUEST = ROOT / "install-tests/electron-macos/guest-automate.sh"
@@ -23,30 +24,30 @@ def main():
     def ssh(command):
         return subprocess.check_output([str(GUEST), "ssh", args.vm, command], text=True, stderr=subprocess.PIPE)
 
-    samples = []
-    for _ in range(5):
-        before = time.time_ns() / 1e6
-        remote = float(ssh("~/Developer/openbase-coder-workspace/.venv/bin/python -c 'import time; print(time.time_ns()/1e6)'"))
-        after = time.time_ns() / 1e6
-        samples.append({"lower_ms": remote - after, "upper_ms": remote - before,
-            "host_before_ms": before, "host_after_ms": after, "server_ms": remote})
-    lower, upper = max(s["lower_ms"] for s in samples), min(s["upper_ms"] for s in samples)
-    if lower > upper:
-        raise ValueError("VM clock changed during calibration")
-    calibration = {"server": {"offset_ms": (lower + upper) / 2, "uncertainty_ms": (upper - lower) / 2},
-        "samples": samples, "measured_at": datetime.now(timezone.utc).isoformat()}
+    samples = sample_vm_clock(GUEST, args.vm)
+    previous_calibration = args.directory / "clock-calibration.json"
+    if previous_calibration.exists():
+        samples = json.loads(previous_calibration.read_text()).get("samples", []) + samples
+    calibration = calibration_from_samples(samples)
+    calibration["measured_at"] = datetime.now(timezone.utc).isoformat()
     (args.directory / "clock-calibration.json").write_text(json.dumps(calibration, indent=2) + "\n")
     if args.ios:
         def size():
             return int(ssh("stat -f %z ~/.openbase/logs/ios-app.log 2>/dev/null || echo 0").strip())
-        previous = size()
-        ssh("~/.local/bin/openbase-coder user ios upload-logs")
-        deadline = time.monotonic() + 15
-        while size() <= previous:
-            if time.monotonic() >= deadline:
-                raise TimeoutError("iPhone acknowledged the command but no diagnostics upload completed")
-            time.sleep(.5)
-        (args.directory / "ios.jsonl").write_text(ssh("tail -c 1500000 ~/.openbase/logs/ios-app.log"))
+        try:
+            previous = size()
+            ssh("~/.local/bin/openbase-coder user ios upload-logs")
+            deadline = time.monotonic() + 15
+            while size() <= previous:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("iPhone acknowledged the command but no diagnostics upload completed")
+                time.sleep(.5)
+            # An upload must never overwrite the more complete native journal.
+            target = "ios-upload.jsonl" if (args.directory / "ios.jsonl").exists() else "ios.jsonl"
+            (args.directory / target).write_text(ssh("tail -c 1500000 ~/.openbase/logs/ios-app.log"))
+        except (subprocess.CalledProcessError, TimeoutError) as error:
+            (args.directory / "collection-errors.json").write_text(json.dumps({"ios_upload": type(error).__name__,
+                "finding": "Upload unavailable; collecting VM records anyway. Obtain the native journal through Appium."}, indent=2) + "\n")
     # Only needed timing records enter the report. Never collect raw ASGI access URLs.
     livekit = ssh("tail -c 2000000 ~/.openbase/logs/livekit-agent.log")
     lines = []
