@@ -1,0 +1,12 @@
+{
+  "seconds": 120,
+  "response_tail_s": 60,
+  "stimuli": [{
+    "at_s": 3,
+    "text": "Tell me a short story about a turtle. Actually, make it about a balloon instead. End the answer with copper meadow complete, and read the whole answer aloud.",
+    "segments": [
+      {"text": "Tell me a short story about a turtle.", "gap_after_s": 0.9},
+      {"text": "Actually, make it about a balloon instead. End the answer with copper meadow complete, and read the whole answer aloud."}
+    ]
+  }]
+}

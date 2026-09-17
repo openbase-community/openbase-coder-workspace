@@ -1,6 +1,6 @@
-# Cedar: React tic-tac-toe
+# Cedar: React chess
 
-Build a working React tic-tac-toe app in an app subfolder. Include turn indication, win and draw detection, and a reset control. Use Mossy River as the visible heading. Keep all work inside this task folder.
+Build a working React chess app in an app subfolder. Include turn indication, legal move highlighting, check and checkmate detection, castling, promotion, an undo control and a reset control. Verify ordinary legal moves, blocked moves, check and promotion behavior with meaningful automated checks and retain their actual output. Use Mossy River as the visible heading. Keep all work inside this task folder.
 
 After the latest source change, run the actual production build. Save its command, complete output and exit code in build.log in this task folder. Save a concise file-backed result in result.md here, including the actual app location, current heading and build result. A completed coding turn does not prove a successful build.
 
