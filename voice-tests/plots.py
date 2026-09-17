@@ -4,6 +4,7 @@ import math
 from pathlib import Path
 import wave
 from secondary_evidence import secondary_readings
+from plot_annotations import loss_intervals
 
 
 def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
@@ -42,6 +43,10 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
             "scheduled lifecycle auto-unmute", "auto-unmute task did not apply",
             "abandoned announcement after audio participant departed")
             or r["event"].startswith("CLI websocket"))]
+    received.extend(r for r in rows if r['source'] in ('ios','android') and (
+        r['event'].startswith(('LiveKit room reconnect','LiveKit remote participant'))
+        or r['event'] in ('LiveKit transport readiness changed','playing mute feedback',
+                         'playing low-network warning sound','mute feedback requested','low-network warning requested')))
     emitted = [r for r in emitted if r.get('case_room_scope') != 'unrelated_room']
     playback = [r for r in rows if r["source"] in ("ios", "android") and "remote audio" in r["event"]]
     input_capture = [r for r in rows if r['source'] in ('ios', 'android') and r['event'] == 'local audio capture callback']
@@ -56,6 +61,8 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         'scheduled_network_restore', 'competing_host_fixture_preparation', 'call_end_gesture_acknowledged',
         'announcement_command_start', 'announcement_command_end', 'operator_stimulus_withheld',
         'speaker_route_verified')]
+    host_markers.extend(r for r in rows if r['source']=='host' and r['event'].startswith('network_loss_transition_'))
+    emitted.extend(r for r in rows if r['source']=='server' and r['event'].startswith('network_loss_transition_'))
     assessment_path = directory / "assessment.json"
     assessment = json.loads(assessment_path.read_text()) if assessment_path.exists() else {}
     invalid = assessment.get("invalid_stimuli", [])
@@ -85,6 +92,10 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
             level_axis.set_yticks([-80, -40, 0])
             level_axis.set_ylabel('20 ms RMS\ndBFS', fontsize=8)
         axes[0].set_ylabel("Recorded\nroom sound")
+        for fault_start, fault_end, label in loss_intervals(rows,duration):
+            if fault_start <= end and fault_end >= start:
+                axes[0].axvspan(max(start,fault_start),min(end,fault_end),color='orange',alpha=.15)
+                axes[0].text(max(start,fault_start)+.1,-.8,label,fontsize=8,clip_on=True)
         for index, word in enumerate(words):
             x, stop = word["start"] / 1000, word["end"] / 1000
             if x > end or stop < start:
@@ -209,7 +220,14 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
             axes[5].set_ylim(-.3, 3.8)
         else:
             axes[5].text(start + .3, .4, "MISSING — no phone microphone application records", color="crimson")
-        axes[5].set_ylabel("Phone mic\nactually applied")
+        snapshots=[r for r in output_path if start <= r['capture_relative_s'] <= end
+                   and str(r.get('metadata',{}).get('microphone_enabled')).lower() in ('true','false')]
+        if snapshots:
+            axes[5].scatter([r['capture_relative_s'] for r in snapshots],
+                [0 if str(r['metadata']['microphone_enabled']).lower()=='true' else 1 for r in snapshots],
+                marker='D',s=8,color='black',label='SDK enabled-state snapshot')
+            axes[5].legend(loc='upper right',fontsize=7)
+        axes[5].set_ylabel("Mic SDK\nreturn / snapshot")
         visible_input = [r for r in input_capture if start <= r['capture_relative_s'] <= end]
         numeric_input = [r for r in visible_input if r.get('metadata', {}).get('peak') not in (None, 'unknown')]
         if numeric_input:
