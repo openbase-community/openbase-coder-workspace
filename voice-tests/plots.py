@@ -22,14 +22,15 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         and str(r.get("metadata", {}).get("microphone_enabled")).lower() in ("true", "false"))
         or r["event"] in ("LiveKit room connection state changed", "call state changed")]
     emitted = [r for r in rows if r["source"] == "server" and r["event"] in (
-        "voice_lifecycle_packet_published", "stt_final_transcript", "voice_delivery_cancelled", "livekit_llm_input_committed", "stt_provider_stall")]
+        "voice_lifecycle_packet_published", "stt_final_transcript", "voice_delivery_cancelled", "livekit_llm_input_committed", "stt_provider_stall", "stt_provider_warning")]
     received = [r for r in rows if r["source"] in ("ios", "android")
         and (r.get("diagnostic_message", r["event"]) in (
             "received voice lifecycle event", "voice lifecycle received", "ignored stale voice lifecycle event"))]
     playback = [r for r in rows if r["source"] in ("ios", "android") and "remote audio" in r["event"]]
     host = [r for r in rows if r["source"] == "host" and "playback_process" in r["event"]]
     host_markers = [r for r in rows if r['source'] == 'host' and r['event'] in (
-        'readiness_gate_rejected', 'scenario_aborted', 'network_restored', 'network_restore')]
+        'readiness_gate_rejected', 'scenario_aborted', 'network_restored', 'network_restore',
+        'vm_desktop_permission_allowed', 'call_teardown_acknowledged')]
     assessment_path = directory / "assessment.json"
     assessment = json.loads(assessment_path.read_text()) if assessment_path.exists() else {}
     invalid = assessment.get("invalid_stimuli", [])

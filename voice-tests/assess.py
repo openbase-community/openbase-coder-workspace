@@ -66,8 +66,9 @@ def main():
     words = json.loads((path / 'transcript.json').read_text()).get('words') or []
     result = assess(rows, words, args.terminal_phrase)
     prior = path / 'assessment.json'
-    if prior.exists() and json.loads(prior.read_text()).get('status') == 'harness_error':
-        result.update(status='harness_error', finding='Retained original harness failure; timing measurements cannot override it')
+    prior_status = json.loads(prior.read_text()).get('status', '') if prior.exists() else ''
+    if prior_status == 'harness_error' or 'harness' in prior_status:
+        result.update(status=prior_status, finding='Retained original harness failure; timing measurements cannot override it')
     (path / 'timing-assessment.json').write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps(result, indent=2))
 

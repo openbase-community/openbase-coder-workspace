@@ -59,10 +59,10 @@ def main():
         except json.JSONDecodeError:
             continue
         message = record.get("message", "")
-        provider_stall = re.fullmatch(r"AssemblyAI no (?:messages received for \d+s|audio frames sent for [\d.]+s) session=[\w-]+", message)
-        if provider_stall:
+        provider_warning = re.fullmatch(r"AssemblyAI no (?:messages received for \d+s|audio frames sent for [\d.]+s) session=[\w-]+", message)
+        if provider_warning:
             lines.append(json.dumps({"timestamp": record["timestamp"],
-                "message": "dispatch_timing stage=stt_provider_stall detail=" + message.replace(" ", "_")}))
+                "message": "dispatch_timing stage=stt_provider_warning detail=" + message.replace(" ", "_")}))
         elif "dispatch_timing" in message:
             # Reject credential-bearing records rather than relying on an incomplete secret regex.
             if re.search(r"(?i)bearer\s|[?&](?:token|access_token|session_token)=|authorization[=:]", record["message"]):

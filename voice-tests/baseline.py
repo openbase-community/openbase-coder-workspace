@@ -45,9 +45,14 @@ def main() -> None:
         if not args.provenance:
             raise ValueError("Seal requires reviewed provenance")
         provenance = json.loads(args.provenance.read_text())
-        required = ("revisions", "doctor_passed", "cloud_environment", "fixture_account", "desktop_permission_reset")
+        required = ("revisions", "doctor_passed", "cloud_environment", "fixture_account")
         if any(key not in provenance for key in required) or not provenance["doctor_passed"]:
             raise ValueError("Provenance lacks required prepared-fixture gates")
+        permission = provenance.get("desktop_permission_state")
+        if permission not in ("reset_for_permission_gate", "granted_for_accelerated_voice"):
+            if provenance.get("desktop_permission_reset") is not True:
+                raise ValueError("Record an explicit Desktop permission state for the prepared fixture")
+            provenance["desktop_permission_state"] = "reset_for_permission_gate"
         if not args.observed_runtime:
             raise ValueError("Seal requires observed guest runtime, not requested revisions")
         observed = json.loads(args.observed_runtime.read_text())
