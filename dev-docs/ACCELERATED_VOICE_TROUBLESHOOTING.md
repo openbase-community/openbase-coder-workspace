@@ -105,6 +105,8 @@ Accepted later steers supersede conflicting original briefing content. Retain th
 
 ## Unanswered clarification and spoken filenames
 
+Fresh managed-Claude voice dispatchers receive a bounded roster of registered task owners and working directories on each turn. Their built-in Agent and Task tools are excluded at SDK connection time; delegation goes through visible Super Agents. Ordinary Super Agent sessions retain their tools. Verify the effective SDK options and actual task file paths during replay, including after dispatcher recreation. An archived app with a matching name is not the current registered task.
+
 An unrelated request does not answer a pending clarification. Record the actual registered text, dispatcher tool prompts and task boundaries before concluding that steering reached the wrong owner. The dispatcher must withhold only the unresolved change, continue independent clear work, and preserve unambiguous words when spelling resolves one word. Use [clarification-continuation.json](../voice-tests/scenarios/clarification-continuation.json) to request a choice, perform an unrelated verification, then explicitly confirm the choice. Compare source and turn creation before and after each input; a spoken acknowledgment alone is insufficient.
 
 Speech does not reliably preserve punctuation in filenames. The Elm briefing specifies the canonical correction result path, and the regular stalled-command stimulus refers to that path instead of dictating its hyphen. Retain older hyphen-to-underscore recognition failures as separate input mismatches; a stopped PID and same-turn completion can establish interruption even when exact-filename requirements fail.
