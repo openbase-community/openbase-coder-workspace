@@ -260,6 +260,25 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
                 if r.get('metadata', {}).get('livekit_engine_running') == 'false']
             if stopped:
                 axes[8].scatter(stopped, [.05] * len(stopped), color='crimson', marker='x', label='Engine stopped')
+            if not any('livekit_engine_running' in r.get('metadata', {}) for r in visible_output):
+                axes[8].text(start + .3, .12, 'Engine state unobserved', fontsize=8, color='gray')
+            route = None
+            for sample in output_path:
+                if sample['capture_relative_s'] > end:
+                    break
+                selected = sample.get('metadata', {}).get('output_ports')
+                if not selected or selected == route:
+                    continue
+                route = selected
+                if sample['capture_relative_s'] >= start:
+                    x = sample['capture_relative_s']
+                    axes[8].axvline(x, color='teal', linestyle=':', alpha=.45)
+                    axes[8].text(x + .1, 1.06, f'Output: {route}', fontsize=8, color='teal', clip_on=True)
+            initial = [r for r in output_path if r['capture_relative_s'] <= start
+                       and r.get('metadata', {}).get('output_ports')]
+            if initial:
+                axes[8].text(start + .3, 1.06, 'Output: ' + initial[-1]['metadata']['output_ports'],
+                             fontsize=8, color='teal', clip_on=True)
             axes[8].legend(loc='upper right', fontsize=8)
         else:
             axes[8].text(start + .3, .4, 'MISSING — no native output-path samples', color='gray', clip_on=True)
