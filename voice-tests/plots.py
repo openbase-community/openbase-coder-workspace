@@ -44,6 +44,8 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
             "abandoned announcement after audio participant departed")
             or r["event"].startswith("CLI websocket"))]
     playback = [r for r in rows if r["source"] in ("ios", "android") and "remote audio" in r["event"]]
+    input_capture = [r for r in rows if r['source'] in ('ios', 'android') and r['event'] == 'local audio capture callback']
+    output_path = [r for r in rows if r['source'] in ('ios', 'android') and r['event'] == 'audio output path sample']
     host = [r for r in rows if r["source"] == "host" and "playback_process" in r["event"]]
     acoustic = [r for r in rows if r['source']=='host' and r['event'].startswith('estimated acoustic fixture')]
     host_markers = [r for r in rows if r['source'] == 'host' and r['event'] in (
@@ -60,11 +62,18 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
     uncalibrated = sorted({r["source"] for r in rows if r["source"] != "host" and r["source"] not in calibration})
 
     def draw(start, end, name, detailed):
-        fig, axes = plt.subplots(7, 1, figsize=(18, 12), sharex=True,
-            gridspec_kw={"height_ratios": [1, 1.4, 1, 1, 1, .65, 1]})
+        fig, axes = plt.subplots(9, 1, figsize=(18, 16), sharex=True,
+            gridspec_kw={"height_ratios": [1, 1.4, 1, 1, 1, .65, 1, .7, .7]})
         stride = max(1, rate // 600)
         first, last = max(0, int(start * rate)), min(len(samples), int(end * rate))
         axes[0].plot(np.arange(first, last, stride) / rate, samples[first:last:stride], linewidth=.55)
+        # Keep quiet noise comparable with speech across every run and detail.
+        axes[0].set_ylim(-1, 1)
+        segment = samples[first:last]
+        rms = float(np.sqrt(np.mean(segment * segment))) if len(segment) else 0
+        db = 20 * math.log10(max(rms, 1e-12))
+        axes[0].text(start + .2, .72, f"Fixed full-scale amplitude; interval RMS {db:.1f} dBFS",
+            fontsize=8, clip_on=True)
         axes[0].set_ylabel("Recorded\nroom sound")
         for index, word in enumerate(words):
             x, stop = word["start"] / 1000, word["end"] / 1000
@@ -190,12 +199,46 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         else:
             axes[5].text(start + .3, .4, "MISSING — no phone microphone application records", color="crimson")
         axes[5].set_ylabel("Phone mic\nactually applied")
+        visible_input = [r for r in input_capture if start <= r['capture_relative_s'] <= end]
+        numeric_input = [r for r in visible_input if r.get('metadata', {}).get('peak') not in (None, 'unknown')]
+        if numeric_input:
+            axes[7].scatter([r['capture_relative_s'] for r in numeric_input],
+                [float(r['metadata']['peak']) for r in numeric_input], s=12, color='teal')
+            for row in numeric_input:
+                error = row.get('clock_uncertainty_ms', 0) / 1000
+                if error:
+                    axes[7].errorbar(row['capture_relative_s'], float(row['metadata']['peak']), xerr=error,
+                        color='teal', alpha=.25)
+        else:
+            label = 'UNKNOWN — input callbacks received; sample format unmeasured' if visible_input else 'MISSING — no phone input callback samples'
+            axes[7].text(start + .3, .4, label, color='gray', clip_on=True)
+        axes[7].set_ylim(0, 1)
+        axes[7].set_ylabel('Phone input peak\npostprocessing\n(not sent ACK)')
+        visible_output = [r for r in output_path if start <= r['capture_relative_s'] <= end]
+        if visible_output:
+            for key, color, label in [('system_output_volume', 'navy', 'System volume'),
+                    ('livekit_output_volume', 'darkorange', 'SDK mixer volume')]:
+                points = [(r['capture_relative_s'], float(r['metadata'][key])) for r in visible_output
+                    if key in r.get('metadata', {})]
+                if points:
+                    axes[8].step([p[0] for p in points], [p[1] for p in points], where='post', color=color, label=label)
+            stopped = [r['capture_relative_s'] for r in visible_output
+                if r.get('metadata', {}).get('livekit_engine_running') == 'false']
+            if stopped:
+                axes[8].scatter(stopped, [.05] * len(stopped), color='crimson', marker='x', label='Engine stopped')
+            axes[8].legend(loc='upper right', fontsize=8)
+        else:
+            axes[8].text(start + .3, .4, 'MISSING — no native output-path samples', color='gray', clip_on=True)
+        axes[8].set_ylim(0, 1.15)
+        axes[8].set_ylabel('Phone output path\nvolume / engine\n(not acoustic proof)')
         axes[-1].set_xlabel("Seconds from first recorded sample")
         axes[-1].set_xlim(start, end)
         for axis in axes:
             axis.grid(axis="x", alpha=.25)
             axis.set_yticks([])
         axes[5].set_yticks([0, 1, 2, 3], ['LIVE', 'MUTED', 'IDLE', 'UNKNOWN'])
+        axes[7].set_yticks([0, .5, 1])
+        axes[8].set_yticks([0, .5, 1])
         fig.suptitle(f"{directory.name} · {start:.0f}–{end:.0f} seconds · {assessment.get('status', 'evidence; not a pass assertion')}\n"
             f"Uncalibrated clocks: {', '.join(uncalibrated) or 'none'}. Excluded probes: {len(calibration.get('device_clock_sample_errors', []))} invalid phone, {calibration.get('device_clock_outside_window_count', 0)} distant phone, {calibration.get('server_clock_outside_window_count', 0)} distant VM. Error bars: clock bounds. ASR ≈ ±400 ms. Process ≠ audible onset.", fontsize=12)
         fig.tight_layout()

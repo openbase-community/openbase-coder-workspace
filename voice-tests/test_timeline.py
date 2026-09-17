@@ -10,6 +10,17 @@ from clock_probe import ClockTransportError, sample_vm_clock
 
 
 class TimingEvidenceTests(unittest.TestCase):
+    def test_input_callback_clock_precedes_delayed_log_emission(self):
+        with tempfile.TemporaryDirectory() as temp:
+            callback = unix_ms('2026-09-17T11:50:00.100Z')
+            row = {'timestamp':'2026-09-17T11:50:00.500Z','component':'CallManager',
+                'message':'local audio capture callback',
+                'metadata':{'callback_unix_ms':str(callback),'peak':'0.25'}}
+            Path(temp,'ios.jsonl').write_text(json.dumps(row)+'\n')
+            actual=events(Path(temp))[0]
+            self.assertEqual(actual['unix_ms'],callback)
+            self.assertEqual(actual['event'],'local audio capture callback')
+
     def test_vm_room_generations_are_retained_for_reconnect_interpretation(self):
         with tempfile.TemporaryDirectory() as temp:
             row = {"timestamp": "2026-09-17T07:55:48Z", "room_id": "new-room", "job_id": "new-job", "pid": 1,

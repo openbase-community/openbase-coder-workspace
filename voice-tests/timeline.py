@@ -56,7 +56,7 @@ def events(directory: Path) -> list[dict]:
     for record in list(read_jsonl(directory / "ios.jsonl")) + list(read_jsonl(directory / "ios-upload.jsonl")):
         entry = record.get("entry", record)
         message = entry.get("message", "")
-        if not any(word in message.lower() for word in ("lifecycle", "mute state", "auto-mute", "auto-unmute", "remote audio", "received app control command", "local microphone publish returned", "room connection state changed", "cli websocket", "audio participant departed")):
+        if not any(word in message.lower() for word in ("lifecycle", "mute state", "auto-mute", "auto-unmute", "remote audio", "received app control command", "local microphone publish returned", "room connection state changed", "cli websocket", "audio participant departed", "local audio capture", "audio output path", "audio session route")):
             continue
         identity = json.dumps(entry, sort_keys=True)
         if identity in seen:
@@ -69,7 +69,8 @@ def events(directory: Path) -> list[dict]:
         stamp = entry.get("timestamp")
         if not stamp:
             continue
-        rows.append({"source": "ios", "unix_ms": unix_ms(stamp), "event": metadata.get("event", message),
+        callback = metadata.get('callback_unix_ms') if message == 'local audio capture callback' else None
+        rows.append({"source": "ios", "unix_ms": float(callback) if callback is not None else unix_ms(stamp), "event": metadata.get("event", message),
             "metadata": metadata, "diagnostic_message": message,
             "timestamp_resolution_ms": 1 if "." in stamp else 1000})
     for record in read_jsonl(directory / "server.log"):
