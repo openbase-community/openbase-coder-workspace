@@ -223,9 +223,14 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         snapshots=[r for r in output_path if start <= r['capture_relative_s'] <= end
                    and str(r.get('metadata',{}).get('microphone_enabled')).lower() in ('true','false')]
         if snapshots:
-            axes[5].scatter([r['capture_relative_s'] for r in snapshots],
-                [0 if str(r['metadata']['microphone_enabled']).lower()=='true' else 1 for r in snapshots],
-                marker='D',s=8,color='black',label='SDK enabled-state snapshot')
+            for basis, marker, color, label in (
+                ('sdk_local_participant', 'D', 'black', 'SDK enabled-state snapshot'),
+                (None, '^', 'gray', 'App mute flag; SDK state unobserved')):
+                basis_samples=[r for r in snapshots if r['metadata'].get('microphone_state_basis')==basis]
+                if basis_samples:
+                    axes[5].scatter([r['capture_relative_s'] for r in basis_samples],
+                        [0 if str(r['metadata']['microphone_enabled']).lower()=='true' else 1 for r in basis_samples],
+                        marker=marker,s=8,color=color,label=label)
             axes[5].legend(loc='upper right',fontsize=7)
         axes[5].set_ylabel("Mic SDK\nreturn / snapshot")
         visible_input = [r for r in input_capture if start <= r['capture_relative_s'] <= end]
