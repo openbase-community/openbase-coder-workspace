@@ -13,6 +13,7 @@ import shutil
 import time
 import uuid
 
+from segment_fixture import synthesize_fixture
 from readiness import valid_permit
 from clock_probe import sample_vm_clock, calibration_from_samples
 
@@ -61,20 +62,26 @@ def main() -> None:
     args.output.mkdir(parents=True, exist_ok=False)
     (args.output / "scenario.json").write_text(json.dumps(scenario, indent=2) + "\n")
     stimulus_durations = []
+    segment_evidence = []
     for index, stimulus in enumerate(stimuli):
         target = args.output / f"stimulus-{index}.wav"
         if args.reuse_stimuli:
             shutil.copyfile(args.reuse_stimuli / target.name, target)
         else:
-            probe.synthesize_cartesia(text=stimulus["text"], api_key=cartesia,
-                voice_id=probe.DEFAULT_CARTESIA_VOICE_ID, model_id=probe.DEFAULT_CARTESIA_MODEL_ID,
-                version=probe.DEFAULT_CARTESIA_VERSION, out_path=str(target))
+            def synthesize(text, path):
+                probe.synthesize_cartesia(text=text, api_key=cartesia,
+                    voice_id=probe.DEFAULT_CARTESIA_VOICE_ID, model_id=probe.DEFAULT_CARTESIA_MODEL_ID,
+                    version=probe.DEFAULT_CARTESIA_VERSION, out_path=str(path))
+            segments = synthesize_fixture(stimulus, target, synthesize)
+            if segments:
+                segment_evidence.append({"index": index, "segments": segments,
+                    "timing_basis": "Sample offsets in fixture WAV; process launch is not exact acoustic onset"})
         # Cartesia emits floating-point WAV, which Python's wave module cannot read.
         stimulus_durations.append(float(subprocess.check_output(["ffprobe", "-v", "error",
             "-show_entries", "format=duration", "-of", "default=nw=1:nk=1",
             str(args.output / f"stimulus-{index}.wav")], text=True)))
     (args.output / "stimulus-provenance.json").write_text(json.dumps({
-        "reused": bool(args.reuse_stimuli), "fixtures": [{"index": i, "duration_s": d,
+        "reused": bool(args.reuse_stimuli), "segmented_fixtures": segment_evidence, "fixtures": [{"index": i, "duration_s": d,
             "sha256": hashlib.sha256((args.output / f"stimulus-{i}.wav").read_bytes()).hexdigest()}
             for i, d in enumerate(stimulus_durations)]}, indent=2) + "\n")
     native = args.output / "room.native.wav"
