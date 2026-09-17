@@ -9,6 +9,7 @@ import subprocess
 import time
 from clock_probe import sample_vm_clock, calibration_from_samples
 from guest import read_guest
+from provider_failures import failure_record
 
 ROOT = Path(__file__).resolve().parents[1]
 GUEST = ROOT / "install-tests/electron-macos/guest-automate.sh"
@@ -75,7 +76,10 @@ def main():
             continue
         message = record.get("message", "")
         provider_warning = re.fullmatch(r"AssemblyAI no (?:messages received for \d+s|audio frames sent for [\d.]+s) session=[\w-]+", message)
-        if provider_warning:
+        failure = failure_record(record)
+        if failure is not None:
+            lines.append(json.dumps(failure))
+        elif provider_warning:
             lines.append(json.dumps({"timestamp": record["timestamp"],
                 "message": "dispatch_timing stage=stt_provider_warning detail=" + message.replace(" ", "_")}))
         elif "dispatch_timing" in message:

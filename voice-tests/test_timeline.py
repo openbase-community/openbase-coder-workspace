@@ -10,6 +10,15 @@ from clock_probe import ClockTransportError, sample_vm_clock
 
 
 class TimingEvidenceTests(unittest.TestCase):
+    def test_partial_provider_failure_preserves_duration_without_raw_secrets(self):
+        from provider_failures import failure_record
+        value = failure_record({"timestamp": "2026-09-17T07:40:28Z",
+            "message": "TTS failed after partial audio was already sent to the user, skip retrying.",
+            "pushed_duration": 3.09, "exc_info": "Authorization: private-value"})
+        self.assertEqual(value["message"], "dispatch_timing stage=tts_provider_partial_failure audio_seconds=3.09")
+        self.assertNotIn("private-value", json.dumps(value))
+
+
     def test_backend_tool_observation_retains_its_actual_clock_and_thread(self):
         with tempfile.TemporaryDirectory() as temp:
             row={'source':'server','unix_ms':1250,'event':'observed super_agents_start_turn',
