@@ -25,7 +25,10 @@ def main():
     parser.add_argument("snapshot", type=Path)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--platform", choices=("ios", "android"), required=True)
+    parser.add_argument("--speaker-verified", action="store_true", help="Route verified visually for this call")
     args = parser.parse_args()
+    if not args.speaker_verified:
+        raise ValueError("Verify the active call's physical speaker route before submitting probes")
     manifest = json.loads(args.manifest.read_text())
     if args.vm not in manifest["clones"]:
         raise ValueError("Probe requires a declared disposable run clone")
@@ -49,6 +52,8 @@ db=sqlite3.connect('file:'+str(stores[0])+'?mode=ro',uri=True)
 print(json.dumps(dict(db.execute('select name,agent_name from sessions where agent_name is not null').fetchall())))"""
     names = json.loads(read_guest(HELPER, args.vm, "python3 -c " + shlex.quote(program)))
     probes = scenario["announcements"]
+    if not probes:
+        raise ValueError("At least one announcement is required")
     for probe in probes:
         if not names.get(probe["thread"]) or not probe["text"].strip():
             raise ValueError("Each probe requires a registered owner and nonempty labeled text")
@@ -64,10 +69,16 @@ print(json.dumps(dict(db.execute('select name,agent_name from sessions where age
         index, probe = item
         name = names[probe["thread"]]
         event("announcement_command_start", index=index, thread=probe["thread"],
-            agent_name=name, text=probe["text"], timing_basis="Model-free diagnostic submission, not acoustic onset")
+            agent_name=name, text=probe["text"], speaker_verified=True,
+            timing_basis="Model-free diagnostic submission, not acoustic onset")
         command = "~/.local/bin/openbase-coder user say " + shlex.join([name, probe["text"]])
-        result = subprocess.run([str(HELPER), "ssh", args.vm, command], text=True,
-            capture_output=True, timeout=60)
+        try:
+            result = subprocess.run([str(HELPER), "ssh", args.vm, command], text=True,
+                capture_output=True, timeout=60)
+        except subprocess.TimeoutExpired:
+            event("announcement_command_end", index=index, exit_code=None,
+                outcome="unconfirmed", reason="SSH command deadline; observe native state before any retry")
+            return 1
         event("announcement_command_end", index=index, exit_code=result.returncode,
             receipt=result.stdout[:500], outcome="accepted" if result.returncode == 0 else "unconfirmed")
         return result.returncode
