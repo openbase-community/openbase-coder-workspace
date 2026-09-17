@@ -22,7 +22,9 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         and str(r.get("metadata", {}).get("microphone_enabled")).lower() in ("true", "false")]
     emitted = [r for r in rows if r["source"] == "server" and r["event"] in (
         "voice_lifecycle_packet_published", "stt_final_transcript", "voice_delivery_cancelled", "livekit_llm_input_committed")]
-    received = [r for r in rows if r["source"] in ("ios", "android") and r.get("metadata", {}).get("created_at_unix_ms")]
+    received = [r for r in rows if r["source"] in ("ios", "android")
+        and (r.get("diagnostic_message", r["event"]) in (
+            "received voice lifecycle event", "voice lifecycle received", "ignored stale voice lifecycle event"))]
     playback = [r for r in rows if r["source"] in ("ios", "android") and "remote audio" in r["event"]]
     host = [r for r in rows if r["source"] == "host" and "playback_process" in r["event"]]
     assessment_path = directory / "assessment.json"
@@ -60,12 +62,14 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
                 axes[2].text(x, .3, label, fontsize=9, color=color, clip_on=True)
         axes[2].set_ylabel("Host stimulus\nprocess interval")
         for axis, items, title, color in [(axes[3], emitted, "VM turn /\nlifecycle events", "darkorange"),
-                (axes[4], received, "Phone received\nlifecycle", "seagreen"),
+                (axes[4], received, "Phone receipt /\nlifecycle handling", "seagreen"),
                 (axes[6], playback, "Phone playback\ndiagnostics", "purple")]:
             visible = [r for r in items if start <= r["capture_relative_s"] <= end]
             for index, row in enumerate(visible):
                 x, lane = row["capture_relative_s"], index % 3
                 label = row.get("metadata", {}).get("event", row["event"])
+                if row.get("diagnostic_message") == "ignored stale voice lifecycle event":
+                    label = "IGNORED stale " + label
                 axis.plot(x, lane, "|", color=color, markersize=14)
                 error = row.get("clock_uncertainty_ms", 0) / 1000
                 if error:

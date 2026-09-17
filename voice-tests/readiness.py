@@ -1,6 +1,29 @@
 """Expiring, request-specific permits for ordinary acoustic stimuli."""
 import time
 import xml.etree.ElementTree as ET
+import re
+
+
+def android_ready(source: str) -> bool:
+    tree = ET.fromstring(source)
+    nodes = [e for e in tree.iter() if e.get("bounds")]
+    if not nodes:
+        return False
+    def bounds(element):
+        values = re.findall(r"-?\d+", element.get("bounds", ""))
+        return tuple(map(int, values)) if len(values) == 4 else (0, 0, 0, 0)
+    left, top, right, bottom = bounds(nodes[0])
+    visible = []
+    for node in nodes:
+        x1, y1, x2, y2 = bounds(node)
+        if (node.get("displayed") == "true" and node.get("enabled") == "true"
+            and x2 > x1 and y2 > y1 and left <= (x1 + x2) / 2 < right
+            and top <= (y1 + y2) / 2 < bottom):
+            visible.append(node)
+    texts = {n.get("text", "") for n in visible}
+    descriptions = {n.get("content-desc", "") for n in visible}
+    return (any(t.startswith("Listening") for t in texts) and {"connected", "active"} <= texts
+        and {"Mute", "End"} <= descriptions and "Unmute" not in descriptions)
 
 
 def ios_ready(source: str) -> bool:

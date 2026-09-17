@@ -49,7 +49,8 @@ def events(directory: Path) -> list[dict]:
         if not stamp:
             continue
         rows.append({"source": "ios", "unix_ms": unix_ms(stamp), "event": metadata.get("event", message),
-            "metadata": metadata, "timestamp_resolution_ms": 1 if "." in stamp else 1000})
+            "metadata": metadata, "diagnostic_message": message,
+            "timestamp_resolution_ms": 1 if "." in stamp else 1000})
     for record in read_jsonl(directory / "server.log"):
         message = record.get("message", "")
         if "dispatch_timing" not in message or not record.get("timestamp"):
