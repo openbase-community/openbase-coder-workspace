@@ -40,8 +40,10 @@ def ios_ready(source: str) -> bool:
         and e.get("enabled") == "true" and in_view(e)]
     listening = any("Listening" in e.get("label", "") for e in visible)
     mute = any(e.get("type") == "XCUIElementTypeButton" and e.get("label") == "Mute" for e in visible)
+    end = any(e.get("type") == "XCUIElementTypeButton" and e.get("label") == "End" for e in visible)
+    labels = {e.get('label', '') for e in visible}
     unmute = any(e.get("type") == "XCUIElementTypeButton" and e.get("label") == "Unmute" for e in visible)
-    return listening and mute and not unmute
+    return listening and mute and end and {'connected', 'active'} <= labels and not unmute
 
 
 def valid_permit(permit: dict, nonce: str, now_ms: float | None = None) -> bool:

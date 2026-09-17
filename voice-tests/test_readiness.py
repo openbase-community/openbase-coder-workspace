@@ -21,7 +21,13 @@ class ReadinessTests(unittest.TestCase):
     def test_listening_text_alone_does_not_allow_a_muted_phone(self):
         source = '<root><e type="XCUIElementTypeApplication" width="390" height="844"/><e width="40" height="40" visible="true" enabled="true" label="Listening..."/><e width="40" height="40" visible="true" enabled="true" type="XCUIElementTypeButton" label="Unmute"/></root>'
         self.assertFalse(ios_ready(source))
-        self.assertTrue(ios_ready(source.replace('label="Unmute"', 'label="Mute"')))
+        connected = source.replace('label="Unmute"', 'label="Mute"').replace('</root>',
+            '<e width="40" height="40" visible="true" enabled="true" type="XCUIElementTypeButton" label="End"/>'
+            '<e width="40" height="40" visible="true" enabled="true" label="connected"/>'
+            '<e width="40" height="40" visible="true" enabled="true" label="active"/></root>')
+        self.assertTrue(ios_ready(connected))
+        self.assertFalse(ios_ready(connected.replace('label="connected"', 'label="disconnected"')))
+        self.assertFalse(ios_ready(connected.replace('label="End"', 'label="Start"')))
         self.assertFalse(ios_ready(source.replace('Listening...', 'Speaking...').replace('label="Unmute"', 'label="Mute"')))
         self.assertFalse(ios_ready(source.replace('label="Unmute"', 'label="Mute" y="900"')))
 
