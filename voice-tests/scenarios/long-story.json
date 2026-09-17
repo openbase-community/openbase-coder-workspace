@@ -1,0 +1,7 @@
+{
+  "seconds": 240,
+  "response_tail_s": 120,
+  "stimuli": [
+    {"at_s": 3, "text": "Tell me a turtle garden story in one hundred words. Read it aloud, and end with velvet orchard complete."}
+  ]
+}

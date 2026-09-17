@@ -1,0 +1,9 @@
+{
+  "seconds": 240,
+  "response_tail_s": 60,
+  "stimuli": [
+    {"at_s": 3, "text": "Transfer me to the Tetris agent in the maple folder."},
+    {"at_s": 60, "text": "Change the heading to Amber Kite. The second word is Kite, spelled K, I, T, E. Run the production build, save its actual output and exit code, and announce the result ending with copper meadow complete."},
+    {"at_s": 160, "text": "Go back to the dispatcher."}
+  ]
+}
