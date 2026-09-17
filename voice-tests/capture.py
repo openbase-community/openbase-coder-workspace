@@ -37,7 +37,7 @@ def credentials(path: Path | None) -> dict[str, str]:
     return values
 
 
-def main() -> None:
+def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("scenario", type=Path, help="JSON: seconds and stimuli [{at_s,text}]")
     parser.add_argument("output", type=Path, help="Ignored report artifact directory")
@@ -45,7 +45,7 @@ def main() -> None:
     parser.add_argument("--reuse-stimuli", type=Path, help="Replay exact WAV fixtures from a prior capture with identical stimulus texts")
     parser.add_argument("--prepare-only", action="store_true", help="Synthesize immutable reusable fixtures without recording or playing them")
     parser.add_argument("--vm", help="Bracket the recording with causal guest clock probes")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     scenario = json.loads(args.scenario.read_text())
     seconds = float(scenario["seconds"])
     stimuli = scenario.get("stimuli", [])

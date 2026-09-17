@@ -49,6 +49,15 @@ Repeat with constrained guest bandwidth, latency, and loss before spending the r
 
 `voice-tests/network.py apply <run-vm> <ignored-network-directory>` installs only its owned Apple dummynet sub-anchor and reserved pipe IDs. It preserves TCP port 22 for SSH management and arms an independent guest rollback timer before loading shaping rules. The default timer is ten minutes; choose `--safety-seconds` to cover the scenario, up to thirty minutes. Use `restore` afterward and inspect actual PF state, the owned anchor and pipe list. Do not replace the guest's main ruleset or flush other pipes. `dnctl pipe delete <id>` is required for precise pipe cleanup; its unqualified delete can target the wrong object. HTTP download/upload probes must measure the configured profile before acoustic coverage. ICMP can be filtered even without shaping; compare unshaped probes and use measured HTTP timings when ping is unavailable. A configured packet-loss probability is not a measured end-to-end loss rate. Keep measurement traffic outside acoustic runs so it does not silently saturate the constrained link.
 
+Prefer `voice-tests/congestion_capture.py` for a repeatable congestion/recovery recording. It validates the declared disposable clone, acquires the same exclusive acoustic lease as ordinary capture, checks shaping ownership, completes sequential 100 KB download/upload measurements, starts the recorder and owned recovery timer, and restores its shaping in cleanup. Apply or measurement failure prevents recording. Planned stimuli must already be prepared and supplied with --reuse-stimuli; model-free passive scenarios use an empty stimuli list. Native Appium Listening, current-call speaker verification, announcement submission, stimulus permits, post-capture journals and the finish guard remain separate requirements. Keep both output directories new and save orchestration and scheduled-recovery logs.
+
+```bash
+python3 voice-tests/congestion_capture.py <run-vm> <passive-or-prepared-scenario.json> \
+  .reports/voice-run/ios-congestion .reports/voice-run/network-congestion \
+  --manifest .local/field-tests/voice-baseline.json \
+  --credentials-file <private-env-file> --after-recorder-s 230
+```
+
 ## Capture and regenerate timing evidence
 
 `voice-tests/capture.py` reuses the shared Cartesia/AssemblyAI acoustic probe. A scenario JSON contains `seconds` and ordered `stimuli` entries with `at_s` and `text`; offsets are the earliest requested times after recorder readiness. Ordinary stimuli wait for a request-specific native readiness permit. Delays are recorded rather than silently treating the original schedule as the actual playback time. Use enough capture time for the final response and announcements; `response_tail_s` defaults to ten seconds and reserves a minimum response interval. A scenario schedule is instrumentation, not a replacement for agent-driven observation or Appium phone control.
