@@ -192,7 +192,7 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
             axis.set_yticks([])
         axes[5].set_yticks([0, 1, 2, 3], ['LIVE', 'MUTED', 'IDLE', 'UNKNOWN'])
         fig.suptitle(f"{directory.name} · {start:.0f}–{end:.0f} seconds · {assessment.get('status', 'evidence; not a pass assertion')}\n"
-            f"Uncalibrated clocks: {', '.join(uncalibrated) or 'none'}. Excluded clock probes: {len(calibration.get('device_clock_sample_errors', []))}. Error bars show clock bounds. ASR ≈ ±400 ms. Process ≠ audible onset.", fontsize=12)
+            f"Uncalibrated clocks: {', '.join(uncalibrated) or 'none'}. Excluded probes: {len(calibration.get('device_clock_sample_errors', []))} invalid phone, {calibration.get('device_clock_outside_window_count', 0)} distant phone, {calibration.get('server_clock_outside_window_count', 0)} distant VM. Error bars: clock bounds. ASR ≈ ±400 ms. Process ≠ audible onset.", fontsize=12)
         fig.tight_layout()
         fig.savefig(directory / f"{name}.svg")
         fig.savefig(directory / f"{name}.png", dpi=120)

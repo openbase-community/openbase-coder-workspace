@@ -168,6 +168,7 @@ def main() -> None:
     if "samples" in calibration:
         nearby = [s for s in calibration["samples"]
             if origin - 120_000 <= s["host_before_ms"] <= origin + duration * 1000 + 120_000]
+        calibration['server_clock_outside_window_count'] = len(calibration['samples']) - len(nearby)
         calibration.pop("server", None)
         if nearby:
             calibration["server"] = calibration_from_samples(nearby)["server"]
@@ -187,6 +188,10 @@ def main() -> None:
             {'source': sample.get('source'), 'host_before_unix_ms': sample.get('host_before_unix_ms'),
                 'reason': 'Invalid or missing Appium timestamp; excluded without guessing'}
             for sample in device_samples if not valid_device_clock_sample(sample)]
+        calibration['device_clock_outside_window_count'] = sum(
+            valid_device_clock_sample(sample) and not (
+                origin - 120_000 <= sample['host_before_unix_ms'] <= origin + duration * 1000 + 120_000)
+            for sample in device_samples)
         direct = device_clock_bounds(device_samples,
             window=(origin - 120_000, origin + duration * 1000 + 120_000))
         for source, bound in direct.items():
