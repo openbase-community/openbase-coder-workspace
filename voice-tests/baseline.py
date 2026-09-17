@@ -38,13 +38,14 @@ def main() -> None:
         if provenance["baseline"] != args.source:
             raise ValueError("Manifest does not describe the requested baseline")
         # Authenticated clones share a fixture network identity. Only one may run.
-        siblings = [name for name in provenance.get("clones", []) if name in state and state[name]["State"].lower() != "stopped"]
+        relatives = provenance.get("clones", []) + [provenance.get("preparation_vm", "")]
+        siblings = [name for name in relatives if name in state and state[name]["State"].lower() != "stopped"]
         if siblings:
             raise ValueError("Stop the previous fixture clone before creating another")
     subprocess.run(["tart", "clone", args.source, args.destination], check=True)
     now = datetime.now(timezone.utc).isoformat()
     if args.action == "seal":
-        provenance.update(baseline=args.destination, sealed_at=now, track="accelerated_voice", clones=[])
+        provenance.update(baseline=args.destination, preparation_vm=args.source, sealed_at=now, track="accelerated_voice", clones=[])
     else:
         provenance.setdefault("clones", []).append(args.destination)
         provenance["last_clone_at"] = now

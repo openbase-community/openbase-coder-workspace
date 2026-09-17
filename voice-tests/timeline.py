@@ -32,9 +32,9 @@ def events(directory: Path) -> list[dict]:
     rows = list(read_jsonl(directory / "host-events.jsonl"))
     seen = set()
     for record in read_jsonl(directory / "ios.jsonl"):
-        entry = record.get("entry", {})
+        entry = record.get("entry", record)
         message = entry.get("message", "")
-        if not any(word in message.lower() for word in ("lifecycle", "mute state", "auto-mute", "auto-unmute", "speech started", "speech ended", "silence gap", "received app control command")):
+        if not any(word in message.lower() for word in ("lifecycle", "mute state", "auto-mute", "auto-unmute", "remote audio", "received app control command")):
             continue
         identity = json.dumps(entry, sort_keys=True)
         if identity in seen:
@@ -82,6 +82,19 @@ def phone_clock_bounds(rows: list[dict]) -> dict | None:
     return {"offset_ms": (lower + upper) / 2, "uncertainty_ms": (upper - lower) / 2, "lower_ms": lower, "upper_ms": upper}
 
 
+def device_clock_bounds(samples: list[dict]) -> dict:
+    result = {}
+    for source in {s["source"] for s in samples}:
+        matching = [s for s in samples if s["source"] == source]
+        lower = max(s["device_unix_ms"] - s["host_after_unix_ms"] for s in matching)
+        upper = min(s["device_unix_ms"] + s.get("timestamp_resolution_ms", 1) - s["host_before_unix_ms"] for s in matching)
+        if lower > upper:
+            raise ValueError("Device clock bounds conflict; do not merge this run")
+        result[source] = {"offset_ms": (lower + upper) / 2, "uncertainty_ms": (upper - lower) / 2,
+            "method": "causal Appium device-time request/response brackets"}
+    return result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path)
@@ -100,6 +113,18 @@ def main() -> None:
         if server:
             calibration["ios"] = {"offset_ms": server["offset_ms"] + phone_bounds["offset_ms"],
                 "uncertainty_ms": server["uncertainty_ms"] + phone_bounds["uncertainty_ms"]}
+    samples_path = directory / "device-clock-samples.json"
+    if samples_path.exists():
+        direct = device_clock_bounds(json.loads(samples_path.read_text()))
+        for source, bound in direct.items():
+            if source in calibration:
+                existing = calibration[source]
+                lower = max(bound["offset_ms"] - bound["uncertainty_ms"], existing["offset_ms"] - existing["uncertainty_ms"])
+                upper = min(bound["offset_ms"] + bound["uncertainty_ms"], existing["offset_ms"] + existing["uncertainty_ms"])
+                if lower > upper:
+                    raise ValueError("Direct and server-mediated device clock bounds conflict")
+                bound.update(offset_ms=(lower + upper) / 2, uncertainty_ms=(upper - lower) / 2)
+            calibration[source] = bound
     for row in rows:
         correction = calibration.get(row["source"])
         if correction:
@@ -116,58 +141,8 @@ def main() -> None:
         writer.writerow(["source", "event", "unix_ms", "capture_relative_s", "metadata"])
         for row in rows:
             writer.writerow([row["source"], row["event"], row["unix_ms"], row["capture_relative_s"], json.dumps(row.get("metadata", {}))])
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    import numpy as np
-    import wave
-
-    transcript = json.loads((directory / "transcript.json").read_text())
-    with wave.open(str(directory / "room.wav")) as wav:
-        rate = wav.getframerate()
-        samples = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2").astype(float) / 32768
-    sources = [source for source in ("host", "server", "ios", "android") if any(r["source"] == source for r in rows)]
-    figure, axes = plt.subplots(2 + len(sources), 1, figsize=(16, 3 + len(sources) * 1.7), sharex=True,
-        gridspec_kw={"height_ratios": [1, 1.3] + [1] * len(sources)})
-    stride = max(1, rate // 500)
-    axes[0].plot(np.arange(0, len(samples), stride) / rate, samples[::stride], linewidth=0.45)
-    axes[0].set_ylabel("Room audio")
-    words = transcript.get("words") or []
-    for index, word in enumerate(words):
-        start, end = word["start"] / 1000, word["end"] / 1000
-        lane = index % 3
-        axes[1].broken_barh([(start, max(.02, end - start))], (lane, .7), facecolors="steelblue")
-        axes[1].text(start, lane + .75, word["text"], fontsize=7, rotation=30)
-    axes[1].set_ylim(0, 4.5)
-    axes[1].set_ylabel("Acoustic words\nASR estimates")
-    colors = {"host": "gray", "server": "darkorange", "ios": "seagreen", "android": "purple"}
-    for axis, source in zip(axes[2:], sources):
-        source_rows = [r for r in rows if r["source"] == source]
-        for index, row in enumerate(source_rows):
-            x = row["capture_relative_s"]
-            lane = index % 3
-            axis.plot(x, lane, "|", color=colors[source], markersize=14)
-            # Whole-second historic logs are intervals, not millisecond measurements.
-            resolution = row.get("timestamp_resolution_ms", 1) / 1000
-            uncertainty = row.get("clock_uncertainty_ms", 0) / 1000
-            if uncertainty:
-                axis.errorbar(x, lane, xerr=uncertainty, color=colors[source], alpha=.3)
-            if resolution > .001:
-                axis.axvspan(x, x + resolution, alpha=.07, color=colors[source])
-            axis.text(x, lane + .1, row["event"], fontsize=6, rotation=35, clip_on=True)
-        axis.set_ylabel(source + " UTC")
-        axis.set_ylim(-.3, 4.2)
-    axes[-1].set_xlabel("Seconds from first recorded sample")
-    axes[-1].set_xlim(0, duration)
-    for axis in axes:
-        axis.grid(axis="x", alpha=.2)
-        axis.set_yticks([])
-    uncalibrated = [s for s in sources if s != "host" and s not in calibration]
-    figure.suptitle(directory.name + " — recorded sound and native event clocks\n"
-        f"Uncalibrated clocks: {', '.join(uncalibrated) or 'none'}. Process playback markers are not audible onset. ASR word boundaries ≈ ±400 ms.", fontsize=11)
-    figure.tight_layout()
-    figure.savefig(directory / "timeline.svg")
-    figure.savefig(directory / "timeline.png", dpi=150)
+    from plots import render
+    render(directory, clock, rows, calibration)
 
 
 if __name__ == "__main__":

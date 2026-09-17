@@ -3,10 +3,21 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from timeline import events, phone_clock_bounds, unix_ms
+from timeline import device_clock_bounds, events, phone_clock_bounds, unix_ms
 
 
 class TimingEvidenceTests(unittest.TestCase):
+    def test_direct_clock_brackets_do_not_assume_symmetric_delay(self):
+        samples = [{"source": "android", "device_unix_ms": 1120,
+            "host_before_unix_ms": 1000, "host_after_unix_ms": 1050}]
+        bound = device_clock_bounds(samples)["android"]
+        self.assertEqual(bound["offset_ms"], 95.5)
+        self.assertEqual(bound["uncertainty_ms"], 25.5)
+        samples.append({"source": "android", "device_unix_ms": 5000,
+            "host_before_unix_ms": 1000, "host_after_unix_ms": 1050})
+        with self.assertRaises(ValueError):
+            device_clock_bounds(samples)
+
     def test_native_precision_and_timezone_are_preserved(self):
         self.assertAlmostEqual(unix_ms("2026-09-17T04:39:12.786Z") % 1000, 786, places=2)
         with self.assertRaises(ValueError):

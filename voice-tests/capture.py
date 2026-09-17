@@ -9,6 +9,9 @@ import os
 from pathlib import Path
 import subprocess
 import time
+import uuid
+
+from readiness import valid_permit
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("acoustic_probe", ROOT / ".agents/skills/field-testing/scripts/acoustic-probe.py")
@@ -48,13 +51,20 @@ def main() -> None:
         raise RuntimeError("Required provider credentials are absent")
     args.output.mkdir(parents=True, exist_ok=False)
     (args.output / "scenario.json").write_text(json.dumps(scenario, indent=2) + "\n")
+    stimulus_durations = []
     for index, stimulus in enumerate(stimuli):
         probe.synthesize_cartesia(text=stimulus["text"], api_key=cartesia,
             voice_id=probe.DEFAULT_CARTESIA_VOICE_ID, model_id=probe.DEFAULT_CARTESIA_MODEL_ID,
             version=probe.DEFAULT_CARTESIA_VERSION, out_path=str(args.output / f"stimulus-{index}.wav"))
+        # Cartesia emits floating-point WAV, which Python's wave module cannot read.
+        stimulus_durations.append(float(subprocess.check_output(["ffprobe", "-v", "error",
+            "-show_entries", "format=duration", "-of", "default=nw=1:nk=1",
+            str(args.output / f"stimulus-{index}.wav")], text=True)))
     native = args.output / "room.native.wav"
     clock = args.output / "capture-clock.json"
     events = args.output / "host-events.jsonl"
+    gates = args.output / "gates"
+    gates.mkdir()
 
     def event(kind: str, **fields) -> None:
         with events.open("a") as output:
@@ -64,6 +74,7 @@ def main() -> None:
     with (args.output / "recorder-stderr.txt").open("w") as stderr:
         rec = subprocess.Popen(["swift", str(probe.NATIVE_RECORDER), str(native), str(seconds), str(clock)],
             stdout=subprocess.PIPE, stderr=stderr, text=True)
+        scenario_failure = None
         try:
             if rec.stdout.readline().strip() != "READY":
                 raise RuntimeError("Recorder failed; inspect recorder-stderr.txt")
@@ -72,23 +83,43 @@ def main() -> None:
             for index, stimulus in enumerate(stimuli):
                 delay = start + float(stimulus["at_s"]) - time.monotonic()
                 if delay < -0.1:
-                    raise RuntimeError("Stimulus schedule overlaps prior playback; schedule was not executed")
+                    event("schedule_delayed", index=index, delay_ms=-delay * 1000)
                 time.sleep(max(0, delay))
+                stimulus_seconds = stimulus_durations[index]
+                deadline_s = seconds - stimulus_seconds - float(scenario.get("response_tail_s", 10))
+                if stimulus.get("mode", "ordinary") != "overlap":
+                    nonce = uuid.uuid4().hex
+                    request = {"index": index, "nonce": nonce, "text": stimulus["text"], "required": "fresh native listening + mic enabled + speaker verified"}
+                    (gates / f"request-{index}.json").write_text(json.dumps(request, indent=2) + "\n")
+                    event("readiness_gate_requested", index=index, nonce=nonce)
+                    print(f"Waiting for native readiness permit: {gates / f'permit-{index}.json'}", flush=True)
+                    permit_path = gates / f"permit-{index}.json"
+                    while True:
+                        if time.monotonic() - start >= deadline_s:
+                            raise TimeoutError("No fresh native readiness permit before recording deadline; stimulus was not played")
+                        if permit_path.exists():
+                            permit = json.loads(permit_path.read_text())
+                            if valid_permit(permit, nonce):
+                                event("readiness_gate_permitted", index=index, proof=permit)
+                                break
+                        time.sleep(.02)
+                else:
+                    event("intentional_overlap_stimulus", index=index)
+                if time.monotonic() - start >= deadline_s:
+                    raise TimeoutError("Recording has insufficient stimulus and response time; stimulus was not played")
                 event("playback_process_start", index=index, text=stimulus["text"])
                 print(f"Stimulus {index}: {stimulus['text']}", flush=True)
                 subprocess.run(["afplay", str(args.output / f"stimulus-{index}.wav")], check=True)
                 event("playback_process_end", index=index)
+        except (TimeoutError, RuntimeError, subprocess.CalledProcessError) as failure:
+            # Keep the full acoustic and clock evidence even when a gate rejects a test.
+            scenario_failure = failure
+            event("scenario_aborted", error_type=type(failure).__name__, reason=str(failure))
+            (args.output / "assessment.json").write_text(json.dumps({"status": "harness_error", "finding": str(failure)}, indent=2) + "\n")
+        finally:
             rec.wait(timeout=seconds + 30)
             if rec.returncode:
                 raise RuntimeError("Recorder failed; inspect recorder-stderr.txt")
-        finally:
-            if rec.poll() is None:
-                rec.terminate()
-                try:
-                    rec.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    rec.kill()
-                    rec.wait()
     event("recording_complete")
     wav = args.output / "room.wav"
     subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(native),
@@ -98,6 +129,8 @@ def main() -> None:
     details = {k: result.get(k) for k in ("text", "words", "utterances", "confidence", "speech_model_used", "audio_duration")}
     (args.output / "transcript.json").write_text(json.dumps(details, indent=2) + "\n")
     print(details["text"], flush=True)
+    if scenario_failure:
+        raise scenario_failure
 
 
 if __name__ == "__main__":
