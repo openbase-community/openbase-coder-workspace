@@ -61,6 +61,8 @@ map, environment knobs, and run commands.
 
 ## Tier 3 — Field tests
 
+For a user-requested voice-only exploration that excludes installation, the [accelerated voice track](ACCELERATED_VOICE_TESTS.md) uses a fresh clone of a stopped, prepared Tart fixture. It preserves real services, physical-phone control, and the full acoustic loop, while explicitly making no clean-install claim. The clean-room installation requirements below describe full installation field tests.
+
 Field tests are the top tier and the source of new coverage. A field test is
 **agent-driven**: there is no script. An AI agent installs the product from
 scratch, exercises it like a user would, decides what to poke at, notices what

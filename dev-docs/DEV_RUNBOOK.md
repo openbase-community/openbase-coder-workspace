@@ -55,6 +55,8 @@ If setup selected Openbase VPN or Openbase Direct before an Openbase login exist
 
 ### Physical-iPhone field-test ordering
 
+For repeated voice, Super Agent, announcement, and mute-lifecycle testing that explicitly excludes installation, use [Accelerated voice tests](ACCELERATED_VOICE_TESTS.md). It seals a prepared developer install into a stopped Tart fixture and runs fresh clones with acoustic word/event timing evidence.
+
 When this developer install is sampled in a field test, use this runbook only for the developer-workspace setup mechanics. The [`field-testing` skill's documentation-ownership section](../.agents/skills/field-testing/SKILL.md#documentation-ownership-keep-the-install-tracks-dry) identifies and owns all behavior shared with the signed-DMG track; do not restate those procedures here. In particular, its [blocking early iPhone VPN passcode gate](../.agents/skills/field-testing/SKILL.md#blocking-early-iphone-vpn-passcode-gate) overrides the normal verify-first order below.
 
 ## 4. Verify, then exercise the product

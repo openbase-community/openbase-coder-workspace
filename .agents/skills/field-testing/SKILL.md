@@ -9,6 +9,8 @@ This workspace-local skill is the operating procedure for **field tests** — ti
 
 It applies whenever the user asks for a field test, live/full-system/no-mock test, or to install-and-exercise the product end to end. For the **tier-2 scripted-E2E regression suite** (deterministic wdio/Appium specs in `e2e-scripted/`), see the [Scripted-E2E annex](#scripted-e2e-annex-tier-2) at the bottom — it is the same live-run gates, applied to frozen specs instead of agent-driven exploration.
 
+When the user explicitly excludes installation and requests accelerated voice testing, use the [prepared Tart voice track](../../../dev-docs/ACCELERATED_VOICE_TESTS.md). It starts each run from a fresh clone of a stopped, versioned developer-install fixture and retains the shared phone, account, permission, Super Agent, and acoustic gates below. It makes no installation claim. Its fixture lifecycle and repeatable acoustic/event timing tools live in `voice-tests/`; those capture instruments do not replace agent-driven exploration. A warm modified run VM remains debugging evidence until the fix is repeated from a fresh prepared clone.
+
 ## Documentation Ownership (keep the install tracks DRY)
 
 This skill is the **single source of truth for every rule shared by developer-install and signed-DMG field tests**: Appium-first ordering, transport selection and the conditional VPN-passcode gate, field-test accounts and `--mock-payment`, disposable-VM control, Cloud/model checks, phone permissions, acoustic setup, speaker verification, the Super Agent/Desktop-permission gate, failure handling, logging, reporting, and teardown. If a new lesson applies to both installation pathways, update this skill only.

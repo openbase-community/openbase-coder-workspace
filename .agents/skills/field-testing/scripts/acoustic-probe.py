@@ -179,7 +179,8 @@ def record_and_speak(
     os.unlink(native_path)
 
 
-def transcribe_assemblyai(wav_path: str, api_key: str) -> str:
+def transcribe_assemblyai_details(wav_path: str, api_key: str) -> dict:
+    """Return the provider result, including word offsets relative to WAV start."""
     with open(wav_path, "rb") as fh:
         audio = fh.read()
     up = urllib.request.Request(
@@ -202,11 +203,15 @@ def transcribe_assemblyai(wav_path: str, api_key: str) -> str:
         data = json.load(urllib.request.urlopen(poll, timeout=60))
         status = data.get("status")
         if status == "completed":
-            return data.get("text") or "(empty transcript)"
+            return data
         if status == "error":
             raise RuntimeError(f"AssemblyAI error: {data.get('error')}")
         time.sleep(2)
     raise RuntimeError("AssemblyAI transcription timed out")
+
+
+def transcribe_assemblyai(wav_path: str, api_key: str) -> str:
+    return transcribe_assemblyai_details(wav_path, api_key).get("text") or "(empty transcript)"
 
 
 def transcribe_mlx(wav_path: str, model_id: str) -> str:
