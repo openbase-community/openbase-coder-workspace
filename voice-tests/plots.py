@@ -33,7 +33,7 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         "turn_start_response", "turn_wait_start", "voice_turn_result", "tts_stream_first_audio", "tts_stream_flush", "tts_stream_audio_gap", "tts_stream_iter_end", "voice_delivery_playout_release_deferred", "super_agent_steer_interrupt_ack", "super_agent_steer_correction_sent", "super_agent_tool_policy_connected",
         "tts_provider_partial_failure", "tts_provider_inference_failure", "tts_provider_connection_failure",
         "tts_provider_retry", "stt_provider_retry", "stt_provider_connection_closed",
-        "voice_session_unrecoverable_failure", "voice_worker_recovery_exit", "agent_session_start_complete", "session_close", "session_error")
+        "voice_session_unrecoverable_failure", "voice_worker_recovery_exit", "voice_worker_recycle", "voice_worker_drain_started", "voice_worker_force_exit", "voice_worker_started", "agent_session_start_complete", "session_close", "session_error")
         or r['source']=='server' and r['event'].startswith(('observed super_agents_', 'observed livekit_room'))]
     received = [r for r in rows if r["source"] in ("ios", "android")
         and (r.get("diagnostic_message", r["event"]) in (
@@ -157,7 +157,7 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
                 error = row.get("clock_uncertainty_ms", 0) / 1000
                 if error:
                     axis.errorbar(x, lane, xerr=error, color=color, alpha=.35)
-                noisy = any(word in label for word in ('RTP stats', 'mute_keepalive', 'silence gap', 'playback sample', 'before playback'))
+                noisy = any(word in label for word in ('RTP stats', 'mute_keepalive', 'silence gap', 'playback sample', 'before playback', 'level sampled'))
                 if label.startswith('CLI websocket heartbeat') and not any(word in label for word in ('timeout', 'timed out', 'failed', 'error')):
                     noisy = True
                 if label.startswith('IGNORED duplicate '):

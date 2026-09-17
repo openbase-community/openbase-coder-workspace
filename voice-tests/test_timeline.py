@@ -10,6 +10,21 @@ from clock_probe import ClockTransportError, sample_vm_clock
 
 
 class TimingEvidenceTests(unittest.TestCase):
+    def test_cleanup_after_recording_remains_visible_without_acoustic_claim(self):
+        from timeline_report import write_report
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            rows = [dict(source='host', event='recorder_ready', capture_relative_s=0),
+                dict(source='host', event='recording_complete', capture_relative_s=10),
+                dict(source='host', event='call_end_gesture_acknowledged', capture_relative_s=25)]
+            write_report(directory, rows, [], [], [], {}, 10)
+            report = (directory / 'timeline.html').read_text()
+            self.assertIn('25.000</td><td>call_end_gesture_acknowledged', report)
+            self.assertIn('Outside recording; unobserved acoustically', report)
+            self.assertIn('Recorded WAV ends: 10.000 s', report)
+            self.assertIn('fill="url(#unrecorded)"', report)
+            self.assertNotIn('data-seek="25.000"', report)
+
     def test_input_callback_clock_precedes_delayed_log_emission(self):
         with tempfile.TemporaryDirectory() as temp:
             callback = unix_ms('2026-09-17T11:50:00.100Z')

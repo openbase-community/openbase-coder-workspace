@@ -12,6 +12,7 @@ from clock_probe import sample_vm_clock, calibration_from_samples
 from guest import read_guest
 from provider_failures import failure_record
 from evidence import merge_jsonl
+from worker_events import worker_event
 
 ROOT = Path(__file__).resolve().parents[1]
 GUEST = ROOT / "install-tests/electron-macos/guest-automate.sh"
@@ -79,7 +80,10 @@ def main():
         message = record.get("message", "")
         provider_warning = re.fullmatch(r"AssemblyAI no (?:messages received for \d+s|audio frames sent for [\d.]+s) session=[\w-]+", message)
         failure = failure_record(record)
-        if failure is not None:
+        worker = worker_event(record)
+        if worker is not None:
+            lines.append(json.dumps(worker))
+        elif failure is not None:
             lines.append(json.dumps(failure))
         elif provider_warning:
             lines.append(json.dumps({"timestamp": record["timestamp"],
@@ -97,6 +101,15 @@ def main():
                 continue
             timestamp = datetime.strptime(match[1], "%Y-%m-%d %H:%M:%S,%f").replace(tzinfo=timezone.utc).isoformat()
             lines.append(json.dumps({"timestamp": timestamp, "message": match[2]}))
+    extractor = (ROOT / 'voice-tests/worker_events.py').read_text()
+    program = extractor + '\nimport json\nfrom pathlib import Path\np=Path.home()/".openbase/logs/sync-workers.log"\n' + (
+        'if p.exists():\n'
+        ' with p.open("rb") as f:\n'
+        '  f.seek(max(0,p.stat().st_size-2000000))\n'
+        '  for line in f.read().decode(errors="replace").splitlines():\n'
+        '   record=watchdog_event(line)\n'
+        '   if record is not None: print(json.dumps(record))\n')
+    lines.extend(ssh('python3 -c ' + shlex.quote(program)).splitlines())
     merge_jsonl(args.directory / "server.log", "\n".join(lines) + "\n")
     # Sanitize inside the guest before transferring server debug records, which
     # can contain TURN passwords and signaling tokens in nested payloads.

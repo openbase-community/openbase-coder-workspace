@@ -3,7 +3,37 @@ import html
 import json
 
 
+def cleanup_plot(rows, duration):
+    events = [r for r in rows if r['source'] == 'host'
+        and r['event'] in {'recording_complete', 'call_end_gesture_acknowledged'}]
+    start = max(0, duration - 20)
+    end = max([duration] + [r['capture_relative_s'] for r in events]) + 2
+    def x(seconds):
+        return 70 + 800 * (seconds - start) / (end - start)
+    boundary = x(duration)
+    svg = '<svg viewBox="0 0 920 170" role="img" aria-label="Recording boundary and driver cleanup timing"><defs><pattern id="unrecorded" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M0 8L8 0" stroke="#aaa"/></pattern></defs>'
+    svg += '<rect x="70" y="40" width="800" height="55" fill="#e6f4ea"/>'
+    svg += '<rect x="%.2f" y="40" width="%.2f" height="55" fill="url(#unrecorded)"/>' % (boundary, 870 - boundary)
+    svg += '<line x1="%.2f" x2="%.2f" y1="30" y2="100" stroke="#c22" stroke-dasharray="4 3"/><text x="%.2f" y="22" font-size="12">Recorded WAV ends: %.3f s</text>' % (boundary, boundary, max(70, boundary - 180), duration)
+    svg += '<text x="70" y="150" font-size="12">%.3f s</text><text x="800" y="150" font-size="12">%.3f s</text>' % (start, end)
+    for index, row in enumerate(events):
+        seconds = row['capture_relative_s']
+        if start <= seconds <= end:
+            position = x(seconds)
+            svg += '<line x1="%.2f" x2="%.2f" y1="45" y2="100" stroke="#246"/><text x="%.2f" y="%d" font-size="11">%s: %.3f s</text>' % (position, position, min(position, 610), 112 + index * 15, html.escape(row['event']), seconds)
+    return svg + '</svg>'
+
+
 def write_report(directory, rows, words, secondary, pages, assessment, duration):
+    cleanup_events = {'recorder_ready', 'recording_complete', 'call_end_gesture_acknowledged'}
+    cleanup_table = '<h2>Recording boundaries and driver cleanup</h2><p>Cleanup gestures are driver acknowledgments, not native microphone or disconnect acknowledgments. Events after the recording boundary have no acoustic coverage.</p><table><tr><th>Capture seconds</th><th>Event</th><th>Acoustic coverage</th></tr>'
+    for row in rows:
+        if row['source'] == 'host' and row['event'] in cleanup_events:
+            seconds = row['capture_relative_s']
+            cleanup_table += '<tr><td>%.3f</td><td>%s</td><td>%s</td></tr>' % (
+                seconds, html.escape(row['event']),
+                'Inside recording' if 0 <= seconds <= duration else 'Outside recording; unobserved acoustically')
+    cleanup_table += '</table><p>Green: recorded interval. Hatched: no acoustic recording.</p>' + cleanup_plot(rows, duration)
     transcripts = ''.join('<tr><td>%.3f s</td><td>%s</td></tr>' % (r['capture_relative_s'],
         html.escape(r.get('metadata',{}).get('text_excerpt',''))) for r in rows
         if r['event']=='stt_final_transcript' and 0 <= r['capture_relative_s'] <= duration)
@@ -37,7 +67,7 @@ def write_report(directory, rows, words, secondary, pages, assessment, duration)
         '<audio id="room-audio" controls preload="metadata" src="room.wav"></audio><span id="seek-status"></span></div>'
         '<p>Overview, followed by 20-second windows. All event markers remain visible; routine heartbeat and repeated duplicate labels are abbreviated for readability. '
         '<a href="timeline-events.json">Event JSON</a> · <a href="timeline-events.csv">Event CSV</a></p><img src="timeline.svg" alt="Overview">'
-        + coverage_table + acoustic_words + '<h2>Words registered by VM STT</h2><p>Final-transcript receipt times; excerpts can be bounded. Compare these with the room-audio word spans.</p><table><tr><th>Capture time</th><th>Registered text</th></tr>'+transcripts+'</table>' + ''.join(pages)
+        + cleanup_table + coverage_table + acoustic_words + '<h2>Words registered by VM STT</h2><p>Final-transcript receipt times; excerpts can be bounded. Compare these with the room-audio word spans.</p><table><tr><th>Capture time</th><th>Registered text</th></tr>'+transcripts+'</table>' + ''.join(pages)
         + '<details><summary>Search every registered event</summary><input id="event-search" placeholder="Filter event, source or delivery ID" style="width:90%;padding:.6rem">'
         '<table id="event-table"><thead><tr><th>Capture seconds</th><th>Source</th><th>Event</th><th>Clock ±ms</th><th>Metadata</th></tr></thead><tbody>'
         + event_table + '</tbody></table></details><script>document.getElementById("event-search").addEventListener("input", function(){'
