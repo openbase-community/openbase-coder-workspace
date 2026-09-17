@@ -2,11 +2,29 @@
   "seconds": 900,
   "response_tail_s": 100,
   "stimuli": [
-    {"at_s": 3, "text": "Start two Super Agents at the same time in the maple and cedar folders on the Desktop. Name the threads maple and cedar. Have each read its briefing file and build the app described there."},
-    {"at_s": 35, "text": "Steer the Tetris agent in maple. Change its heading to Amber Kite, spelled K, I, T, E. Run the production build after that change, save its actual output and exit code, and announce the result ending with copper meadow complete."},
-    {"at_s": 80, "text": "Steer the chess agent in cedar. Change its heading to Blue Harbor. Run the production build after that change, save its actual output and exit code, and announce the result ending with copper meadow complete."},
-    {"at_s": 400, "text": "Verify the actual headings and saved build results for both apps. Tell me their actual status aloud and end with copper meadow complete."},
-    {"at_s": 550, "text": "Start a Super Agent named elm in the elm folder on the Desktop. Have it read the briefing file and perform the controlled stalled command test described there."},
-    {"at_s": 595, "text": "Steer the elm agent. Stop its waiting command now. Inside elm, write steer-result.txt containing meadow sunrise. Announce that the file is written, ending with copper meadow complete."}
+    {
+      "at_s": 3,
+      "text": "Start two Super Agents at the same time in the maple and cedar folders on the Desktop. Name the threads maple and cedar. Have each read its briefing file and build the app described there."
+    },
+    {
+      "at_s": 35,
+      "text": "Steer the Tetris agent in maple. Change its heading to the two words Amber Kite, with Amber spelled A, M, B, E, R and Kite spelled K, I, T, E. Run the production build after that change, save its actual output and exit code, and announce the result ending with copper meadow complete."
+    },
+    {
+      "at_s": 80,
+      "text": "Steer the chess agent in cedar. Change its heading to Blue Harbor. Run the production build after that change, save its actual output and exit code, and announce the result ending with copper meadow complete."
+    },
+    {
+      "at_s": 400,
+      "text": "Verify the actual headings and saved build results for both apps. Tell me their actual status aloud and end with copper meadow complete."
+    },
+    {
+      "at_s": 550,
+      "text": "Start a Super Agent named elm in the elm folder on the Desktop. Have it read the briefing file and perform the controlled stalled command test described there."
+    },
+    {
+      "at_s": 595,
+      "text": "Steer the elm agent. Stop its waiting command now. Inside elm, write the correction result file specified in its briefing containing meadow sunrise. Announce that the file is written, ending with copper meadow complete."
+    }
   ]
 }
