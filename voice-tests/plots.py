@@ -38,7 +38,9 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
         or r['source']=='server' and r['event'].startswith('observed super_agents_')]
     received = [r for r in rows if r["source"] in ("ios", "android")
         and (r.get("diagnostic_message", r["event"]) in (
-            "received voice lifecycle event", "voice lifecycle received", "ignored stale voice lifecycle event", "ignored duplicate voice lifecycle event")
+            "received voice lifecycle event", "voice lifecycle received", "ignored stale voice lifecycle event", "ignored duplicate voice lifecycle event",
+            "scheduling lifecycle stuck-muted recovery unmute", "scheduled auto-unmute",
+            "scheduled lifecycle auto-unmute", "auto-unmute task did not apply")
             or r["event"].startswith("CLI websocket"))]
     playback = [r for r in rows if r["source"] in ("ios", "android") and "remote audio" in r["event"]]
     host = [r for r in rows if r["source"] == "host" and "playback_process" in r["event"]]
