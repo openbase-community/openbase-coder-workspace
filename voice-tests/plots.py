@@ -42,6 +42,7 @@ def render(directory: Path, clock: dict, rows: list[dict], calibration: dict):
             "scheduled lifecycle auto-unmute", "auto-unmute task did not apply",
             "abandoned announcement after audio participant departed")
             or r["event"].startswith("CLI websocket"))]
+    emitted = [r for r in emitted if r.get('case_room_scope') != 'unrelated_room']
     playback = [r for r in rows if r["source"] in ("ios", "android") and "remote audio" in r["event"]]
     input_capture = [r for r in rows if r['source'] in ('ios', 'android') and r['event'] == 'local audio capture callback']
     output_path = [r for r in rows if r['source'] in ('ios', 'android') and r['event'] == 'audio output path sample']

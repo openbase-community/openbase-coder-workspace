@@ -25,6 +25,8 @@ def cleanup_plot(rows, duration):
 
 
 def write_report(directory, rows, words, secondary, pages, assessment, duration):
+    unrelated_rooms = sum(r.get('case_room_scope') == 'unrelated_room' for r in rows)
+    room_scope_note = '<p>%d unrelated room observations are retained in the searchable event table and JSON, and excluded from this call’s plotted lifecycle lane. Room scope follows the accepted announcement receipt or native current-room name; reconnect generations with that same name remain visible.</p>' % unrelated_rooms
     cleanup_events = {'recorder_ready', 'recording_complete', 'call_end_gesture_acknowledged'}
     cleanup_table = '<h2>Recording boundaries and driver cleanup</h2><p>Cleanup gestures are driver acknowledgments, not native microphone or disconnect acknowledgments. Events after the recording boundary have no acoustic coverage.</p><table><tr><th>Capture seconds</th><th>Event</th><th>Acoustic coverage</th></tr>'
     for row in rows:
@@ -67,7 +69,7 @@ def write_report(directory, rows, words, secondary, pages, assessment, duration)
         '<audio id="room-audio" controls preload="metadata" src="room.wav"></audio><span id="seek-status"></span></div>'
         '<p>Overview, followed by 20-second windows. All event markers remain visible; routine heartbeat and repeated duplicate labels are abbreviated for readability. '
         '<a href="timeline-events.json">Event JSON</a> · <a href="timeline-events.csv">Event CSV</a></p><img src="timeline.svg" alt="Overview">'
-        + cleanup_table + coverage_table + acoustic_words + '<h2>Words registered by VM STT</h2><p>Final-transcript receipt times; excerpts can be bounded. Compare these with the room-audio word spans.</p><table><tr><th>Capture time</th><th>Registered text</th></tr>'+transcripts+'</table>' + ''.join(pages)
+        + room_scope_note + cleanup_table + coverage_table + acoustic_words + '<h2>Words registered by VM STT</h2><p>Final-transcript receipt times; excerpts can be bounded. Compare these with the room-audio word spans.</p><table><tr><th>Capture time</th><th>Registered text</th></tr>'+transcripts+'</table>' + ''.join(pages)
         + '<details><summary>Search every registered event</summary><input id="event-search" placeholder="Filter event, source or delivery ID" style="width:90%;padding:.6rem">'
         '<table id="event-table"><thead><tr><th>Capture seconds</th><th>Source</th><th>Event</th><th>Clock ±ms</th><th>Metadata</th></tr></thead><tbody>'
         + event_table + '</tbody></table></details><script>document.getElementById("event-search").addEventListener("input", function(){'

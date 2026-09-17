@@ -4,12 +4,18 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from timeline import device_clock_bounds, events, phone_clock_bounds, unix_ms
+from timeline import device_clock_bounds, events, phone_clock_bounds, unix_ms, within_capture_or_cleanup
 from clock_probe import calibration_from_samples
 from clock_probe import ClockTransportError, sample_vm_clock
 
 
 class TimingEvidenceTests(unittest.TestCase):
+    def test_main_capture_filter_keeps_late_cleanup_but_excludes_unrecorded_audio(self):
+        base = {'source':'host', 'unix_ms':25000}
+        self.assertTrue(within_capture_or_cleanup({**base,'event':'call_end_gesture_acknowledged'},0,10))
+        self.assertTrue(within_capture_or_cleanup({**base,'event':'failed_session_cleanup_authorized'},0,10))
+        self.assertFalse(within_capture_or_cleanup({**base,'event':'playback_process_start'},0,10))
+
     def test_cleanup_after_recording_remains_visible_without_acoustic_claim(self):
         from timeline_report import write_report
         with tempfile.TemporaryDirectory() as temp:

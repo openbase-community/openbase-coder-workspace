@@ -11,6 +11,7 @@ import math
 from pathlib import Path
 import re
 from clock_probe import calibration_from_samples
+from room_events import label_case_rooms
 
 
 def unix_ms(timestamp: str) -> float:
@@ -29,6 +30,13 @@ def read_jsonl(path: Path):
         except json.JSONDecodeError:
             # A bounded log tail may start in the middle of a record.
             continue
+
+
+def within_capture_or_cleanup(row, origin, duration):
+    return 0 <= (row['unix_ms'] - origin) / 1000 <= duration + 2 or (
+        row['source'] == 'host' and row['event'] in (
+            'recording_complete', 'call_end_gesture_acknowledged',
+            'failed_session_cleanup_authorized'))
 
 
 def events(directory: Path) -> list[dict]:
@@ -221,7 +229,8 @@ def main() -> None:
             "applied mute state", "LiveKit room connection state changed", "call state changed") and r["unix_ms"] < origin]
         if direct and before:
             prior_microphones.append(before[-1])
-    rows = prior_microphones + [r for r in rows if 0 <= (r["unix_ms"] - origin) / 1000 <= duration + 2]
+    rows = prior_microphones + [r for r in rows if within_capture_or_cleanup(r, origin, duration)]
+    label_case_rooms(rows)
     (directory / "clock-bounds.json").write_text(json.dumps({"host_mapping": clock["wall_mapping"], "calibration": calibration, "phone_minus_server": phone_bounds}, indent=2) + "\n")
     for row in rows:
         row["capture_relative_s"] = (row["unix_ms"] - origin) / 1000

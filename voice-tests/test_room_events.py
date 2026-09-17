@@ -1,9 +1,19 @@
 import json
 import unittest
-from room_events import room_event
+from room_events import room_event, label_case_rooms
 
 
 class RoomEventTests(unittest.TestCase):
+    def test_previous_room_close_is_not_drawn_as_current_call_failure(self):
+        rows = [{'source':'host', 'event':'announcement_command_end',
+                 'receipt':'Announcer message sent to room-current.\n'}]
+        rows += [{'source':'server', 'event':'observed livekit_room closing room',
+                  'metadata':{'room':name, 'roomID':sid}}
+                 for name,sid in [('room-old','RM_old'),('room-current','RM_first'),('room-current','RM_rejoined')]]
+        self.assertEqual(label_case_rooms(rows), {'room-current'})
+        self.assertEqual([r['case_room_scope'] for r in rows[1:]],
+                         ['unrelated_room','current_call','current_call'])
+
     def test_room_close_retains_cause_and_id_but_no_signal_credentials(self):
         payload = {"roomID": "RM_example", "reason": "IDLE_TIMEOUT", "signal": {"password": "private"}, "token": "private", "error": "private"}
         line = "2026-09-17T11:16:12.704Z\tINFO\tlivekit.room\trtc/room.go:822\tclosing room\t" + json.dumps(payload)
