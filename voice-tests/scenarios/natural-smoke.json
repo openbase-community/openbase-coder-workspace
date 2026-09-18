@@ -1,0 +1,10 @@
+{
+  "seconds": 150,
+  "response_tail_s": 80,
+  "stimuli": [
+    {
+      "at_s": 3,
+      "text": "Hey, before we start coding, can you tell me briefly how you can help me work with two coding agents at once?"
+    }
+  ]
+}
