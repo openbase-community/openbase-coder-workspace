@@ -29,7 +29,7 @@ def android_ready(source: str) -> bool:
 def ios_ready(source: str) -> bool:
     tree = ET.fromstring(source)
     application = next((e for e in tree.iter() if e.get("type") == "XCUIElementTypeApplication"), None)
-    if application is None:
+    if application is None or application.get("visible") != "true":
         return False
     width, height = float(application.get("width", 0)), float(application.get("height", 0))
     def in_view(element):
@@ -57,7 +57,7 @@ def valid_permit(permit: dict, nonce: str, now_ms: float | None = None) -> bool:
 def ios_speaker_enabled(source: str) -> bool:
     tree = ET.fromstring(source)
     application = next((e for e in tree.iter() if e.get('type') == 'XCUIElementTypeApplication'), None)
-    if application is None:
+    if application is None or application.get("visible") != "true":
         return False
     width, height = float(application.get('width', 0)), float(application.get('height', 0))
     for element in tree.iter():

@@ -5,8 +5,9 @@ from readiness import ios_ready, android_ready, valid_permit, ios_speaker_enable
 
 class ReadinessTests(unittest.TestCase):
     def test_ios_speaker_approval_cannot_promote_off_missing_or_hidden_state(self):
-        source = '<AppiumAUT><XCUIElementTypeApplication type="XCUIElementTypeApplication" width="390" height="844"><XCUIElementTypeButton type="XCUIElementTypeButton" label="Speaker" value="On" visible="true" enabled="true" x="267" y="710" width="64" height="87"/></XCUIElementTypeApplication></AppiumAUT>'
+        source = '<AppiumAUT><XCUIElementTypeApplication type="XCUIElementTypeApplication" visible="true" width="390" height="844"><XCUIElementTypeButton type="XCUIElementTypeButton" label="Speaker" value="On" visible="true" enabled="true" x="267" y="710" width="64" height="87"/></XCUIElementTypeApplication></AppiumAUT>'
         self.assertTrue(ios_speaker_enabled(source))
+        self.assertFalse(ios_speaker_enabled(source.replace('type="XCUIElementTypeApplication" visible="true"', 'type="XCUIElementTypeApplication" visible="false"')))
         self.assertFalse(ios_speaker_enabled(source.replace('value="On"', 'value="Off"')))
         self.assertFalse(ios_speaker_enabled(source.replace('value="On"', '')))
         self.assertFalse(ios_speaker_enabled(source.replace('visible="true"', 'visible="false"')))
@@ -27,13 +28,14 @@ class ReadinessTests(unittest.TestCase):
         self.assertFalse(android_ready(source.replace('[200,2100][300,2200]', '[200,2500][300,2600]')))
 
     def test_listening_text_alone_does_not_allow_a_muted_phone(self):
-        source = '<root><e type="XCUIElementTypeApplication" width="390" height="844"/><e width="40" height="40" visible="true" enabled="true" label="Listening..."/><e width="40" height="40" visible="true" enabled="true" type="XCUIElementTypeButton" label="Unmute"/></root>'
+        source = '<root><e type="XCUIElementTypeApplication" visible="true" width="390" height="844"/><e width="40" height="40" visible="true" enabled="true" label="Listening..."/><e width="40" height="40" visible="true" enabled="true" type="XCUIElementTypeButton" label="Unmute"/></root>'
         self.assertFalse(ios_ready(source))
         connected = source.replace('label="Unmute"', 'label="Mute"').replace('</root>',
             '<e width="40" height="40" visible="true" enabled="true" type="XCUIElementTypeButton" label="End"/>'
             '<e width="40" height="40" visible="true" enabled="true" label="connected"/>'
             '<e width="40" height="40" visible="true" enabled="true" label="active"/></root>')
         self.assertTrue(ios_ready(connected))
+        self.assertFalse(ios_ready(connected.replace('type="XCUIElementTypeApplication" visible="true"', 'type="XCUIElementTypeApplication" visible="false"')))
         self.assertFalse(ios_ready(connected.replace('label="connected"', 'label="disconnected"')))
         self.assertFalse(ios_ready(connected.replace('label="End"', 'label="Start"')))
         self.assertFalse(ios_ready(source.replace('Listening...', 'Speaking...').replace('label="Unmute"', 'label="Mute"')))
