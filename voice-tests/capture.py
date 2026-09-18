@@ -125,8 +125,9 @@ def main(argv=None) -> None:
                 stimulus_seconds = stimulus_durations[index]
                 deadline_s = seconds - stimulus_seconds - float(scenario.get("response_tail_s", 10))
                 if stimulus.get("mode", "ordinary") != "overlap":
+                    phone_state = "agent_speaking" if stimulus.get("mode") == "interruption" else "listening"
                     nonce = uuid.uuid4().hex
-                    request = {"index": index, "nonce": nonce, "text": stimulus["text"], "required": "fresh native listening + mic enabled + speaker verified"}
+                    request = {"index": index, "nonce": nonce, "text": stimulus["text"], "phone_state": phone_state, "required": f"fresh native {phone_state} + mic enabled + speaker verified"}
                     (gates / f"request-{index}.json").write_text(json.dumps(request, indent=2) + "\n")
                     event("readiness_gate_requested", index=index, nonce=nonce)
                     print(f"Waiting for native readiness permit: {gates / f'permit-{index}.json'}", flush=True)
@@ -136,8 +137,10 @@ def main(argv=None) -> None:
                             raise TimeoutError("No fresh native readiness permit before recording deadline; stimulus was not played")
                         if permit_path.exists():
                             permit = json.loads(permit_path.read_text())
-                            if valid_permit(permit, nonce):
+                            if valid_permit(permit, nonce, phone_state=phone_state):
                                 event("readiness_gate_permitted", index=index, proof=permit)
+                                if phone_state == "agent_speaking":
+                                    event("intentional_overlap_stimulus", index=index)
                                 break
                         time.sleep(.02)
                 else:

@@ -35,6 +35,10 @@ class ReadinessTests(unittest.TestCase):
             '<e width="40" height="40" visible="true" enabled="true" label="connected"/>'
             '<e width="40" height="40" visible="true" enabled="true" label="active"/></root>')
         self.assertTrue(ios_ready(connected))
+        speaking = connected.replace('Listening...', 'Agent speaking')
+        self.assertFalse(ios_ready(speaking))
+        self.assertTrue(ios_ready(speaking, state="Agent speaking"))
+        self.assertFalse(ios_ready(speaking.replace('label="Mute"', 'label="Unmute"'), state="Agent speaking"))
         self.assertFalse(ios_ready(connected.replace('type="XCUIElementTypeApplication" visible="true"', 'type="XCUIElementTypeApplication" visible="false"')))
         self.assertFalse(ios_ready(connected.replace('label="connected"', 'label="disconnected"')))
         self.assertFalse(ios_ready(connected.replace('label="End"', 'label="Start"')))
@@ -48,6 +52,10 @@ class ReadinessTests(unittest.TestCase):
         self.assertFalse(valid_permit(permit, "previous", 1200))
         self.assertFalse(valid_permit(permit, "current", 2600))
         self.assertFalse(valid_permit(permit, "current", 900))
+        self.assertFalse(valid_permit(permit, "current", 1200, phone_state="agent_speaking"))
+        permit["phone_state"] = "agent_speaking"
+        self.assertFalse(valid_permit(permit, "current", 1200))
+        self.assertTrue(valid_permit(permit, "current", 1200, phone_state="agent_speaking"))
         permit["microphone_enabled"] = False
         self.assertFalse(valid_permit(permit, "current", 1200))
 
