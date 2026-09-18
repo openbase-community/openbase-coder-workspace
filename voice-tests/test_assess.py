@@ -43,6 +43,18 @@ class AcousticAssessmentTests(unittest.TestCase):
         self.assertEqual(assess(rows, self.words(), 'velvet orchard complete')['status'],
             'complete_marker_unmute_clock_uncalibrated')
 
+    def test_later_unsolicited_announcement_does_not_own_reply_unmute(self):
+        for gap in (-.7, 77):
+            rows = self.rows(gap)
+            rows += [dict(source='ios', event='applied mute state', capture_relative_s=110,
+                metadata={'microphone_enabled': False}),
+                dict(source='ios', event='applied mute state', capture_relative_s=130,
+                metadata={'microphone_enabled': True}, clock_uncertainty_ms=30)]
+            result = assess(rows, self.words(), 'velvet orchard complete')
+            self.assertAlmostEqual(result['unmute_after_word_ms'], gap * 1000)
+            if gap < 0:
+                self.assertEqual(result['status'], 'premature_unmute_candidate_requires_waveform_review')
+
     def test_later_turn_cannot_hide_earlier_premature_unmute(self):
         rows = self.rows(-.7)
         rows[0]['index'] = 0

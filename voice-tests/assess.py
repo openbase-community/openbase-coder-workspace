@@ -39,7 +39,7 @@ def assess(rows, words, terminal_phrase, asr_uncertainty_ms=400, stimulus_index=
     result.update(terminal_word_end_s=end, terminal_occurrences=len(candidates))
     mutes = [r for r in rows if r['event'] == 'applied mute state'
         and str(r.get('metadata', {}).get('microphone_enabled')).lower() == 'false'
-        and input_end < r['capture_relative_s'] < window_end]
+        and input_end < r['capture_relative_s'] < terminal[0]['start'] / 1000]
     if not mutes:
         return {**result, 'status': 'complete_marker_missing_native_mute_evidence'}
     live = [r for r in rows if r['source'] == mutes[-1]['source'] and r['event'] == 'applied mute state'
