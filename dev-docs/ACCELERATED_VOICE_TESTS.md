@@ -2,6 +2,8 @@
 
 Use this track when installation is already understood and the question is how the dispatcher, Super Agents, phone audio, and mute lifecycle behave during a real call. Each run starts from a fresh clone of a **stopped, prepared Tart fixture**, with the developer installation and dedicated test-account login already complete. This provides repeatable voice coverage without reinstalling the product. It provides **no installation coverage**. A retained, modified run VM is debugging evidence; fix, refresh the prepared fixture, and repeat from another fresh clone before reporting the fix as verified.
 
+Collect `python3 voice-tests/backend_tools.py VM CASE_DIRECTORY` during and after real dispatch. It merges observed filesystem, skill and Super Agent tool invocations into the timing evidence from bounded SDK log tails. Arguments can contain private data, so keep the output in the ignored report directory. A zero dispatch count is not a zero filesystem-call count, and a bounded checkpoint cannot establish absence of older calls. Pair invocations with actual turn outcomes and file/build evidence; invocation timestamps do not prove tool success.
+
 The [field-testing skill](../.agents/skills/field-testing/SKILL.md) owns all shared phone, Appium, account, permission, speaker, acoustic-loop, model, and reporting gates. Follow its Appium-first and early iPhone VPN-passcode ordering before preparing the computer. The user enters any physical-device passcode directly; a test must record whether the actual VPN passcode sheet appeared. This page owns only prepared-fixture mechanics, scenario timing, and evidence interpretation.
 
 ## Prepare and seal a fixture
