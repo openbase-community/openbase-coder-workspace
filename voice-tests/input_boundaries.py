@@ -23,7 +23,10 @@ def assess_input(alignment, rows, allowance_ms=10):
         return {**result, 'status': 'input_started_with_last_acknowledged_mic_disabled'}
     following = [r['capture_relative_s'] for r in rows
                  if r['event'] == 'playback_process_start' and r['capture_relative_s'] > end]
-    limit = min(following) if following else float('inf')
+    # A missing journal interval must not borrow an unrelated announcement's
+    # mute minutes later and turn an unknown input boundary into a safe one.
+    limit = min([end + 30, *following])
+    result['mute_observation_deadline_s'] = limit
     muted = [r for r in events if start < r['capture_relative_s'] < limit
              and str(r.get('metadata', {}).get('microphone_enabled')).lower() == 'false']
     if not muted:

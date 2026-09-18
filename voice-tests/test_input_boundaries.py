@@ -29,3 +29,8 @@ class InputBoundaryTests(unittest.TestCase):
     def test_prior_muted_mic_is_not_mistaken_for_safe_input(self):
         self.assertEqual(assess_input(self.alignment,[self.mute(1),self.mute(9)])['status'],
                          'input_started_with_last_acknowledged_mic_disabled')
+
+    def test_later_unrelated_announcement_cannot_fill_a_journal_gap(self):
+        result=assess_input(self.alignment,[self.mute(1,True),self.mute(90)])
+        self.assertEqual(result['status'],'native_mute_not_observed')
+        self.assertEqual(result['mute_observation_deadline_s'],38)
