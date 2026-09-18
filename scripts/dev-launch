@@ -137,7 +137,7 @@ if [ "$LAUNCH_ELECTRON" = true ]; then
     echo "Branded the dev Electron bundle as Openbase."
   fi
   DIST_INDEX="$DESKTOP_DIR/dist/index.html"
-  if [ ! -f "$DIST_INDEX" ] || [ -n "$(find "$DESKTOP_DIR/src" "$DESKTOP_DIR/index.html" "$DESKTOP_DIR/vite.config"* -newer "$DIST_INDEX" -print -quit 2>/dev/null)" ]; then
+  if [ ! -f "$DIST_INDEX" ] || ! node "$ROOT_DIR/scripts/check-renderer-freshness.cjs" "$ROOT_DIR" desktop || [ -n "$(find "$DESKTOP_DIR/src" "$DESKTOP_DIR/index.html" "$DESKTOP_DIR/vite.config"* "$ROOT_DIR/coder-react/src" "$ROOT_DIR/multi-react/src" "$ROOT_DIR/boilersync-react/src" -newer "$DIST_INDEX" -print -quit 2>/dev/null)" ]; then
     echo "Building the dashboard renderer…"
     pnpm --dir "$DESKTOP_DIR" build
   fi
