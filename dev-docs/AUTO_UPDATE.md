@@ -123,6 +123,8 @@ The user-facing shim (`~/.local/bin/openbase-coder`) and service wrappers point 
 
 ## State-file schema versions
 
+The CLI notification store (`notifications.json`) uses `version: 2`. A forward-only read migration preserves notification entries and replaces the version-1 global report mtime watermark with per-report observations. The first discovery pass uses the migrated cutoff once to preserve the existing quiet baseline, then records individual file versions; subsequent new paths are detected regardless of mtime. Unknown store versions are refused.
+
 Every Openbase-owned state file carries a `schema_version` (all currently 1):
 
 - `~/.openbase/installation.json`
