@@ -91,7 +91,7 @@ To verify a host after updating develop, check its standing branches against fre
 
 ## 6. Resetting
 
-Syncthing policy: `.git` (and all VCS metadata) is **never synced** — the `~/Projects/.stglobalignore` patterns enforce this and `openbase-coder doctor` checks it. If a file mysteriously changes or vanishes mid-operation, suspect a working-tree sync race from the other machine and check `~/.openbase/sync-versions/` (code-sync history) before assuming data loss.
+Syncthing policy: `.git` (and all VCS metadata) is **never file-synced** — the `~/Projects/.stglobalignore` patterns enforce this and `openbase-coder doctor` checks it. This applies to Syncthing (code sync's layer 1) *only*: git commits and branch pointers still cross machines through code sync's separate reconciler (layer 2, over git's own tailnet transport — see `dev-docs/GLOSSARY.md` "Repo reconciler"). So "never synced" means "never rides Syncthing," **not** "stays on one machine" — expect branches and commits to appear from a peer. If a file mysteriously changes or vanishes mid-operation, suspect a working-tree sync race from the other machine and check `~/.openbase/sync-versions/` (code-sync history) before assuming data loss.
 
 To test first-run behavior from scratch: stop services (`openbase-coder services stop`), archive `~/.openbase` (move it aside), and re-run `./scripts/setup`. You lose cloud login (re-run `openbase-coder login`), dispatcher settings (e.g. the skills auto-link toggle), and the Syncthing thread-sync folder identity.
 
