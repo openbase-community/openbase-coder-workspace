@@ -1,0 +1,49 @@
+{
+  "seconds": 480,
+  "response_tail_s": 100,
+  "stimuli": [
+    {
+      "at_s": 3,
+      "text": "Hey, can you start two Super Agents for me? One in the maple folder on my Desktop, and one in cedar. Have them follow the briefing files and build those apps.",
+      "segments": [
+        {
+          "text": "Hey, can you start two Super Agents for me?",
+          "gap_after_s": 0.6
+        },
+        {
+          "text": "One in the maple folder on my Desktop, and one in cedar. Have them follow the briefing files and build those apps."
+        }
+      ]
+    },
+    {
+      "at_s": 65,
+      "text": "For the Tetris app in maple, change the heading to Silver Fox. Actually, sorry, make that Copper Meadow. Keep everything else the same and run the build.",
+      "segments": [
+        {
+          "text": "For the Tetris app in maple, change the heading to Silver Fox.",
+          "gap_after_s": 0.85
+        },
+        {
+          "text": "Actually, sorry, make that Copper Meadow. Keep everything else the same and run the build."
+        }
+      ]
+    },
+    {
+      "at_s": 125,
+      "text": "And for the chess app in cedar, make the heading Blue Harbor. Oh, and use a dark blue background. Please build it when you are done.",
+      "segments": [
+        {
+          "text": "And for the chess app in cedar, make the heading Blue Harbor.",
+          "gap_after_s": 1.1
+        },
+        {
+          "text": "Oh, and use a dark blue background. Please build it when you are done."
+        }
+      ]
+    },
+    {
+      "at_s": 305,
+      "text": "How did those two apps turn out? Check the actual headings and whether the builds passed. I just want a quick update, no need to deploy anything."
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "seconds": 240,
+  "response_tail_s": 60,
+  "stimuli": [{
+    "at_s": 3,
+    "text": "Verify the existing task in the cedar folder on the Desktop. Cedar is spelled C, E, D, A, R. Tell me its current visible heading and latest production build result. End with copper meadow complete."
+  }]
+}

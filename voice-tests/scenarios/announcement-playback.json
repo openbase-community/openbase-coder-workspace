@@ -1,0 +1,14 @@
+{
+  "announcements": [
+    {
+      "thread": "maple",
+      "text": "This is a controlled playback probe, not a report that an app task finished. A small balloon drifted above the garden at sunrise. Below it, a turtle followed a winding path through warm grass. The balloon passed the apple tree, the quiet pond, and the wooden gate. Every sentence in this probe should play completely before the microphone is released. The turtle reached the gate and rested in the morning light. This first probe now ends with slate river complete.",
+      "terminal_phrase": "slate river complete"
+    },
+    {
+      "thread": "cedar",
+      "text": "This is the second controlled playback probe, not a report that an app task finished. A paper boat crossed a clear pond while a sparrow watched from a branch. The boat carried a yellow leaf toward the far bank. A gentle breeze moved the reeds, and the sparrow sang above the water. Each sentence should remain audible through the end of this message. The boat reached the bank safely, and the sparrow returned to its nest. This second probe now ends with velvet orchard complete.",
+      "terminal_phrase": "velvet orchard complete"
+    }
+  ]
+}

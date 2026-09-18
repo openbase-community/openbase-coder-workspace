@@ -43,7 +43,16 @@ VM_USER="${VM_USER:-admin}"; VM_PASS="${VM_PASS:-admin}"
 # Disposable field-test guests use the explicit VM password above. Ignore the
 # host's SSH agent so a busy developer keychain cannot exhaust MaxAuthTries
 # before password authentication is attempted.
-SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o PubkeyAuthentication=no -o PreferredAuthentications=password)
+SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10)
+# macOS Bash 3.2 treats an empty array expansion as unbound under nounset.
+SSH_AUTH=(env)
+if [[ -n "${VM_SSH_IDENTITY_FILE:-}" ]]; then
+  [[ -f "$VM_SSH_IDENTITY_FILE" ]] || { printf 'Configured VM SSH identity is missing\n' >&2; exit 2; }
+  SSH_OPTS+=(-i "$VM_SSH_IDENTITY_FILE" -o IdentityAgent=none -o IdentitiesOnly=yes -o BatchMode=yes -o PubkeyAuthentication=yes -o PreferredAuthentications=publickey)
+else
+  SSH_OPTS+=(-o PubkeyAuthentication=no -o PreferredAuthentications=password)
+  SSH_AUTH=(sshpass -p "$VM_PASS")
+fi
 SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
 
 die() { printf '\033[31mFATAL\033[0m %s\n' "$*" >&2; exit 2; }
@@ -58,7 +67,7 @@ vm_ip() {
 
 ssh_vm() { # IP CMD...
   local ip="$1"; shift
-  sshpass -p "$VM_PASS" ssh "${SSH_OPTS[@]}" "$VM_USER@$ip" "$@"
+  "${SSH_AUTH[@]}" ssh "${SSH_OPTS[@]}" "$VM_USER@$ip" "$@"
 }
 
 cmd="${1:-}"; shift || true
@@ -74,7 +83,7 @@ case "$cmd" in
     NAME="${1:?usage: guest-automate.sh push NAME SRC DEST}"
     SRC="${2:?src}"; DEST="${3:?dest}"
     IP="$(vm_ip "$NAME")"
-    sshpass -p "$VM_PASS" scp -q "${SSH_OPTS[@]}" -r "$SRC" "$VM_USER@$IP:$DEST"
+    "${SSH_AUTH[@]}" scp -q "${SSH_OPTS[@]}" -r "$SRC" "$VM_USER@$IP:$DEST"
     step "pushed $SRC -> $NAME:$DEST" ;;
 
   pin-layout)
@@ -106,7 +115,7 @@ case "$cmd" in
     step "starting guest safaridriver on :$PORT and forwarding to localhost:$PORT"
     step "WebDriver endpoint: http://127.0.0.1:$PORT  (Ctrl-C to stop)"
     # -t keeps safaridriver attached to the ssh session so Ctrl-C cleans up.
-    sshpass -p "$VM_PASS" ssh -t "${SSH_OPTS[@]}" -L "$PORT:127.0.0.1:$PORT" \
+    "${SSH_AUTH[@]}" ssh -t "${SSH_OPTS[@]}" -L "$PORT:127.0.0.1:$PORT" \
       "$VM_USER@$IP" "/usr/bin/safaridriver --port $PORT" ;;
 
   safari-adopt)
@@ -155,7 +164,7 @@ case "$cmd" in
     step "app launched with CDP on guest :$PORT — forwarding to localhost:$PORT"
     step "CDP endpoint: http://127.0.0.1:$PORT  (Ctrl-C to stop)"
     step "drive it: node driver/host-drive.mjs --cdp http://127.0.0.1:$PORT <cmd...>"
-    sshpass -p "$VM_PASS" ssh -N "${SSH_OPTS[@]}" -L "$PORT:127.0.0.1:$PORT" "$VM_USER@$IP" ;;
+    "${SSH_AUTH[@]}" ssh -N "${SSH_OPTS[@]}" -L "$PORT:127.0.0.1:$PORT" "$VM_USER@$IP" ;;
 
   *)
     sed -n '2,40p' "$0"; exit 2 ;;

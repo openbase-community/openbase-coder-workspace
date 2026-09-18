@@ -1,0 +1,26 @@
+{
+  "seconds": 360,
+  "response_tail_s": 90,
+  "stimuli": [
+    {
+      "at_s": 3,
+      "text": "Can you put me through to the agent working on the Tetris app in Maple?"
+    },
+    {
+      "at_s": 50,
+      "text": "Hey, quick change: make the start button say Let's play. Actually, Start game is clearer. Please use that, keep Copper Meadow as the heading, and run the build.",
+      "segments": [
+        {"text": "Hey, quick change: make the start button say Let's play.", "gap_after_s": 0.7},
+        {"text": "Actually, Start game is clearer. Please use that, keep Copper Meadow as the heading, and run the build."}
+      ]
+    },
+    {
+      "at_s": 160,
+      "text": "Bring me back to the dispatcher, please."
+    },
+    {
+      "at_s": 220,
+      "text": "Can you check with both agents and give me one short update on what changed and whether the builds passed?"
+    }
+  ]
+}

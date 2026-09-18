@@ -207,3 +207,11 @@ From-source version integrity: staging tags end in `.dev0` because setuptools-sc
 - [ ] Self-update completes without the desktop app running (CLI + routines-service path only)
 - [ ] Concurrent self-updates are serialized by the update lock
 - [ ] Releases are draft-first and fail on mid-build sibling pushes
+
+## Developer source provenance
+
+Developer freshness is separate from release updates. Managed service runners write private, atomic schema-version-1 records under `~/.openbase/dev-runtime/`, binding startup revisions to PID and OS process creation time. Reused PIDs, missing/unsupported records, different workspaces, unavailable source, and failed probes must never appear current. External-engine records capture executable SHA-256 at launch; LiveKit is also checked against the current source pin. Direct builds write an artifact-digest-bound `.provenance.json` sidecar, so restarting an old compiled executable cannot acquire the latest checkout identity.
+
+The shared Vite plugin in `coder-react/build/runtime-provenance.cjs` embeds developer build provenance in loaded JavaScript and emits `dist/provenance.json`; desktop builds also emit a main/preload stamp validated against packaged Electron file contents. Build stamps contain opaque workspace identity and per-repository commits, never source paths. CI builds omit developer stamps. Source builds restart the Vite server on hot updates so a reload receives a coherent stamp; this first version does not verify uncommitted content.
+
+Developer clients send loaded stamps in a read-only `POST /api/health/warnings/`; the response adds `freshness` with `enabled`, `checked_at`, `coverage`, and component states (`current`, `stale`, `unknown`). GET retains the existing health response. The backend accepts only known component/repository identities, never client-supplied filesystem paths. Standalone runtimes return `enabled: false` before probing source. Production Electron builds do not request checks even when connected to a developer backend. Unknown native companion provenance and unverified mobile/session coverage remain explicit until those components provide their own handshake.

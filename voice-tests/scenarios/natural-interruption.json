@@ -1,0 +1,19 @@
+{
+  "seconds": 240,
+  "response_tail_s": 60,
+  "stimuli": [
+    {
+      "at_s": 3,
+      "text": "Could you walk me through how you coordinate multiple coding agents, in about two hundred words? Include an example of changing a requirement while both agents are still working."
+    },
+    {
+      "at_s": 45,
+      "mode": "interruption",
+      "text": "Actually, stop there. Just give me the short version, in one sentence."
+    },
+    {
+      "at_s": 140,
+      "text": "Thanks. Which two apps are we working on right now?"
+    }
+  ]
+}

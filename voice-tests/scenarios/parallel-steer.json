@@ -1,0 +1,22 @@
+{
+  "seconds": 720,
+  "response_tail_s": 100,
+  "stimuli": [
+    {
+      "at_s": 3,
+      "text": "Start two Super Agents at the same time in the maple and cedar folders on the Desktop. Name the threads maple and cedar. Have each read its briefing file and build the app described there."
+    },
+    {
+      "at_s": 35,
+      "text": "Steer the Tetris agent in maple. Change its heading to Silver Fox. Run the production build after that change, save its actual output and exit code, and announce the result ending with copper meadow complete."
+    },
+    {
+      "at_s": 80,
+      "text": "Steer the chess agent in cedar. Change its heading to Blue Harbor. Run the production build after that change, save its actual output and exit code, and announce the result ending with copper meadow complete."
+    },
+    {
+      "at_s": 400,
+      "text": "Verify the actual headings and saved build results for both apps. Tell me their actual status aloud and end with copper meadow complete."
+    }
+  ]
+}

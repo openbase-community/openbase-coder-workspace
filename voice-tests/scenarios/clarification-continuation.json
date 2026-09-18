@@ -1,0 +1,18 @@
+{
+  "seconds": 300,
+  "response_tail_s": 65,
+  "stimuli": [
+    {
+      "at_s": 3,
+      "text": "For maple, I am choosing between the headings Amber Kite and Silver Fox. Ask me to confirm which one before you change anything."
+    },
+    {
+      "at_s": 65,
+      "text": "Verify only the cedar app. Read its actual current heading and saved build result. Tell me the actual result aloud, ending with copper meadow complete."
+    },
+    {
+      "at_s": 135,
+      "text": "Confirm the maple heading should be Silver Fox. Steer its existing agent to make that change, run the production build, save the actual output and exit code, and announce the result ending with copper meadow complete."
+    }
+  ]
+}

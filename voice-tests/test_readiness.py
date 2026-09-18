@@ -1,0 +1,64 @@
+import unittest
+
+from readiness import ios_ready, android_ready, valid_permit, ios_speaker_enabled
+
+
+class ReadinessTests(unittest.TestCase):
+    def test_ios_speaker_approval_cannot_promote_off_missing_or_hidden_state(self):
+        source = '<AppiumAUT><XCUIElementTypeApplication type="XCUIElementTypeApplication" visible="true" width="390" height="844"><XCUIElementTypeButton type="XCUIElementTypeButton" label="Speaker" value="On" visible="true" enabled="true" x="267" y="710" width="64" height="87"/></XCUIElementTypeApplication></AppiumAUT>'
+        self.assertTrue(ios_speaker_enabled(source))
+        self.assertFalse(ios_speaker_enabled(source.replace('type="XCUIElementTypeApplication" visible="true"', 'type="XCUIElementTypeApplication" visible="false"')))
+        self.assertFalse(ios_speaker_enabled(source.replace('value="On"', 'value="Off"')))
+        self.assertFalse(ios_speaker_enabled(source.replace('value="On"', '')))
+        self.assertFalse(ios_speaker_enabled(source.replace('visible="true"', 'visible="false"')))
+        self.assertFalse(ios_speaker_enabled(source.replace('y="710"', 'y="900"')))
+
+    def test_android_requires_connected_room_and_live_mic_in_viewport(self):
+        nodes = ['<node bounds="[0,0][1080,2400]" displayed="true" enabled="true">']
+        for text in ("Listening…", "connected", "active"):
+            nodes.append(f'<node text="{text}" bounds="[100,300][300,400]" displayed="true" enabled="true"/>')
+        for label in ("Mute", "End"):
+            nodes.append(f'<node content-desc="{label}" bounds="[200,2100][300,2200]" displayed="true" enabled="true"/>')
+        source = '<hierarchy>' + ''.join(nodes) + '</node></hierarchy>'
+        self.assertTrue(android_ready(source))
+        # UiAutomator2 emits Java class names as tags, unlike uiautomator dumps.
+        self.assertTrue(android_ready(source.replace('<node', '<android.view.View').replace('</node>', '</android.view.View>')))
+        self.assertFalse(android_ready(source.replace('content-desc="Mute"', 'content-desc="Unmute"')))
+        self.assertFalse(android_ready(source.replace('text="connected"', 'text="disconnected"')))
+        self.assertFalse(android_ready(source.replace('[200,2100][300,2200]', '[200,2500][300,2600]')))
+
+    def test_listening_text_alone_does_not_allow_a_muted_phone(self):
+        source = '<root><e type="XCUIElementTypeApplication" visible="true" width="390" height="844"/><e width="40" height="40" visible="true" enabled="true" label="Listening..."/><e width="40" height="40" visible="true" enabled="true" type="XCUIElementTypeButton" label="Unmute"/></root>'
+        self.assertFalse(ios_ready(source))
+        connected = source.replace('label="Unmute"', 'label="Mute"').replace('</root>',
+            '<e width="40" height="40" visible="true" enabled="true" type="XCUIElementTypeButton" label="End"/>'
+            '<e width="40" height="40" visible="true" enabled="true" label="connected"/>'
+            '<e width="40" height="40" visible="true" enabled="true" label="active"/></root>')
+        self.assertTrue(ios_ready(connected))
+        speaking = connected.replace('Listening...', 'Agent speaking')
+        self.assertFalse(ios_ready(speaking))
+        self.assertTrue(ios_ready(speaking, state="Agent speaking"))
+        self.assertFalse(ios_ready(speaking.replace('label="Mute"', 'label="Unmute"'), state="Agent speaking"))
+        self.assertFalse(ios_ready(connected.replace('type="XCUIElementTypeApplication" visible="true"', 'type="XCUIElementTypeApplication" visible="false"')))
+        self.assertFalse(ios_ready(connected.replace('label="connected"', 'label="disconnected"')))
+        self.assertFalse(ios_ready(connected.replace('label="End"', 'label="Start"')))
+        self.assertFalse(ios_ready(source.replace('Listening...', 'Speaking...').replace('label="Unmute"', 'label="Mute"')))
+        self.assertFalse(ios_ready(source.replace('label="Unmute"', 'label="Mute" y="900"')))
+
+    def test_stale_or_reused_permit_never_triggers_speech(self):
+        permit = {"nonce": "current", "allow": True, "observed_at_unix_ms": 1000,
+            "microphone_enabled": True, "phone_state": "listening", "speaker_verified": True}
+        self.assertTrue(valid_permit(permit, "current", 1200))
+        self.assertFalse(valid_permit(permit, "previous", 1200))
+        self.assertFalse(valid_permit(permit, "current", 2600))
+        self.assertFalse(valid_permit(permit, "current", 900))
+        self.assertFalse(valid_permit(permit, "current", 1200, phone_state="agent_speaking"))
+        permit["phone_state"] = "agent_speaking"
+        self.assertFalse(valid_permit(permit, "current", 1200))
+        self.assertTrue(valid_permit(permit, "current", 1200, phone_state="agent_speaking"))
+        permit["microphone_enabled"] = False
+        self.assertFalse(valid_permit(permit, "current", 1200))
+
+
+if __name__ == "__main__":
+    unittest.main()
