@@ -77,7 +77,7 @@ def events(directory: Path) -> list[dict]:
     for record in list(read_jsonl(directory / "ios.jsonl")) + list(read_jsonl(directory / "ios-upload.jsonl")):
         entry = record.get("entry", record)
         message = entry.get("message", "")
-        if not any(word in message.lower() for word in ("lifecycle", "mute state", "auto-mute", "auto-unmute", "remote audio", "received app control command", "local microphone publish returned", "room connection state changed", "cli websocket", "audio participant departed", "local audio capture", "audio output path", "audio session route", "room reconnect", "remote participant", "transport readiness", "feedback", "low-network warning")):
+        if not any(word in message.lower() for word in ("lifecycle", "mute state", "auto-mute", "auto-unmute", "remote audio", "received app control command", "local microphone publish returned", "room connection state changed", "cli websocket", "audio participant departed", "local audio capture", "audio output path", "audio session route", "room reconnect", "remote participant", "transport readiness", "feedback", "low-network warning", "network degraded during capture")):
             continue
         identity = json.dumps(entry, sort_keys=True)
         if identity in seen:
@@ -109,7 +109,13 @@ def events(directory: Path) -> list[dict]:
         for key in ("room_id", "job_id", "pid"):
             if key in record:
                 fields["observed_" + key] = record[key]
-        rows.append({"source": "server", "unix_ms": unix_ms(record["timestamp"]),
+        # Prefer the emit-time wall clock the agent now stamps on every
+        # dispatch_timing line: the service-log wrapper timestamp reflects flush
+        # time, which drifts from true event time under load -- exactly the
+        # roaming/reconnect moments this timeline exists to pin down.
+        wall_ms = fields.get("wall_ms")
+        server_unix_ms = float(wall_ms) if wall_ms and wall_ms.isdigit() else unix_ms(record["timestamp"])
+        rows.append({"source": "server", "unix_ms": server_unix_ms,
             "event": fields.get("stage", "dispatch_timing"), "metadata": fields})
     for record in read_jsonl(directory / "android.jsonl"):
         if "unix_ms" in record:

@@ -212,6 +212,28 @@ The client muting its microphone here is the designed voice-delivery flow, not a
 
 The delay itself. Read the thread's rollout under `~/.codex/sessions/` (or `super_agents_progress` for the turn) and compare `task_started` → first `AgentMessage` timestamps. A single multi-minute gap with no tool calls or retries, followed by fast subsequent turns, is a stalled model API request (seen after the app-server sits idle for hours — dead keep-alive socket signature), not a voice-pipeline problem: once text arrives, TTS flush→first-audio runs in under a second.
 
+## User's Words Get Chopped Or Dropped When The Phone Roams Off Wi-Fi
+
+### Symptoms Seen
+
+Part of a spoken message (or a whole utterance — e.g. a project subdirectory name said once) never reaches the dispatcher when the user walks out of Wi-Fi range. The user believes they said it; the agent never saw it.
+
+### Root cause
+
+Transcription is entirely server-side: the phone streams **raw audio** to LiveKit and the `cli` livekit-agent runs STT — the phone never holds the transcript text. So a roam (Wi-Fi→cellular handoff, ICE/TURN path change, packet loss) drops **audio frames in transit**, and the transcriber simply never receives those words. There is no dropped transcript to recover; the words are lost *upstream of transcription*. This is not the intended mid-conversation mute above.
+
+### Diagnosis (correlate the two sides)
+
+The signal to look for is: the phone mic was capturing speech while the server's audio input starved, in the same wall-clock window.
+
+- **Desktop** (`livekit-agent.log`): `dispatch_timing stage=stt_audio_gap gap_ms=…` — inbound audio frames stopped arriving for `gap_ms` (WARNING level). Every `dispatch_timing` line now carries `wall_ms=<epoch_ms>` for cross-device alignment.
+- **iOS** (AuthDiagnostics journal / upload): `local audio capture callback` with `above_threshold=true` and `event_kind=transition` marks the spoken window (`callback_unix_ms` epoch clock); `local network degraded during capture` and the `room reconnecting`/`reconnect started` lines now carry `mic_above_threshold`/`mic_captured_seconds` so you can see speech coinciding with the transport event.
+- **Automated correlation**: after capturing a session with the `voice-tests` harness, run `python voice-tests/drop_correlation.py <session-dir>` — it overlaps desktop `stt_audio_gap` events with iOS speech windows on the shared timeline and writes `drop-correlation.json` (heuristic; assumes NTP-synced clocks). `voice-tests/plots.py` renders the aligned iOS/server lanes for a visual timeline.
+
+### Fix
+
+There is no transcript to recover after the fact — mitigation is transport-level (audio buffering/FEC, reconnect handling). Use the diagnostics above to confirm a roam drop before treating a "missing message" as a dispatcher bug.
+
 ## livekit-server Crash-Loops With No Log Output (Code Signature Invalid)
 
 ### Symptoms Seen
