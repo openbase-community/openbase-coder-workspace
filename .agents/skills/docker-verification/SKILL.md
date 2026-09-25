@@ -102,6 +102,7 @@ The cli source (including uncommitted changes) is COPY'd into the image.
 ```sh
 docker run -d --name $SLUG --hostname $SLUG \
   -e OPENBASE_CODER_NETWORK_MODE=local \
+  -e OPENBASE_CODER_BACKEND=codex \
   -e "OPENBASE_CODER_SERVICES=django-cli codex-app-server" \
   -p 127.0.0.1:0:7999 \
   -v $SLUG-data:/home/openbase/.openbase \
@@ -111,9 +112,12 @@ PORT=$(docker port $SLUG 7999 | head -1 | cut -d: -f2)
 until curl -fsS http://localhost:$PORT/api/health/ >/dev/null; do sleep 3; done
 ```
 
-`django-cli codex-app-server` is the full read-path stack. Add services only
-when the change under test needs them; never the `livekit-*` pair (voice is
-out of scope here).
+`django-cli codex-app-server` is the full read-path stack for a Codex-backed
+sandbox. The `OPENBASE_CODER_BACKEND=codex` env var is required on a fresh
+container because the Docker entrypoint otherwise runs first-time setup with
+`openbase-cloud`, which does not generate a `codex-app-server` wrapper. Add
+services only when the change under test needs them; never the `livekit-*` pair
+(voice is out of scope here).
 
 ### 3. Backend flavor — threads need the codex app-server
 
