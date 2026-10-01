@@ -138,6 +138,12 @@ This glossary defines Openbase Coder workspace terms as they appear in docs, ins
 
 **Routine**: A persisted Openbase Coder schedule run through the local `openbase-coder routines` command surface. Agent routines start or queue a Super Agents turn; command routines run a normal local command without launching an AI agent. Routines are stored in local Super Agents state and run by the `openbase-routines` scheduler service.
 
+**Loop trigger**: The "when" of a loop beyond its schedule. A **webhook trigger** fires on an HTTP delivery to a capability URL (optionally relayed through Openbase Cloud); a **file trigger** fires when a file matching an absolute glob is created or modified on this machine (one run per `(path, mtime)`; touching re-fires). The scheduler sweep scans file triggers; event runs never consume the schedule. Managed with `openbase-coder loops add-webhook-trigger` / `add-file-trigger` / `remove-trigger`.
+
+**`.triggers/` directory**: The agent-to-agent counterpart of `.reports/`: a directory at a project, workspace, or worktree root holding one Markdown message per file (YAML front matter with `kind`, `status`, `from`, `created_at`, then the body). A `<stage>-request.md` is pending until a newer `<stage>-response.md` exists beside it. Loops watch these files with file triggers. Never committed; setup adds it to the global Git ignore.
+
+**Recommended loop**: A ready-made loop template shipped in the product-bundled `openbase-recommended-loops` skill (prompt plus the exact `loops create` / `add-*-trigger` commands) that an agent instantiates for a user on request. The product never seeds or auto-installs loops; recommended loops are opt-in and parameterized per machine.
+
 **Cloud idle heartbeat**: The `openbase-cloud-heartbeat` service (cloud DevSpaces only, installed by `openbase-coder provision`) that runs `openbase-coder cloud heartbeat`. It samples the local server's `/api/threads/activity/` endpoint between beats and posts to the cloud API whether any agent runs were running or launched during the window; Openbase Cloud stops DevSpaces with no run activity. DCV connections and console browsing intentionally do not count.
 
 ## Releases & Updates
