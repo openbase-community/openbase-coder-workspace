@@ -26,6 +26,8 @@
 !/netmesh-go
 !/netmesh-macos/
 !/netmesh-macos
+!/sync/
+!/sync
 !/super-agents/
 !/super-agents
 !/multi-react/
