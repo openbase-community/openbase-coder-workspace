@@ -46,6 +46,8 @@ install-tests/electron-macos/last-result.json
 /netmesh-go
 /netmesh-macos/
 /netmesh-macos
+/sync/
+/sync
 /super-agents/
 /super-agents
 /multi-react/
