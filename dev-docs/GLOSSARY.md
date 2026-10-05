@@ -54,6 +54,8 @@ This glossary defines Openbase Coder workspace terms as they appear in docs, ins
 
 ## Voice
 
+**Live Voice**: The planned full-duplex Openbase voice engine where the LiveKit agent uses GPT-Live client delegation as the conversational voice layer while Super Agent threads keep doing the coding work, tool calls, MCP calls, and skill-driven reasoning. Tracked in `dev-docs/live-voice.md`; the existing STT → Super Agent turn → TTS path remains the `pipeline` voice engine.
+
 **Voice route**: The active target for user speech in a private LiveKit room. It is normally the dispatcher, but can be transferred to a Super Agent/thread and then returned to the dispatcher.
 
 **LiveKit room**: The private real-time voice room used by Openbase Coder for user speech, agent audio, route-control data messages, and related voice events.
