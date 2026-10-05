@@ -113,6 +113,15 @@
       ]
     },
     {
+      "name": "sync",
+      "fixedBranch": "main",
+      "url": "https://github.com/openbase-community/openbase-sync",
+      "description": "Openbase Sync daemon: hub/edge file, git and database mirror over netmesh (private, proprietary; spec in docs/)",
+      "installSets": [
+        "internal"
+      ]
+    },
+    {
       "name": "super-agents",
       "url": "https://github.com/montaguegabe/super-agents",
       "description": "Python MCP wrapper for controlling Codex app-server threads, turns, compact status checks, and Super Agents coordination.",
