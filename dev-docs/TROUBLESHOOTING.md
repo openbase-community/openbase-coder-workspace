@@ -388,3 +388,19 @@ phone notification instead of dropping the message.
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:7880/   # expect 200
 openbase-coder user say "<agent>" "test"                          # expect spoken or phone fallback, exit 0
 ```
+
+## Live Voice (GPT-Live) Engine: Call Runs On The Classic Pipeline, Or Ends Mid-Conversation
+
+The default voice model is `gpt-live-1` (the Live Voice engine, `dev-docs/live-voice.md`): the LiveKit agent runs the call on OpenAI GPT-Live through the Openbase Cloud live voice gateway and answers the model's client delegations with Super Agent turns. It fails soft: when a prerequisite is missing the call silently runs on the classic STT → turn → TTS pipeline for that call, the clients get a `live_voice_unavailable` status packet (`severity: warning`, not fatal) and the participant attribute `openbase.voice.engine` reads `pipeline`. The agent log carries exactly one line explaining why: `Live voice is unavailable for this call (reason=<reason>); falling back to the pipeline voice engine: <detail>`.
+
+Reasons and what they mean: `login_required` (no Cloud login / machine token on this install; `openbase-coder login`, then restart the Openbase services); `cloud_live_voice_unknown` (the Cloud usage summary at `/api/openbase/audio/usage/` has no `live_voice_*` fields, so the gateway is not deployed on the backend this install talks to; nothing to fix locally, point `OPENBASE_CLOUD_LIVE_BASE_URL` at staging if you need live voice before the production rollout); `subscription_required` (live voice credits for the month are used up); `gateway_not_deployed` / `gateway_http_401` / `gateway_http_403` (the websocket handshake at `{base_url}/live/sessions` answered 404 / 401 / 403); `gateway_close_4401` / `gateway_close_4403` (the gateway accepted the socket and immediately closed it: 4401 = token rejected, 4403 = spend or capacity denied, matching the audio proxies); `gateway_unreachable` (connection refused or timed out); `plugin_import_failed` (`livekit-plugins-openai` is missing or broken in the agent's venv: re-run the install, the package is a pinned dependency since livekit-agents 1.8.4); `live_session_start_failed` (`AgentSession.start` raised after the probe passed).
+
+A call that was live and then ends with the status code `live_voice_provider_failed` lost its GPT-Live websocket mid-conversation. The gateway spec notes that a cloud deploy cuts hour-long sockets (the ASGI drain window is shorter than a long call) and that the plugin reconnects only within its retry budget, so a deploy during a call ends it; the phone shows the packet detail and the user calls again. Also check the Cloud side for a 4403 close (spend cap reached mid-session) before blaming the network.
+
+```bash
+tail -n 400 ~/.openbase/logs/livekit-agent.log | rg -i 'Live voice is unavailable|voice_engine=|live_voice_unavailable|live_voice_provider_failed|gpt-live|OpenAI Live API'
+./.venv/bin/openbase-coder defaults voice-model          # which voice model this install asks for
+```
+
+To force the classic engine while debugging, set the voice model to `pipeline` (`openbase-coder defaults voice-model pipeline`); it applies to the next call, no restart. Unit tests never need a key or the gateway: `cli/tests/test_live_voice.py` runs a fake gateway on loopback.
+
