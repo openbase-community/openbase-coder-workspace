@@ -52,8 +52,8 @@ GPT-Live-1 facts that shape this design (OpenAI docs, LiveKit plugin source `gpt
 phone / desktop ── LiveKit room ── livekit-agent (user's Mac or DevSpace)
                                      │
                                      ├─ AgentSession(llm=GPTLiveModel(delegation="client",
-                                     │        base_url=<gateway or api.openai.com>,
-                                     │        api_key=<Openbase token or user's key>))
+                                     │        base_url=<Openbase Cloud gateway>,
+                                     │        api_key=<Openbase machine token>))
                                      │        │ wss  (voice only, $0.05/min)
                                      │        ▼
                                      │   Openbase Cloud live-voice gateway ──▶ OpenAI GPT-Live
@@ -136,9 +136,9 @@ Kept as a documented alternative, not built in phase 1. Shape: `google` plugin's
 ## Phases
 
 0. **Spike (dispatcher only).** Originally a bring-your-own-key spike; superseded by the decision that the key never lives on a device. The measurement goal stands and moves to phase 1 against the staging gateway: time-to-first-audio and perceived latency on a real phone against the pipeline. Go/no-go.
-1. **Gateway + Openbase Cloud provider.** Cloud MWW `live-voice-gateway` lands; the CLI side (this branch) has the entitlement check, agent status codes (`live_voice_unavailable`, `live_voice_provider_failed`), settings surface, the fail-soft fallback, transfers and direct mode with one voice per call, and publishes `openbase.voice.engine`. Still owed: phone/desktop attribute-driven auto-mute change, field test (tier 3).
-2. **Polish.** Speculative start, per-agent voice via session recycle on transfer, spoken-command parity, announcer integration, Android parity.
-3. **Default flip.** `voice_engine` defaults to `live` for installs with a Cloud login; `pipeline` remains for local-only and as a fallback when the gateway returns `subscription_required`.
+1. **Gateway + Openbase Cloud provider.** Cloud MWW `live-voice-gateway` lands; the CLI side (this branch) has the entitlement check, agent status codes (`live_voice_unavailable`, `live_voice_provider_failed`), settings surface, the fail-soft fallback, transfers and direct mode with one voice per call, publishes `openbase.voice.engine`, and the phone/desktop clients keep the mic open when that attribute is `live`. Still owed: tier-3 field test against a deployed gateway.
+2. **Polish.** Speculative start, per-agent voice via session recycle on transfer, and deeper spoken-command parity.
+3. **Default flip.** `voice_model` defaults to `gpt-live-1`; `pipeline` remains selectable for local-only installs and as a per-call fallback when the gateway is missing or returns `subscription_required`.
 
 ## Testing
 

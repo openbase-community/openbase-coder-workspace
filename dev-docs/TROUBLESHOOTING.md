@@ -403,4 +403,3 @@ tail -n 400 ~/.openbase/logs/livekit-agent.log | rg -i 'Live voice is unavailabl
 ```
 
 To force the classic engine while debugging, set the voice model to `pipeline` (`openbase-coder defaults voice-model pipeline`); it applies to the next call, no restart. Unit tests never need a key or the gateway: `cli/tests/test_live_voice.py` runs a fake gateway on loopback.
-
