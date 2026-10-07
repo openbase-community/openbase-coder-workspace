@@ -65,21 +65,7 @@ Manifest schema (`manifest_schema` 1):
 
 ## The sync engine
 
-The sync engine is closed source and ships as prebuilt binaries, the same
-way the netmesh companion does for the desktop app. `cli/sync_engine.json`
-pins its version and the sha256 of each target's archive in the releases
-bucket (`sync-engine/<version>/openbase-sync-<os>-<arch>.tar.gz`);
-`cli/scripts/fetch_sync_engine.py` downloads and verifies the pinned archive.
-The release workflow bundles it into the runtime package (the package signer
-gives it the Developer ID signature with the rest), and the Docker image
-installs the Linux build into `/usr/local/bin`. Self-update therefore updates
-the engine with everything else: the flip retargets
-`packages/standalone/current/bin/openbase-syncd`, which the service resolver
-prefers, and the post-flip `services install` restarts `sync-daemon` and
-relinks `~/.local/bin/edge` and `~/.local/bin/openbase-sync`. To ship a new
-engine, publish it from its repository, then bump the pin (version and all
-four checksums) on develop. Development installs, which carry no package,
-use `openbase-coder sync-daemon install-binary`.
+The sync engine is closed source and ships as prebuilt binaries, the same way the netmesh companion does for the desktop app. `cli/sync_engine.json` pins its version and the sha256 of each target's archive in the releases bucket (`sync-engine/<version>/openbase-sync-<os>-<arch>.tar.gz`); `cli/scripts/fetch_sync_engine.py` downloads and verifies the pinned archive. The release workflow bundles it into the runtime package (the package signer gives it the Developer ID signature with the rest), and the Docker image installs the Linux build into `/usr/local/bin`. Self-update therefore updates the engine with everything else: the flip retargets `packages/standalone/current/bin/openbase-syncd`, which the service resolver prefers, and the post-flip `services install` restarts `sync-daemon` and relinks `~/.local/bin/edge` and `~/.local/bin/openbase-sync`. To ship a new engine, publish it from its repository, then bump the pin (version and all four checksums) on develop. Development installs, which carry no package, use `openbase-coder sync-daemon install-binary`.
 
 ## Release-time race protections
 
@@ -135,7 +121,7 @@ Updates apply through three triggers, all funneling into the same locked sequenc
 3. Fetch the manifest for the install's channel (from `openbase-coder-package.json`); verify signature when the key is set.
 4. Compare versions; honor `min_supported_version` and any cloud-reported minimum; stop if `layout_version` is newer than the updater understands.
 5. **Quiesce**: if a voice session is active, defer (override with `--force`).
-6. Download the target tarball, verify SHA-256, extract to `~/.openbase/packages/standalone/releases/<version>-<target>/`, validate the package (metadata, launcher, livekit-server), smoke-run `bin/openbase-coder --version`.
+6. Download the target tarball, verify SHA-256, extract to `~/.openbase/packages/standalone/releases/<version>-<target>/`, validate the package (metadata, launcher, livekit-server, openbase-tunneld, sync engine binaries), smoke-run `bin/openbase-coder --version`.
 7. **Atomic flip**: repoint the `current` symlink (temp symlink + rename); keep the outgoing release behind a `previous` symlink; prune older releases (keep 2).
 8. **Post-flip via the NEW launcher**: regenerate + restart services (`services install`), rebuild the plugin site when the bundled Python minor version changed (`plugins rebuild-site`), refresh `~/.openbase/bin/codex` when it was installed by us.
 9. **Health gate**: services installed + `--version` sane. On failure, flip back to `previous`, reinstall services, and report the rollback.
