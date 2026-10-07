@@ -122,7 +122,7 @@ Full duplex needs the microphone open while the agent speaks. Today's clients mu
 ### Dependencies and runtime
 
 - **Done:** `livekit-agents[silero,turn-detector]` 1.5.17 → 1.8.4, `livekit-plugins-assemblyai/cartesia/deepgram` 1.8.4, `livekit-plugins-openai` 1.8.4 (`openai` 2.44 → 2.54). Pipeline fixes for 1.8: the deprecated `AgentSession(preemptive_generation=)` kwarg moved into `turn_handling` (same semantics); `ProcPool` gained a `simulation_end_fnc` constructor argument (test only). Both monkey patches were re-verified against the 1.8.4 source and kept: `proc_pool_patch.py` still applies (upstream issue 3841 is open; the version gate now lists 1.8.4) and `vad_backlog_patch.py` applies unchanged. The live engine passes the Silero VAD explicitly (the session drops its default VAD for a duplex model) with `turn_handling={"interruption": {"mode": "vad"}}` so LiveKit cuts playout on barge-in; the model owns turn-taking. `livekit.plugins.turn_detector` is deprecated in 1.8 in favour of `livekit.agents.inference.TurnDetector`; the pipeline keeps the plugin for now (warning only).
-- The pinned `livekit-server` (`livekit_version.py`, 1.13.7) is unaffected.
+- The pinned `livekit-server` (`livekit_version.py`, 1.13.8 since 2026-10-07) is unaffected by the agents bump.
 - The agent process already runs under the `livekit-agent` service; no new service. Memory: the GPT-Live plugin replaces the STT and TTS plugin processes, so footprint should drop (see `openbase-memory-footprint-fixes` in memory for how it is measured).
 
 ### Cost
