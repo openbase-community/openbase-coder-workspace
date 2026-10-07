@@ -32,7 +32,7 @@ Rules that must not regress:
 - `update-manifest.json` (+ `update-manifest.json.sig` when signing is configured) — built by `cli/scripts/build_update_manifest.py`
 - `install.sh`
 
-The macOS runtime package includes the relocatable CLI launcher, the pinned LiveKit server, and `openbase-tunneld`. Openbase Direct depends on that bundled tunnel binary; package validation, installation, self-update validation, and Electron staging all treat it as required rather than attempting a first-run Go build on the user's Mac.
+The macOS runtime package includes the relocatable CLI launcher, the pinned LiveKit server, `openbase-tunneld`, and the Openbase Sync engine (`openbase-syncd`, `openbase-sync`, `edge`). Openbase Direct depends on that bundled tunnel binary; package validation, installation, self-update validation, and Electron staging all treat it as required rather than attempting a first-run Go build on the user's Mac.
 
 The release workflow builds macOS LiveKit from its official source tag using `cli/scripts/build-pinned-livekit.sh` and verifies the resulting version against `livekit_version.py`. Homebrew's floating formula must not determine the packaged engine or block releases when it advances past the pin.
 
@@ -62,6 +62,24 @@ Manifest schema (`manifest_schema` 1):
 - **super-agents is built from its sibling checkout, not PyPI.** The package build installs the `super-agents` checkout from source (and fails if the checkout is missing or if the cli's version floor would pull a PyPI wheel over it), so the runtime package rides branch HEADs exactly like the JS siblings. The `super-agents[claude]>=x.y.z` floor in `cli/pyproject.toml` only governs dev-channel installs that resolve from PyPI.
 - The manifest is signed with an Ed25519 key (`OPENBASE_UPDATE_SIGNING_KEY` repo secret); the client embeds the public key in `openbase_coder_cli/self_update.py`, and signature verification is mandatory — never ship a client that downgrades this.
 - Key custody: GitHub secrets are write-only, so the private key is also kept outside any git repo under `~/Projects/openbase/secure/`. Rotating the key is a client-release-first operation: ship a client embedding the new public key before signing manifests with the new private key.
+
+## The sync engine
+
+The sync engine is closed source and ships as prebuilt binaries, the same
+way the netmesh companion does for the desktop app. `cli/sync_engine.json`
+pins its version and the sha256 of each target's archive in the releases
+bucket (`sync-engine/<version>/openbase-sync-<os>-<arch>.tar.gz`);
+`cli/scripts/fetch_sync_engine.py` downloads and verifies the pinned archive.
+The release workflow bundles it into the runtime package (the package signer
+gives it the Developer ID signature with the rest), and the Docker image
+installs the Linux build into `/usr/local/bin`. Self-update therefore updates
+the engine with everything else: the flip retargets
+`packages/standalone/current/bin/openbase-syncd`, which the service resolver
+prefers, and the post-flip `services install` restarts `sync-daemon` and
+relinks `~/.local/bin/edge` and `~/.local/bin/openbase-sync`. To ship a new
+engine, publish it from its repository, then bump the pin (version and all
+four checksums) on develop. Development installs, which carry no package,
+use `openbase-coder sync-daemon install-binary`.
 
 ## Release-time race protections
 
