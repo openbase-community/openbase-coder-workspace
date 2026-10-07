@@ -38,7 +38,7 @@ service. It is not a tier of record; it produces confidence, not regression pins
   at the container's API port as its backend, but the app itself runs outside
   Docker; app-side verification is its own build + run.
 - **Tailnet / peer / fleet paths**: origin-host discovery, device sync,
-  netmesh, code-sync reconcile. The sandbox deliberately never joins a tailnet
+  netmesh, Openbase Sync. The sandbox deliberately never joins a tailnet
   (`OPENBASE_CODER_NETWORK_MODE=local`); peer behavior needs two real devices.
 - **Running turns / LLM work.** Read-only by default. Turns need a real cloud
   login; if ever required, use the dedicated field-test account per the

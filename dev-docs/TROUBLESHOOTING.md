@@ -318,18 +318,13 @@ Before cli/desktop staging 2026-07-20, onboarding surfaces only checked that `~/
 
 Run `openbase-coder auth status --json`. If `login_expired`, the stored refresh token was rejected — run `openbase-coder login` again. If surfaces still disagree, the install predates the consolidation; update it.
 
-## Stale Peer Trees, Resurrected Deleted Files, Or Branch Switches Not Propagating (Syncthing Stall)
+## Stale Peer Trees Or Changes Not Propagating (Openbase Sync)
 
-The user-facing explanation, the 2 GiB disk floor, where the stall surfaces (dashboard banner, Sync page, `sync status`, `/api/sync/status/`), and the baseline fix (free disk, restart `code-sync`) are canonical in `cli/docs/code-sync.md` ("File sync stalled" and "Reading the reconcile heartbeat"). Symptoms on a two-machine pair: the peer's checkouts lag; files a commit deleted reappear as *untracked* copies with pre-deletion mtimes (breaking builds on files nobody edited); `*.sync-conflict-*` copies pile up; branch switches stop mirroring — because git-state sync rides Syncthing (repository manifests are synced files), a file-sync stall freezes both layers.
+The user-facing troubleshooting (daemon not answering, no peer, conflicts) is canonical in `cli/docs/code-sync.md`. Agent-side diagnosis:
 
-Agent-side diagnosis beyond the user doc:
-
-1. `openbase-coder sync status` — a red `ERROR:` under a folder names the stall; a climbing `Reconcile: awaiting_files` means files are behind git state.
-2. Engine detail: `curl -H "X-API-Key: $(sed -n 's/.*<apikey>\(.*\)<\/apikey>.*/\1/p' ~/.openbase/code-sync/config.xml)" "http://127.0.0.1:8385/rest/db/status?folder=<folder-id>"` — the `error` field names the stall reason.
-3. Reconcile heartbeat: `grep "code_sync tick_complete" ~/.openbase/logs/sync-workers.log | tail`
-   — no lines means the sync-workers service is down; `errors>0` lines are explained by an adjacent `code_sync tick_errors` warning naming the repo.
-
-Remedy beyond the baseline: the classic low-disk cause is often Docker VM images under `~/Library/Containers/com.docker.docker` (multi-hundred-GB). After freeing disk and restarting `code-sync`, if a deleted file was resurrected, remove the stray untracked copies on **both** machines (SSH to the peer) or Syncthing round-trips them back.
+1. `openbase-coder sync status --json` — no answer means the `sync-daemon` service is down (`openbase-coder services status`, `openbase-coder services logs sync-daemon`); an empty peer list means the edge cannot reach the hub over Openbase VPN; per-root pending transfers that never drain point at the transport.
+2. `openbase-coder sync conflicts` — a diverged branch or a both-sides edit holds that path until someone picks a side; nothing is overwritten silently.
+3. A machine still running the previous Syncthing-based sync (a `code-sync` service or a `~/.openbase/code-sync` directory) has not been migrated: run `openbase-coder sync migrate-from-syncthing` and then `--apply` on it.
 
 ## Openbase Direct Stays In `NeedsLogin` Or Reports `invalid pre auth key`
 

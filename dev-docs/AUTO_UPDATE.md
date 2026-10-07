@@ -99,7 +99,7 @@ Every versioned piece is inspectable without MCP:
 | Desktop app | shown in the app UI (and macOS About menu) |
 | Console | shows the CLI/package version it is served by (they version together) |
 | livekit-server / codex / claude | each binary's own `--version` |
-| syncthing (optional, downloaded on `sync enable`) | pinned in `code_sync/install.py`; `syncthing --version` |
+| openbase-syncd (optional, Openbase Sync) | installed by `openbase-coder sync-daemon install-binary`; reported by `openbase-coder sync status` |
 | Plugins | `openbase-coder plugins list` |
 
 ## The CLI self-update sequence
