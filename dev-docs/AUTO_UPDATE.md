@@ -19,7 +19,7 @@ Each component owns its own update; nothing installs into another component.
 Rules that must not regress:
 
 - The CLI package bundled inside the desktop DMG is a **first-install seed only**. After activation, the GitHub release feed is the sole authority; the desktop app triggers CLI updates through the local API (`POST /api/update/apply`), it never installs the CLI itself.
-- Seed activation must preserve relative symlinks verbatim so the copied runtime is self-contained. Rewriting Python links to the app bundle couples the runtime to desktop replacement and lets Python bytecode writes invalidate the app's signature.
+- Seed activation must preserve relative symlinks verbatim so the copied runtime is self-contained. Rewriting Python links to the app bundle couples the runtime to desktop replacement and lets Python bytecode writes invalidate the app's signature. Packaged desktop startup normalizes legacy absolute seed links to the installed release's own files before running its CLI, retaining the installed version and current pointer.
 - **Dev-workspace installs never auto-update.** `self-update` refuses when the CLI is not running from a standalone runtime package; dev checkouts are git-managed. After a source update, a restart that includes `livekit-server` prepares the checkout's pinned engine before scheduling service restarts. A failed download leaves running services untouched and fails the restart request; packaged installs keep their bundled engine.
 - **Self-update must never depend on the desktop app.** The CLI and its routines service apply updates on their own; the desktop app only *triggers* an update through the local API, it is never required for one to complete (auto-update runs from the routines service with the app closed).
 
@@ -33,6 +33,8 @@ Rules that must not regress:
 - `install.sh`
 
 The macOS runtime package includes the relocatable CLI launcher, the pinned LiveKit server, and `openbase-tunneld`. Openbase Direct depends on that bundled tunnel binary; package validation, installation, self-update validation, and Electron staging all treat it as required rather than attempting a first-run Go build on the user's Mac.
+
+The release workflow builds macOS LiveKit from its official source tag using `cli/scripts/build-pinned-livekit.sh` and verifies the resulting version against `livekit_version.py`. Homebrew's floating formula must not determine the packaged engine or block releases when it advances past the pin.
 
 Manifest schema (`manifest_schema` 1):
 
