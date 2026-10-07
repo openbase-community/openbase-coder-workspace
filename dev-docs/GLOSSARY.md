@@ -80,6 +80,8 @@ This glossary defines Openbase Coder workspace terms as they appear in docs, ins
 
 **MCP**: Model Context Protocol, the mechanism Openbase Coder uses to expose tools and resources to agents, including Super Agents coordination tools.
 
+**MCP gateway**: Makes an MCP server that is bound to one machine (computer control of the laptop's screen, a browser extension's server) *available* to agents on another of the owner's machines (a hub), under an explicit `<name>-laptop` key. The serving machine opts in per server (`openbase-coder mcp-gateway serve add`, config `~/.openbase/mcp-gateway.json`) and bridges the owner-authenticated WebSocket `ws/mcp-gateway/<name>/` to a fresh stdio process per session; the hub lists it in its agent profiles with `mcp-gateway offer`, whose entries run `mcp-gateway connect` (a stdio relay that exits 69 at once when the peer is unreachable). The agent decides whether to call it: nothing auto-routes, wraps, or prefers the gateway. Code in `cli/openbase_coder_cli/mcp_gateway.py`; user docs `cli/docs/laptop-tools.md`; agent guidance in the bundled `openbase-laptop-tools` skill.
+
 **MCP elicitation**: A structured request from an MCP tool or backend asking the agent to collect user input before continuing, such as a plan-mode question.
 
 **Skill**: A local instruction bundle that teaches an agent a specialized workflow, tool integration, or domain convention. Skills are loaded when a task matches their trigger.
