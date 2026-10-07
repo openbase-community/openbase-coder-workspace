@@ -80,7 +80,8 @@ docker build -t openbase-coder:$SLUG .
 The cli source (including uncommitted changes) is COPY'd into the image.
 **Two things are cloned from GitHub instead, and must be injected locally:**
 
-- **Console**: the image builds console/coder-react from remote `develop`.
+- **Frontend siblings**: the image builds console/coder-react from remote
+  `develop`, plus `multi-react` and `boilersync-react` from remote `main`.
   To test local frontend changes, build locally (`cd ../console && npx vite build`)
   and bind-mount `console/dist` over the served dir (step 2).
 - **super-agents**: cloned from remote. The trunk cli often depends on
