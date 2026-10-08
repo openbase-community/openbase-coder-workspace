@@ -93,9 +93,9 @@ export async function ensureSignedOutAtWelcome(env: DeviceEnv): Promise<void> {
   // The fresh-start launch argument is compiled out of release builds; fall
   // back to the in-app sign-out flow (account surface -> Sign Out -> confirm).
   // Settings (nav.account) is the gear at the bottom of the side drawer.
-  await clickFirstExisting(["~nav.open-sidebar", "~Open sidebar"]);
+  await clickFirstExisting(["~nav.open-sidebar", "~Open sidebar", "~Menu"]);
   await browser.pause(500);
-  await clickFirstExisting(["~nav.account", "~Account"]);
+  await clickFirstExisting(["~nav.account", "~Account", "~Settings", 'android=new UiSelector().description("Settings")']);
   await browser.pause(1_000);
   for (let attempt = 0; attempt < 4; attempt += 1) {
     if (await clickFirstExisting(['-ios predicate string:label == "Sign Out"', "~Sign Out"])) {

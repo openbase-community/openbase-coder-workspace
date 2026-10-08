@@ -68,17 +68,20 @@ export async function openCallSurfaceIfAvailable(): Promise<boolean> {
     return true;
   }
   // Elsewhere in the app: open the drawer and choose "New chat".
-  for (const selector of ["~nav.open-sidebar", "~Open sidebar"]) {
+  for (const selector of ["~nav.open-sidebar", "~Open sidebar", "~Menu"]) {
     const menu = await $(selector);
     if (await menu.isExisting()) {
       await menu.click();
       break;
     }
   }
-  const newChat = await $("~nav.home");
-  if (await newChat.isExisting()) {
-    await newChat.click();
-    await browser.pause(500);
+  for (const selector of ["~nav.home", "~New chat", 'android=new UiSelector().text("New chat")']) {
+    const newChat = await $(selector);
+    if (await newChat.isExisting()) {
+      await newChat.click();
+      await browser.pause(500);
+      break;
+    }
   }
   return anyExists(CALL_SURFACE_MARKERS);
 }
@@ -87,7 +90,7 @@ export async function openCallSurface(): Promise<void> {
   const opened = await openCallSurfaceIfAvailable();
   if (!opened) {
     const source = await browser.getPageSource();
-    throw new Error(`Unable to open the new-chat home. Expected call.start, call.end, or nav.home. Page source excerpt: ${source.slice(0, 1000)}`);
+    throw new Error(`Unable to open the new-chat home. Expected call.start, call.end, nav.home, or New chat. Page source excerpt: ${source.slice(0, 1000)}`);
   }
 }
 
