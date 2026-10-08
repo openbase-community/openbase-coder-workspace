@@ -12,6 +12,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const HOOKS_SOURCE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".githooks");
+const DESKTOP_HOOKS_SOURCE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "desktop", ".githooks");
 const HAS_GITLEAKS = spawnSync("sh", ["-c", "command -v gitleaks || test -x /opt/homebrew/bin/gitleaks"]).status === 0;
 const IDENTITY = ["-c", "user.name=Hook Test", "-c", "user.email=hook-test@example.invalid"];
 
@@ -91,13 +92,17 @@ function push(repo, env) {
   return git(repo, ["push", "-q", "origin", "HEAD:main"], env);
 }
 
-function prePush(repo, input, env = {}) {
-  return spawnSync(path.join(repo, ".githooks", "pre-push"), ["origin", "unused"], {
+function prePushHook(repo, hookPath, input, env = {}) {
+  return spawnSync(hookPath, ["origin", "unused"], {
     cwd: repo,
     encoding: "utf8",
     input,
     env: { ...process.env, OPENBASE_SKIP_SECRET_HOOKS: "1", ...env },
   });
+}
+
+function prePush(repo, input, env = {}) {
+  return prePushHook(repo, path.join(repo, ".githooks", "pre-push"), input, env);
 }
 
 const scanTest = HAS_GITLEAKS ? test : test.skip;
@@ -234,4 +239,26 @@ rootGuardTest("root pre-push guard scans when the remote sha is unknown locally"
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /commit [0-9a-f]{40} touches a private path/);
   assert.match(result.stderr, /netmesh-go\/private\.txt/);
+});
+
+// Only the Openbase Coder workspace has the desktop repo-local hook.
+const desktopGuardTest = existsSync(path.join(DESKTOP_HOOKS_SOURCE, "pre-push")) ? test : test.skip;
+
+desktopGuardTest("desktop pre-push guard scans when the remote sha is unknown locally", async (t) => {
+  const ws = await workspace(t);
+  const desktop = path.join(ws.root, "desktop-standalone");
+  initRepo(desktop, path.dirname(ws.root), "desktop-standalone", "openbase-community/openbase-coder-desktop");
+  cpSync(DESKTOP_HOOKS_SOURCE, path.join(desktop, ".githooks"), { recursive: true });
+  stageFile(desktop, "netmesh-macos/private.txt", "private\n");
+  gitOk(desktop, ["commit", "-q", "--no-verify", "-m", "private"]);
+  const head = gitOk(desktop, ["rev-parse", "HEAD"]);
+  const unknownRemote = "f".repeat(40);
+  const result = prePushHook(
+    desktop,
+    path.join(desktop, ".githooks", "pre-push"),
+    `refs/heads/main ${head} refs/heads/main ${unknownRemote}\n`,
+  );
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /commit [0-9a-f]{40} touches netmesh-macos\/ \(closed source\)/);
+  assert.match(result.stderr, /netmesh-macos\/private\.txt/);
 });
