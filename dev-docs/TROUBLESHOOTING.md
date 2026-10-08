@@ -234,6 +234,20 @@ The signal to look for is: the phone mic was capturing speech while the server's
 
 There is no transcript to recover after the fact — mitigation is transport-level (audio buffering/FEC, reconnect handling). Use the diagnostics above to confirm a roam drop before treating a "missing message" as a dispatcher bug.
 
+## codex-app-server Crash-Loops Behind Codex's Managed Daemon, Or Skew Restarts Never Resolve
+
+### Symptoms Seen
+
+`launchctl print gui/$(id -u)/com.openbase.coder.codex-app-server` shows `runs` in the thousands; `~/.openbase/logs/codex-app-server.log` is megabytes of one repeated traceback ending in `RuntimeError: Codex control socket ... already has a live owner; refusing to replace or kill it`; `~/.openbase/logs/sync-workers.log` repeats `codex_version_skew waiting services=['codex-app-server'] blockers=[...]` (or logged `auto_restart services=['codex-app-server']` with a running version *higher* than the installed one). Users see Codex's "Background server has incompatible feature settings" dialog on every new session.
+
+### Diagnosis
+
+`ls -l ~/.codex/app-server-control/app-server-control.sock` is a **symlink**: Codex's own self-updating managed daemon (`codex app-server --managed-daemon`, binary under `~/.codex/packages/app-server-daemon/releases/`) owns the standard socket, and `codex app-server daemon version` shows `appServerVersion` ahead of `cliVersion`. Both symptoms are the same split, handled in cli since 2026-10-08: the `codex-app-server` runner idles (one log line, re-probing every 15 s) while `shared_codex_daemon_ready` is true instead of exiting 1 into launchd's `KeepAlive` loop, each runner start caps its own log at 4 MB, and `codex_version_skew` treats a server that is newer than the installed CLI, or served through the daemon's symlink, as advisory (`cli_outdated` in the tick summary, `codex-cli-outdated:<service>` in the health banner, a `no_restart` warning logged once per version pair) rather than scheduling a restart. On an install predating that, the fix is the same CLI upgrade; do not restart services to "catch up" to the daemon, and never pick "Restart with these settings" in Codex's dialog (it restarts the shared daemon under every attached session). User-facing write-up: `cli/docs/troubleshooting.md`, "Codex Says the Background Server Has Incompatible Feature Settings".
+
+### Fix
+
+Upgrade the npm Codex CLI to the daemon's version (`npm install -g @openai/codex@<appServerVersion>`), then confirm `codex app-server daemon version` reports equal versions and `openbase-coder services status` shows `codex-app-server available through the shared Codex daemon` with no mismatch. A crash-loop that is still running on an older cli stops on its own after the next `openbase-coder update`; trimming the oversized log by hand is safe (launchd appends).
+
 ## livekit-server Crash-Loops With No Log Output (Code Signature Invalid)
 
 ### Symptoms Seen
