@@ -4,7 +4,7 @@
 // absolute in sub-repos.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, cpSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -220,7 +220,11 @@ scanTest("pre-push chains the root repo's own guard from .githooks/root/", async
   assert.match(result.stderr, /root guard ran/);
 });
 
-test("root pre-push guard scans when the remote sha is unknown locally", async (t) => {
+// Only workspaces whose root repo has its own guard (the Openbase Coder
+// workspace's .githooks/root/pre-push) run this one.
+const rootGuardTest = existsSync(path.join(HOOKS_SOURCE, "root", "pre-push")) ? test : test.skip;
+
+rootGuardTest("root pre-push guard scans when the remote sha is unknown locally", async (t) => {
   const ws = await workspace(t);
   stageFile(ws.root, "netmesh-go/private.txt", "private\n");
   gitOk(ws.root, ["commit", "-q", "--no-verify", "-m", "private"]);
