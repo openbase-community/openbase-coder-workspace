@@ -198,11 +198,15 @@ scanTest("pre-push chains a sub-repo's own .githooks/pre-push guard", async (t) 
   assert.match(result.stderr, new RegExp(`repo guard saw ${head}`));
 });
 
-scanTest("pre-push chains the root repo's guard from .githooks/root/", async (t) => {
+scanTest("pre-push chains the root repo's own guard from .githooks/root/", async (t) => {
   const ws = await workspace(t);
-  stageFile(ws.root, "netmesh-go/x.go", "package x\n");
-  gitOk(ws.root, ["commit", "-q", "-m", "private path"]);
+  const guard = path.join(ws.root, ".githooks", "root", "pre-push");
+  mkdirSync(path.dirname(guard), { recursive: true });
+  writeFileSync(guard, "#!/bin/sh\necho 'root guard ran' >&2\nexit 1\n");
+  chmodSync(guard, 0o755);
+  stageFile(ws.root, "clean.txt", "fine\n");
+  gitOk(ws.root, ["commit", "-q", "-m", "clean"]);
   const result = push(ws.root);
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /touches a private path \(netmesh-go\/ or \.reports\/\)/);
+  assert.match(result.stderr, /root guard ran/);
 });
