@@ -91,6 +91,15 @@ function push(repo, env) {
   return git(repo, ["push", "-q", "origin", "HEAD:main"], env);
 }
 
+function prePush(repo, input, env = {}) {
+  return spawnSync(path.join(repo, ".githooks", "pre-push"), ["origin", "unused"], {
+    cwd: repo,
+    encoding: "utf8",
+    input,
+    env: { ...process.env, OPENBASE_SKIP_SECRET_HOOKS: "1", ...env },
+  });
+}
+
 const scanTest = HAS_GITLEAKS ? test : test.skip;
 
 scanTest("pre-commit refuses a staged secret in a sub-repo and in the root", async (t) => {
@@ -209,4 +218,16 @@ scanTest("pre-push chains the root repo's own guard from .githooks/root/", async
   const result = push(ws.root);
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /root guard ran/);
+});
+
+test("root pre-push guard scans when the remote sha is unknown locally", async (t) => {
+  const ws = await workspace(t);
+  stageFile(ws.root, "netmesh-go/private.txt", "private\n");
+  gitOk(ws.root, ["commit", "-q", "--no-verify", "-m", "private"]);
+  const head = gitOk(ws.root, ["rev-parse", "HEAD"]);
+  const unknownRemote = "f".repeat(40);
+  const result = prePush(ws.root, `refs/heads/main ${head} refs/heads/main ${unknownRemote}\n`);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /commit [0-9a-f]{40} touches a private path/);
+  assert.match(result.stderr, /netmesh-go\/private\.txt/);
 });
