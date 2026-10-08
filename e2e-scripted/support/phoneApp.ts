@@ -49,28 +49,50 @@ export async function configureBackendIfUiIsAvailable(baseUrl: string): Promise<
   return false;
 }
 
-export async function openCallSurfaceIfAvailable(): Promise<boolean> {
-  const selectors = ["~nav.call", "~Call", "~Open Call", "~Open call"];
+// There is no separate Call page any more: calls start from the composer on
+// the new-chat home screen (call.start) and are controlled from the call
+// strip above it (call.mute / call.speaker / call.end).
+const CALL_SURFACE_MARKERS = ["~call.start", "~call.end", "~call.details"];
+
+async function anyExists(selectors: string[]): Promise<boolean> {
   for (const selector of selectors) {
-    const element = await $(selector);
-    if (await element.isExisting()) {
-      await element.click();
+    if (await (await $(selector)).isExisting()) {
       return true;
     }
   }
   return false;
 }
 
+export async function openCallSurfaceIfAvailable(): Promise<boolean> {
+  if (await anyExists(CALL_SURFACE_MARKERS)) {
+    return true;
+  }
+  // Elsewhere in the app: open the drawer and choose "New chat".
+  for (const selector of ["~nav.open-sidebar", "~Open sidebar"]) {
+    const menu = await $(selector);
+    if (await menu.isExisting()) {
+      await menu.click();
+      break;
+    }
+  }
+  const newChat = await $("~nav.home");
+  if (await newChat.isExisting()) {
+    await newChat.click();
+    await browser.pause(500);
+  }
+  return anyExists(CALL_SURFACE_MARKERS);
+}
+
 export async function openCallSurface(): Promise<void> {
   const opened = await openCallSurfaceIfAvailable();
   if (!opened) {
     const source = await browser.getPageSource();
-    throw new Error(`Unable to open call surface. Expected nav.call or Call control. Page source excerpt: ${source.slice(0, 1000)}`);
+    throw new Error(`Unable to open the new-chat home. Expected call.start, call.end, or nav.home. Page source excerpt: ${source.slice(0, 1000)}`);
   }
 }
 
 export async function startCallIfAvailable(): Promise<boolean> {
-  const selectors = ["~call.start", "~Start", "~Start call", "~Call"];
+  const selectors = ["~call.start", "~Start call", "~Start"];
   for (const selector of selectors) {
     const element = await $(selector);
     if (await element.isExisting()) {
