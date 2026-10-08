@@ -1,5 +1,8 @@
 {
   "allowSymlinks": false,
+  "hooks": {
+    "path": ".githooks"
+  },
   "repos": [
     {
       "name": "allauth-client-swift",

@@ -5,7 +5,7 @@ The recommended path for developing and testing Openbase Coder starts at the Git
 ## 1. One-time prerequisites
 
 - `uv`, Node + pnpm (via nvm), and the current Go toolchain from [go.dev/dl](https://go.dev/dl/). The source-workspace path builds the Openbase Direct transport from `cli/tunneld`, so Go is required even when the current test selects another transport. (`livekit-server` is downloaded at the release-pinned version by setup into `~/.openbase/bin`; a Homebrew `livekit-server` is only a fallback and will warn if its version skews.)
-- `multi` (`uv tool install multi-workspace`)
+- `multi` 3.2.21 or newer (`uv tool install multi-workspace`, or `uv tool upgrade multi-workspace`) and `gitleaks` (`brew install gitleaks`). `multi sync` installs the workspace git hooks in `.githooks/` into every repo, and they refuse commits and pushes without gitleaks; see `.githooks/README.md`.
 - A tailnet transport for phone access. Interactive developer setup offers the expert Tailscale transport, Openbase VPN, and Openbase Direct. Electron production onboarding is different: it offers only Openbase VPN or Direct.
 - Coding-backend login: `codex login` for the codex backend, and/or your normal Claude Code login (setup bridges it into Openbase's managed config automatically on macOS)
 - Only if you pick **Openbase VPN**, and only on macOS: the hardened VPN companion is closed-source, but a public checkout downloads its signed prebuilt and needs no extra build tools. An internal checkout with the private `netmesh-macos` source builds the companion with Xcode, `xcodegen`, and Go. Openbase Direct and the expert standalone-Tailscale transport do not use this companion; Linux and Windows use the official Tailscale client instead of the macOS companion.
