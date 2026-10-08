@@ -50,9 +50,10 @@ export async function configureBackendIfUiIsAvailable(baseUrl: string): Promise<
 }
 
 // There is no separate Call page any more: calls start from the composer on
-// the new-chat home screen (call.start) and are controlled from the call
-// strip above it (call.mute / call.speaker / call.end).
-const CALL_SURFACE_MARKERS = ["~call.start", "~call.end", "~call.details"];
+// the chat screen (call.start) and are controlled from the same composer
+// (call.mute / call.unmute / call.end); speaker lives in the call settings
+// sheet behind call.settings.
+const CALL_SURFACE_MARKERS = ["~call.start", "~call.end", "~call.settings"];
 
 async function anyExists(selectors: string[]): Promise<boolean> {
   for (const selector of selectors) {
@@ -116,13 +117,39 @@ export async function startCall(): Promise<void> {
 
 export async function enableSpeakerIfAvailable(): Promise<boolean> {
   // Calls start in receiver mode; one tap of the speaker toggle routes call
-  // audio to the loudspeaker so a human observer can follow the test.
-  const speakerButton = await $("~call.speaker");
-  if (await speakerButton.isExisting()) {
-    await speakerButton.click();
-    return true;
+  // audio to the loudspeaker so a human observer can follow the test. The
+  // toggle sits in the call settings sheet, opened from the chat header.
+  let speakerButton = await $("~call.speaker");
+  let openedSettings = false;
+  if (!(await speakerButton.isExisting())) {
+    const settings = await $("~call.settings");
+    if (!(await settings.isExisting())) {
+      return false;
+    }
+    await settings.click();
+    await browser.pause(500);
+    openedSettings = true;
+    speakerButton = await $("~call.speaker");
   }
-  return false;
+  if (!(await speakerButton.isExisting())) {
+    return false;
+  }
+  await speakerButton.click();
+  if (openedSettings) {
+    await closeCallSettingsIfOpen();
+  }
+  return true;
+}
+
+async function closeCallSettingsIfOpen(): Promise<void> {
+  for (const selector of ["~call.settings-done", "~Done", "~Close"]) {
+    const button = await $(selector);
+    if (await button.isExisting()) {
+      await button.click();
+      await browser.pause(300);
+      return;
+    }
+  }
 }
 
 export type CallMuteState = "muted" | "unmuted" | "unknown";
