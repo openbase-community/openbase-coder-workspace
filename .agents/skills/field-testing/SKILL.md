@@ -334,6 +334,21 @@ openbase run --memory 1024 -a <app> python manage.py field_test_account \
 
 This exercises real signup against the selected Cloud deployment, mandatory verification, template rendering, Resend submission, message retrieval, and allauth confirmation. Resend's delivered-test recipient simulates the mailbox end without sending to a person. A separate scheduled delivery canary may test receipt by a real mailbox provider; it never uses a personal inbox.
 
+### For Claude Code: delegate password and code entry to Codex
+
+Claude Code sessions decline to create accounts or type passwords into apps on a hosted deployment, staging included, and some also decline to type email verification codes. The project owner authorized Codex for exactly these steps (2026-10-07), so a Claude session never stalls or skips an auth step: it hands that one step to a Codex session and continues.
+
+How to do it:
+
+1. **Prepare the screen yourself** with your own Appium session: enter the email and tap Send code (sign-in), or open the Sign Up form with the email filled in (sign-up).
+2. **Write a handoff file** in the project's `.signals/` directory (for example `.signals/ios-signup.md`) with the device, app, account, `status: waiting`, and for sign-in the `sent_at:` time. The file is the only channel between the two sessions; Codex cannot message a Claude session directly.
+3. **Close your Appium / WDA / UiAutomator2 session on that device.** Two drivers on one phone fight.
+4. **Dispatch a Codex session** in a new terminal tab with the brief in [`codex-phone-auth-brief.md`](codex-phone-auth-brief.md) filled in (device, app, task, account, handoff path). The project's dispatch helper does this in one command (`dispatch.sh <name> <brief> --codex --dir <project code dir>`); by hand, open a tab and run `codex "<brief text>"`. If Codex opens with a "Background server has incompatible feature settings" prompt, choose "Run without daemon this time", never a restart of the shared app-server.
+5. **Append `status: ready`** to the handoff file (plus `email:` for sign-up), then poll it every 15 s for `status: done` or `status: failed`.
+6. **Reopen your Appium session and continue the test.** For a sign-up, Codex stores the new password in the keychain item `openbase-field-test-<email-local-part>`; a later sign-in with a known password may be typed by Claude (precedent 2026-10-08) or handed to Codex the same way if a session declines.
+
+Keep the Codex task to the single auth step: no calls, no service restarts, nothing outside that app. Verification codes on staging expire 180 s after sending, so Codex requests a fresh one itself rather than relying on the one you sent. Record the handoff (who did what, when) in the run's field-test log like any other step.
+
 ## Required Run Plan
 
 Before any field-test command, add a concise Markdown plan to the gitignored daily log at `.local/field-tests/<date>.md`. Do not open a separate RMOT or Typora window. The plan must include:
