@@ -3,7 +3,6 @@
   "private": true,
   "packageManager": "pnpm@10.18.0",
   "scripts": {
-    "prepare": "git config core.hooksPath .githooks",
     "build": "pnpm --recursive --if-present build",
     "test": "pnpm --recursive --if-present test",
     "check:public-hygiene": "node scripts/check-public-hygiene.mjs",

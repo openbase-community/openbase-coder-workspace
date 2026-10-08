@@ -17,8 +17,8 @@ if (trackedPrivate.length > 0) {
 }
 
 // The tip check above cannot catch content that was committed and later
-// removed; the .githooks/pre-push hook checks every commit in the pushed
-// range. Verify the hook is installed so it cannot be silently skipped.
+// removed; the workspace .githooks/pre-push hook (with its root/pre-push
+// guard) checks every commit in the pushed range. Verify the hook is installed so it cannot be silently skipped.
 let hooksPath = "";
 try {
   hooksPath = execFileSync("git", ["config", "core.hooksPath"], {
@@ -29,7 +29,7 @@ try {
 }
 if (hooksPath !== ".githooks") {
   console.error(
-    'The pre-push private-path guard is not installed: run "git config core.hooksPath .githooks" (pnpm install does this via the prepare script).',
+    'The workspace git hooks are not installed: run "multi hooks install" (multi sync does this automatically).',
   );
   process.exitCode = 1;
 }

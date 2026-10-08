@@ -1,0 +1,32 @@
+#!/bin/sh
+# Workspace pre-commit hook, run by every repo in this multi workspace
+# (multi.json "hooks"; installed by `multi sync` / `multi hooks install`).
+#   1. gitleaks over the staged changes.
+#   2. Public repos: refuse while any .reports/ path is in the index.
+#   3. The repo's own pre-commit, if it has one (see repo_local_hook).
+# shellcheck source=lib.sh
+. "$(dirname "$0")/lib.sh"
+
+status=0
+
+if ! skip_secret_scan commit; then
+  GITLEAKS=$(find_gitleaks pre-commit) || exit 1
+  run_gitleaks pre-commit --staged || status=1
+fi
+
+if ! repo_is_private; then
+  # shellcheck disable=SC2086 # REPORTS_PATHSPEC is a list of pathspecs
+  tracked=$(git ls-files -- $REPORTS_PATHSPEC)
+  if [ -n "$tracked" ]; then
+    hook_err "pre-commit: BLOCKED - .reports/ is private and must never be tracked in this public repo:"
+    printf '%s\n' "$tracked" | sed 's/^/  /' >&2
+    hook_err "  Keep the files and untrack them: git rm -r --cached -- <path>"
+    status=1
+  fi
+fi
+
+if chained=$(repo_local_hook pre-commit); then
+  "$chained" "$@" || status=1
+fi
+
+exit $status
