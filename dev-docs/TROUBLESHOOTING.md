@@ -371,6 +371,25 @@ tart run <sip-enabled-source> --recovery
 
 Then clone VPN-exercising field tests from that maintained SIP-enabled source. See the shared `field-testing` skill and `install-tests/electron-macos/README.md` for the current VM lifecycle. Openbase Direct avoids the VPN companion, and current desktop packages are required to include `openbase-tunneld`.
 
+## Phone VPN Down After An App Update, Onboarded User Back On "Pair your devices"
+
+### Symptoms Seen
+
+The Openbase VPN was connected; a new build was installed over the app (devicectl/Xcode, TestFlight, App Store, or an APK update on Android); on the next launch the tunnel is down and, on iOS, the app shows onboarding at "Pair your devices" even though the VPN profile is still present and enabled in Settings (live demo, 2026-10-08, staging). The iOS trace (`Documents/netmesh-vpn.log`, pulled with `devicectl device copy from --domain-type appDataContainer`) shows `launch: ... new-install` followed by `status: 1` (disconnected).
+
+### Diagnosis
+
+Replacing the app bundle kills the packet-tunnel extension process (or stops it with `NEProviderStopReason.appUpdate`), and iOS never restarts a tunnel on its own without on-demand rules. The onboarding gate asks the VPN controller for the phone's tailnet identity, which is nil while the tunnel is down, so `localTailscaleDetected` is false and the required step snaps back to pairing.
+
+Both apps now restart the saved tunnel themselves from the authenticated shell (launch, foreground, and the onboarding gate's identity poll all join one in-flight attempt, which waits a bounded time for the tunnel). The restart reuses the enrolled node: no enrolment call and no new pre-auth key. Whether to restart is decided by `NetmeshTunnelResumePolicy` (iOS, `ios/Openbase/Services/NetmeshTunnelResumePolicy.swift`) and `shouldRecoverManagedNetwork` (Android, `android/.../settings/ManagedNetworkRecovery.kt`), with this heuristic for telling a user disconnect from a kill:
+
+- **iOS.** The packet-tunnel extension overwrites `status.json` in the App Group once a second with `phase: "running"` while up, and with `phase: "stopped", reason: <NEProviderStopReason>` from `stopTunnel`. When the OS reports the tunnel disconnected, a file still in a running/start phase means the process died without `stopTunnel` (install over the app, jetsam, reboot): restart. A `stopped` file carries the OS reason: `userInitiated`, `userLogout`, `userSwitch`, `authenticationCanceled` (the user's choice, including the VPN toggle in iOS Settings) and `superceded`, `configurationDisabled`, `configurationRemoved`, `providerDisabled` (another VPN configuration took over) are left alone; `appUpdate`, `providerFailed`, `sleep`, `idleTimeout`, network-loss reasons and `none` are restarted. Disconnect in the app additionally sets a `userDisconnected` default that Connect clears. A disabled profile (`isEnabled == false`, iOS's "another VPN is active" marker) and a node flagged for a post-sign-out reset or enrolled by a different account are never auto-started. Three consecutive failures (with 10 s then 30 s backoff between them) stop the automatic attempts and the pairing card shows the error with Connect as the way forward. The trace logs one `resume[<trigger>]: <decision>` line per evaluation.
+- **Android.** `VpnService.prepare()` returning an intent means consent was revoked or another VPN took the slot (`onRevoke`): recovery is skipped. The app's Disconnect sets a `user_disconnected` preference in the netmesh VPN prefs that `connect` clears, and recovery is skipped while it is set. Everything else (APK update, process death, network loss) resumes the persisted node from the saved control URL, enrolling once only when that node cannot resume.
+
+### Fix
+
+Nothing to repair by hand on a current build: open the app and wait for the pairing card's status. If it reports the VPN did not reconnect after the attempts, tap Connect (iOS) or reconnect from onboarding/Settings (Android); that path re-enrols only when the node needs it. If a user deliberately turned the VPN off in iOS Settings, the app does not fight it: Connect in the pairing card is the only way back.
+
 ## `openbase-coder user say` Fails With "Unable to publish announcer message"
 
 ### Symptoms Seen
