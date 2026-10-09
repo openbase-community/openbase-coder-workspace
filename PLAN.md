@@ -36,7 +36,9 @@ Workspace → phone control goes over the existing app-control websocket when th
 
 ## Steps and PR-sized landings
 
-Each step is one review + merge through the MWW pipeline. Steps 1–3 are independent of the phone work and land first. Steps 4 and 5 depend on 2 and 3. Step 6 is optional and depends on 2.
+Each step is one review + merge through the MWW pipeline, in its own MWW branched from the trunk after the previous step lands (`maritime-localhost-oauth` for steps 0+1, `maritime-localhost-oauth-step2`, ...). Steps 1–3 are independent of the phone work and land first. Steps 4 and 5 depend on 2 and 3. Step 6 is optional and depends on 2.
+
+Status: steps 0+1 landed on develop 2026-10-09 (cli `46df6be`, skills `5ff29b7`). The Cloud API part of step 2 (`notify` scope, opt-in at bootstrap exchange; `url` + `forward_*` push keys) is in the cloud workspace MWW `maritime-localhost-oauth`. The cli/ios/android part of step 2 is in `maritime-localhost-oauth-step2`.
 
 ### Step 0: skill and `BROWSER` shim (S, 0.5–1 day) — repos: `skills`, `cli`
 
@@ -73,6 +75,7 @@ After step 2, Goal 1 is complete on both phones and every login with a device-co
 
 - `netmesh/LoopbackForwarder.kt` inside the VPN service process: on `forward_loopback {port, target, ttl, token}` (from the app-control socket or an FCM data message), bind `127.0.0.1:<port>` and `[::1]:<port>` (`ServerSocket`, `SO_REUSEADDR`), for each accepted connection open a plain socket to `<target>:<port>` (goes through the tun; do not `protect()`), pump both directions, close after TTL or after the first completed exchange when `one_shot`. Idempotent per port; bind failure (port in use) reports `forward_failed` back over the socket so the agent can fall back to paste-back.
 - Delivery: when the app is foreground, the app-control socket hands the command to the service via a bound call; when not, the FCM data message (high priority) reaches `OpenbaseMessagingService`, which starts the forward in the already-running VPN service and posts the open-URL notification. If the VPN is not up, report `vpn_down` and fall back to paste-back.
+- Cloud prerequisite (found in step 2): `send_fcm_alert` sends notification+data messages, which Android displays itself while the app is backgrounded, so the app never sees the `forward_*` keys and the tap handler deliberately ignores them (`MainActivity` is exported). For `open_url` pushes the Cloud must send a high-priority data-only FCM message carrying `title`/`body` keys; the Android app already handles that shape in every app state. iOS is unaffected (APNs taps deliver userInfo to the app).
 - Tests: Robolectric/JVM tests for the forwarder with a local target; instrumentation test on an emulator with a fake "workspace" socket; manual device check by Gabe: Codex login in a cloud workspace completed from Chrome on Android.
 
 ### Step 5: iOS spike and packet-tunnel loopback forwarder (spike 0.5 day; M/L, 3–5 days) — repos: `ios`, possibly `netmesh-go`
