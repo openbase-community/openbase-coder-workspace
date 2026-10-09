@@ -28,6 +28,10 @@ This glossary defines Openbase Coder workspace terms as they appear in docs, ins
 
 **Install sets**: The two `multi.json` repo groups for the dev-setup pathway. **`default`** is the public contributor set — every repo a non-member needs to build and run Openbase Coder, including `desktop` (its closed netmesh companion is fetched as a signed prebuilt artifact; see `desktop/OPEN_SOURCE_BOUNDARY.md`). **`internal`** (formerly named `dev`) adds the members-only repos: `ios`, `android`, `netmesh-go`, and the mobile auth/UI library repos. `scripts/detect-install-set.mjs` picks the set from what is already checked out and still recognizes the legacy `dev` name.
 
+**Dynamic tailnet forward**: A temporary `openbase-tunneld` TCP listener created by `openbase-coder service expose` on an embedded-node host, forwarding the same port to loopback. It expires after a bounded TTL, can retire after one completed connection, and can require a specific peer identity. Receiving phones need Openbase VPN for their browsers to reach it. User-facing behavior: `cli/docs/commands/service.md`.
+
+**Cloud browser shim**: The container's `openbase-browser` executable used by `BROWSER` and `GH_BROWSER`. It invokes `openbase-coder browser open`, prints the login URL, and attempts bounded delivery through the phone app-control socket. Receipt is not confirmation that the browser opened; loopback-only logins currently use paste-back. User-facing behavior: `cli/docs/docker.md` and the bundled `openbase-cloud-workspace-logins` skill.
+
 **Console**: The shared dashboard UI (from `coder-react`, built in `console`). The desktop app embeds it, the local runtime serves it in a browser, and the iOS app opens it in its Console and Diff tabs.
 
 **iOS app**: The phone client: voice calls with the dispatcher and Super Agents, threads, approvals, reports, diffs, and phone-side settings, connected to a Mac or DevSpace over Tailscale.
