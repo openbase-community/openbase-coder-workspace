@@ -89,6 +89,19 @@ The AMI is built by GitHub Actions in the private `openbase-community/openbase-d
 
 Either way the CLI comes from git at that branch's HEAD (a rebake picks up new commits directly; `openbase-coder` is no longer published to PyPI). The staging AMI only matters when you're deploying through the `staging` path (see Branch model above); a direct `develop` → `main` deploy exercises just the `main`/default AMI.
 
+### Cloud workspace image upgrades (staging and production)
+
+Cloud workspaces (DevSpace kind `container`) run the CLI baked into the image pinned by the Cloud app's `MARITIME_IMAGE`; a CLI release does not reach them until that image is rebuilt, re-pinned and each existing workspace is redeployed in place. Maritime keeps only `/data` across a redeploy: the image layer, `$HOME` included, is replaced. Images built before cli `docker/persist-home-state.sh` (landed 2026-10-09) kept the Super Agents registry (thread ids, the Dispatcher's thread, Super Agent names) in `$HOME`, and the first staging redeploy lost it. Every existing workspace on such an image needs a one-time copy before its first redeploy; skipping it loses that user's threads irrecoverably.
+
+For each existing workspace, staging and production alike:
+
+1. Quiesce it: no active turn or call (check its threads through the local API over exec), so the snapshot is not overtaken by later writes.
+2. Copy the registry onto the volume: run the body of cli `docker/pre-upgrade-copy-home-state.sh` inside the workspace as its command through the Maritime exec API (from the Cloud shell: `MaritimeClient().exec_command(d.maritime_agent_id, script_text, timeout=60)`). Expect `copied …` for each directory, or `skip … (not a real directory)` on a workspace whose image already links them. A `skip … already exists` means an older copy is on the volume: rename that copy aside (never delete it) and run the script again.
+3. Redeploy immediately with `redeploy_container_workspace(d)` from `openbase_api.devspaces.maritime`, never a bare `deploy_image`. It re-checks through exec and refuses when the registry is still only in the image layer, when the volume copy is older than the live store, or when the check cannot run (an asleep workspace: start it first). `allow_unpersisted_state=True` overrides the check and accepts losing the threads; use it only with Gabe's explicit go for that workspace.
+4. Verify after boot: `/home/openbase/.super-agents` and `/home/openbase/.local/share/super-agents-claude-code` are symlinks into `/data/openbase`, and the workspace's `/api/threads/` still lists its `s_` thread ids, the Dispatcher's thread and the Super Agent names it had before.
+
+Fresh workspaces need none of this; workspaces already on an image with `persist-home-state.sh` pass step 3's check with no copy.
+
 ## 4. Desktop DMG publish
 
 **CI is the publisher.** Pushing desktop `main` (done by step 2's promote) runs `electron-rebuild.yml`, which builds, signs, notarizes, and publishes the DMG/zip/feed to S3 (~30 min), seeding the app with the **latest released** CLI package (downloaded, never rebuilt). If publishing fails, fix or rerun CI; do not publish from a developer workstation.
