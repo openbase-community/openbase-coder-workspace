@@ -62,7 +62,7 @@ This glossary defines Openbase Coder workspace terms as they appear in docs, ins
 
 **Dictation**: The microphone button in the iOS and Android chat composers (a "voice note"). It streams speech to Openbase speech-to-text, the same AssemblyAI session the pipeline voice engine opens through the Openbase Cloud audio proxy, and merges the transcript into the message box; it never uses the phone's own dictation, and it fails with a message when Openbase speech-to-text is unreachable. Contract and cost guards: `dev-docs/dictation.md`.
 
-**Voice route**: The active target for user speech in a private LiveKit room. It is normally the dispatcher, but can be transferred to a Super Agent/thread and then returned to the dispatcher.
+**Voice route**: The active target for user speech in a private LiveKit room. A call starts routed to the thread it was started from (the phone passes that thread to the room-token request, and the agent applies the route before the voice session starts); a call started from the dispatcher, an inbound call, or a client that passes no thread starts on the dispatcher. The route can then be transferred to another Super Agent/thread and returned to the dispatcher.
 
 **LiveKit room**: The private real-time voice room used by Openbase Coder for user speech, agent audio, route-control data messages, and related voice events.
 
