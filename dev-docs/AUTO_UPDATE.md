@@ -33,7 +33,7 @@ Rules that must not regress:
 - `update-manifest.json` (+ `update-manifest.json.sig` when signing is configured) — built by `cli/scripts/build_update_manifest.py`
 - `install.sh`
 
-The macOS runtime package includes the relocatable CLI launcher, the pinned LiveKit server, `openbase-tunneld`, and the Openbase Sync engine (`openbase-syncd`, `openbase-sync`, `edge`). Openbase Direct depends on that bundled tunnel binary; package validation, installation, self-update validation, and Electron staging all treat it as required rather than attempting a first-run Go build on the user's Mac.
+The macOS runtime package includes the relocatable CLI launcher, the pinned LiveKit server, `openbase-tunneld`, the Openbase Sync engine (`openbase-syncd`, `openbase-sync`, `edge`), and the Openbase Services launcher bundle (`libexec/Openbase Services.app`, recorded as `serviceLauncher` in the package metadata). Openbase Direct depends on that bundled tunnel binary; package validation, installation, self-update validation, and Electron staging all treat it as required rather than attempting a first-run Go build on the user's Mac. The services launcher is the launchd job process for every macOS service, and self-update validation refuses a macOS package that does not declare and ship it: it is the stable, Developer ID-signed identity that keeps the user's Desktop/Documents/Local Network grants valid across updates — see `MACOS_SERVICE_IDENTITY.md`, which also lists the Apple signing secrets the CLI release workflow needs (without them the package ships ad-hoc signed and every update re-prompts).
 
 The release workflow builds macOS LiveKit from its official source tag using `cli/scripts/build-pinned-livekit.sh` and verifies the resulting version against `livekit_version.py`. Homebrew's floating formula must not determine the packaged engine or block releases when it advances past the pin.
 
@@ -235,6 +235,7 @@ From-source version integrity: staging tags end in `.dev0` because setuptools-sc
 - [ ] Self-update completes without the desktop app running (CLI + routines-service path only)
 - [ ] Concurrent self-updates are serialized by the update lock
 - [ ] Releases are draft-first and fail on mid-build sibling pushes
+- [ ] macOS services keep one code identity across updates: the launchd job runs through the signed `Openbase Services.app` launcher, its bundle identifier never changes, and the plist stays byte-identical across releases (`MACOS_SERVICE_IDENTITY.md`)
 
 ## Developer source provenance
 

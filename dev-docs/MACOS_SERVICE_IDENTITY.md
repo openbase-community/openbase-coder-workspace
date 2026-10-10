@@ -1,0 +1,51 @@
+# macOS Service Identity (TCC, Local Network, Background Items)
+
+How the Openbase Coder background services present themselves to macOS, why that identity must be stable across self-updates, and how to verify it. Consult this before touching the launchd plist generation (`cli/openbase_coder_cli/services/launchd.py`), the package signing scripts (`cli/scripts/sign_standalone_package.py`, `cli/scripts/build_service_launcher.py`), or the release workflow's signing steps.
+
+## The problem this solves
+
+Every Openbase Coder service on macOS is a user LaunchAgent (`com.openbase.coder.<service>`). The Dispatcher, Super Agents, Claude/Codex threads, LiveKit and the Openbase Direct tunnel are all that job's process or its descendants. When any of them touches `~/Desktop`, `~/Documents`, `~/Downloads`, an external or network volume, or the local network, macOS asks the user once and records the answer in the TCC database. Both the prompt and the record are attributed to the **responsible process**: launchd makes a job's own process responsible for itself and for everything it spawns (the same mechanism that makes Terminal, not `python3`, the thing you grant Desktop access to).
+
+TCC does not key that record on the process name. For a bare executable the row's `client` is its absolute path and its `csreq` column is the executable's **designated requirement**; for an app bundle the `client` is the **bundle identifier** plus the same `csreq`. A designated requirement is only stable when the code is signed with a certificate: a Developer ID signature yields `identifier "<id>" and anchor apple generic and ... certificate leaf[subject.OU] = <Team ID>`, which every future build with the same identifier and team satisfies. An ad-hoc signature (`codesign -s -`, or the linker's default) yields `cdhash H"<hash>"`, a different value for every build.
+
+Before this design the job process was the bundled CPython interpreter, `~/.openbase/packages/standalone/releases/<version>-<target>/python/bin/python3.12`: ad-hoc signed (the CLI release workflow only signs with the Developer ID identity when its Apple secrets are present) **and** under a path that changes every release. Each self-update therefore produced a brand-new TCC client. The agent hung on "python3.12 would like to access files in your Desktop folder" until a human clicked Allow, `openbase-tunneld` re-asked for Local Network, and because the first install's seed had been re-signed by the desktop build while updates were not, even the identity's shape flipped between installs.
+
+## The identity model
+
+1. **The launchd job process is the Openbase Services launcher**, a tiny C program (`cli/macos/service-launcher/openbase-services.c`) packaged as the app bundle `libexec/Openbase Services.app` inside the macOS runtime package, bundle identifier `cloud.openbase.coder.services`. The generated plist runs `[<current>/libexec/Openbase Services.app/Contents/MacOS/openbase-services, ~/.openbase/launchd/<service>.sh]`; the launcher spawns the wrapper (which execs the runner, which execs the real service binary) and stays alive as the job's process, forwarding termination signals and exiting with the child's status. Everything the service spawns — Python, livekit-server, openbase-tunneld, codex, claude, the user's build tools — inherits the launcher as its responsible process. TCC therefore shows **"Openbase Services"** in its prompts (with the usage strings from the bundle's `Info.plist`) and stores one row, `client = cloud.openbase.coder.services`, `client_type = 0`, for all of them. The bundle identifier is path-independent, so the versioned release directory no longer matters.
+2. **Every macOS runtime release is signed with the Developer ID Application identity** by `cli/scripts/sign_standalone_package.py` in `release-standalone.yml`: every Mach-O file (deepest first, so libraries before the executables that load them), then every app bundle as a unit. The launcher's designated requirement is then `identifier "cloud.openbase.coder.services" and anchor apple generic and ... subject.OU = <Team ID>` — identical for every release, so the stored `csreq` keeps validating after a self-update. The signature lives inside the Mach-O / `_CodeSignature` files, so it survives `tar`, `install.sh`, the desktop seed copy (`fs.cp`) and the self-update extract unchanged.
+3. **The desktop seed and the self-update feed carry the same identity.** The DMG build re-signs everything under `Resources/OpenbaseCoderCLI` with the same Developer ID certificate; because the signing script derives identifiers the same way codesign does by default (bundle `Info.plist` for the launcher, file name for bare binaries), the seeded launcher and every later release share one designated requirement. Only the launcher's identity is load-bearing for TCC; the interpreter's own identifier is irrelevant once it is no longer the responsible process.
+4. **The interpreter keeps hardened-runtime entitlements** (`cli/macos/python-runtime.entitlements`: `disable-library-validation`, `allow-unsigned-executable-memory`, `allow-jit`, `allow-dyld-environment-variables`) because the plugin site (`~/.openbase/plugins/site`) and user-installed wheels load extension modules we never signed. Nothing else needs entitlements.
+5. **Background Items stay quiet.** macOS posts "Background Items Added" when a LaunchAgent is registered (bootout + bootstrap) or its plist changes. The plist's launcher path goes through the `current` alias and the wrapper path is fixed, so a self-update changes neither; `install_service` keeps restarting loaded jobs in place. A Developer ID-signed job executable is also what makes the plist's `AssociatedBundleIdentifiers` effective: macOS groups the services under the Openbase app in Login Items & Extensions only when the job's code is signed by the same team as the app. Expect exactly one notification per service on the first update that introduces the launcher (the plist gains an argument), and none after.
+
+Development installs carry no runtime package and run the wrapper directly as before; their grants are keyed on the workspace venv's interpreter and live as long as that interpreter does.
+
+Changing the bundle identifier, the Team ID or the launcher's bundle layout invalidates every user's grants at once; treat `cloud.openbase.coder.services` as a compatibility identifier like the desktop bundle ID.
+
+## What the CI needs
+
+The CLI release workflow signs only when these repository secrets exist on `openbase-community/openbase` (they are the same values the desktop repository already holds):
+
+| Secret | Purpose |
+|---|---|
+| `APPLE_DEVELOPER_ID_APPLICATION_CERT_BASE64` | Developer ID Application certificate + private key, `.p12`, base64 |
+| `APPLE_DEVELOPER_ID_APPLICATION_CERT_PASSWORD` | the `.p12` password |
+| `APPLE_CODESIGN_IDENTITY` | the identity name (`Developer ID Application: … (<Team ID>)`); defaults to `Developer ID Application` |
+| `APPLE_CODESIGN_KEYCHAIN_PASSWORD` | password for the throwaway build keychain (any value) |
+| `APPLE_NOTARY_KEY`, `APPLE_NOTARY_KEY_ID`, `APPLE_NOTARY_ISSUER_ID` | App Store Connect API key for notarizing the package |
+
+Without the certificate secret the workflow emits a warning annotation ("Unsigned runtime package") and ships the ad-hoc-signed package: it runs, but every release is a new identity and the re-prompting returns. The signing step fails the release if the launcher's designated requirement is not identifier-based, if its signature carries no Team ID, or if the interpreter lost its entitlements.
+
+## Verifying on a Tart VM
+
+Run this after installing a signed staging DMG in a fresh VM (the field-testing skill covers the VM itself). The TCC database is readable from a shell that has Full Disk Access (the field-test SSH session, or a terminal granted it), otherwise prefix the `sqlite3` reads with `sudo`.
+
+1. Install the DMG, sign in, and let the services come up (`openbase-coder services status`). Confirm the job runs through the launcher: `launchctl print gui/$(id -u)/com.openbase.coder.django-cli | grep -A3 'program\|arguments'` lists `…/current/libexec/Openbase Services.app/Contents/MacOS/openbase-services` first, and `codesign -dvv "$HOME/.openbase/packages/standalone/current/libexec/Openbase Services.app" 2>&1 | grep -E 'Identifier|TeamIdentifier'` shows `cloud.openbase.coder.services` with a real Team ID (not `not set`).
+2. Reset any earlier grant so the prompt is exercised: `tccutil reset SystemPolicyDesktopFolder cloud.openbase.coder.services`.
+3. Trigger Desktop access through the product (voice: "what's on my desktop", or start a Super Agent in a Desktop folder). The prompt must read **"Openbase Services" would like to access files in your Desktop folder** with the usage description from the bundle. Click Allow once.
+4. Read the grant: `sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" "select client, client_type, auth_value from access where service = 'kTCCServiceSystemPolicyDesktopFolder'"` must list `cloud.openbase.coder.services|0|2`. If the row instead names a `python3.12` path, the job is not running through the launcher.
+5. Self-update to the next staging release (`openbase-coder self-update --force`, or wait for the routines service) and confirm `openbase-coder version` moved. Re-run step 1's `codesign` check on the new `current`.
+6. Repeat step 3 without resetting. There must be **no new prompt**, the voice request must succeed, and the `sqlite3` row from step 4 must be unchanged (same `client`, `auth_value` still 2). The Local Network entry under System Settings → Privacy & Security → Local Network must likewise list Openbase Services once, still enabled.
+7. Background Items: `sfltool dumpbtm | grep -B2 -A8 'com.openbase.coder'` after the update shows the same record UUIDs as before it; no "Background Items Added" notification fires during the update, apart from the single one per service on the first update that adds the launcher argument to the plist.
+
+Any re-prompt at step 6 means an identity drifted; compare `codesign -d -r- "…/current/libexec/Openbase Services.app"` before and after the update — the two designated requirements must be byte-identical.
