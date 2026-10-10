@@ -23,6 +23,20 @@ Two promotion paths are both valid, and we use each at different times:
 
 Pick one per deploy and apply it consistently across both workspaces. The commands below use `develop main` as the example (the direct path); if you're going through `staging`, substitute the branch pair for the step you're on (`develop staging`, then later `staging main`) — the surrounding gates and ordering are identical either way.
 
+## Staging promotions: one command
+
+A `develop` → `staging` promotion is one script, run from the Cloud workspace trunk (it drives the sibling Coder workspace too):
+
+```bash
+cd ../openbase-cloud-workspace
+scripts/promote-staging --dry-run --upgrade <devspace pks>   # print the plan only
+scripts/promote-staging --upgrade <devspace pks> --log <file> --summary-json <file>
+```
+
+It prints the plan first ("WILL rebuild X", "skip Y: unchanged"), from both workspaces' own `scripts/promote --dry-run` content comparison, and rebuilds only what depends on a changed tree: the Cloud API/web releases when api, api-core, deploy, the cloud root or web changed; the CLI release and the cloud workspace image when cli or a bundled sibling (super-agents, skills, console, coder-react, the root's `instructions/`) changed; desktop when desktop or its bundled CLI changed; Android when android changed. Then it runs everything in parallel: both promotions at once (Coder holds desktop back until the CLI release it must seed exists), the image build (amd64 only, dispatched right after the push instead of after the CLI release), the CLI, Android and desktop CI, and, once the image is built and the staging API is live, the `MARITIME_IMAGE` pin (its ~10 min config release rolls out in the background), the in-place upgrade of each `--upgrade` workspace and the fresh-workspace check, all at once. Remote steps run as short `openbase run` tasks (each under the ~120 s proxy cutoff) with `MARITIME_IMAGE` set to the new digest in the task environment, which is why they need not wait for the config release.
+
+It upgrades only the listed workspaces that are running, with the image-upgrade procedure's guarded path below (quiescence check, both Super Agents stores already linked into `/data`, guard, `redeploy_container_workspace`, post-boot verification that every thread id and agent name survived). It skips stopped workspaces and refuses, without copying anything, a workspace whose stores are not linked (a suspected image revert); handle those by hand with the full procedure. The fresh-workspace check creates a workspace as `--fresh-user` (a field-test account), runs the post-boot checks and the BUG 7 stop/wake canary, and terminates it unless `--keep-fresh`. `--wait-desktop` also waits for the ~25 min desktop rebuild and verifies its CLI seed; by default the script reports the run and returns. It exits non-zero and lists every failure if any step failed; read the milestones it prints for the timeline.
+
 ## 0. Preconditions
 
 - Both workspaces committed and pushed on the FROM branch you're promoting (usually `develop`); no parallel agent mid-commit in these repos.
@@ -100,7 +114,7 @@ For each existing workspace, staging and production alike:
 3. Redeploy immediately with `redeploy_container_workspace(d)` from `openbase_api.devspaces.maritime`, never a bare `deploy_image`. First confirm the target Cloud backend includes the persistence guard and the replacement image includes `persist-home-state.sh`. The guard re-checks through exec and refuses when the registry is still only in the image layer, when the volume copy is more than 300 seconds older than the live store, or when the check cannot run (an asleep workspace: start it first; a transient exec 503 `guest_command_unavailable`: retry from step 2). A refusal for staleness means the store changed after the copy: repeat step 2 with `--refresh` and redeploy again at once. Its five-minute staleness tolerance does not prove that all writes were captured; keep the workspace quiescent even if the guard passes. `allow_unpersisted_state=True` overrides the check and accepts losing the threads; use it only with Gabe's explicit go for that workspace.
 4. Verify after boot: `/home/openbase/.super-agents` and `/home/openbase/.local/share/super-agents-claude-code` are symlinks into `/data/openbase`, every file under them belongs to the workspace user, and the workspace's `/api/threads/` still lists its `s_` thread ids, the Dispatcher's thread and the Super Agent names it had before. Give the services a minute: the LiveKit worker (`127.0.0.1:18081`) comes up after the API. Return the workspace to the state it was in (a stopped workspace is stopped again through the product action) before moving to the next one; the Maritime plan caps the number of awake machines, and the product start call can exceed the Cloud client's timeout while the VM still starts, so reconcile a minute later rather than retrying the start.
 
-Fresh workspaces need none of this; workspaces already on an image with `persist-home-state.sh` pass step 3's check with no copy.
+Fresh workspaces need none of this; workspaces already on an image with `persist-home-state.sh` pass step 3's check with no copy. For staging, `scripts/promote-staging` (above) runs this procedure's linked-stores path for the running workspaces it is given; the one-time copy stays a manual step.
 
 ## 4. Desktop DMG publish
 
@@ -142,10 +156,15 @@ If the macOS job fails late with `Electron failed to install correctly`, the wor
 
 | Deploy | Typical duration |
 |---|---|
-| Coder workspace `scripts/promote` (prechecks dominate: cli pytest suite, assembly pnpm install, typechecks) | 30+ min |
-| CLI auto-release (GHA) | ~3 min |
-| Desktop CI build+notarize+publish | ~30 min |
-| openbase-cloud API (`openbase-deploy`, warm cache) | ~7 min (build ~4, rollout ~3.5) |
+| Coder workspace `scripts/promote` to main (prechecks dominate: cli pytest suite, assembly pnpm install, typechecks) | 30+ min |
+| Coder or Cloud `scripts/promote` to staging (no prechecks; pushes only) | < 1 min |
+| CLI auto-release (GHA, measured 2026-10-09) | 4–6 min |
+| Cloud workspace image (`docker-image.yml`, both arches; amd64 alone is the same wall clock) | ~4–5 min |
+| Android release (GHA) | 12–17 min, ~8 min less with the netmesh AAR cached |
+| Desktop CI build+notarize+publish | ~24–30 min |
+| openbase-cloud API (staging or prod webhook deploy) | 6–7.5 min |
+| `MARITIME_IMAGE` config change (two config_sync releases) | 5 and 9–10 min |
+| Cloud workspace in-place upgrade (redeploy + boot + verify) | ~3–5 min each, in parallel |
 | Static sites (web/marketing) | ~20 s after local build |
 
 ## 5. Post-deploy checks
