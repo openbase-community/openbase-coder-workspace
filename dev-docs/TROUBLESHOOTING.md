@@ -252,6 +252,20 @@ There is no transcript to recover after the fact — mitigation is transport-lev
 
 Upgrade the npm Codex CLI to the daemon's version (`npm install -g @openai/codex@<appServerVersion>`), then confirm `codex app-server daemon version` reports equal versions and `openbase-coder services status` shows `codex-app-server available through the shared Codex daemon` with no mismatch. A crash-loop that is still running on an older cli stops on its own after the next `openbase-coder update`; trimming the oversized log by hand is safe (launchd appends).
 
+## macOS Asks Again For Desktop/Documents/Local Network Access After Every Update
+
+### Symptoms Seen
+
+After a CLI self-update, a voice request such as "what's on my desktop" hangs or fails until someone clicks Allow on a `"python3.12" would like to access files in your Desktop folder` dialog; `openbase-tunneld` re-asks for Local Network; six "Background Items Added" notifications fire during the update.
+
+### Diagnosis
+
+The launchd job's process is what macOS keys the grant on. Check what it is: `launchctl print gui/$(id -u)/com.openbase.coder.django-cli | grep -A3 arguments` must list `.../current/libexec/Openbase Services.app/Contents/MacOS/openbase-services` first; if it goes straight to `~/.openbase/launchd/django-cli.sh`, the installed release predates the launcher or the package shipped without it. Then `codesign -dvv "$HOME/.openbase/packages/standalone/current/libexec/Openbase Services.app" 2>&1 | grep -E 'Identifier|TeamIdentifier'`: `TeamIdentifier=not set` means the release was built without the Apple signing secrets, so its identity is a per-build cdhash and every update is a new client. The TCC row itself: `sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" "select client, client_type from access where service = 'kTCCServiceSystemPolicyDesktopFolder'"` should show `cloud.openbase.coder.services|0`, not a `python3.12` path.
+
+### Fix
+
+Ship a release built with the signing secrets in place (`MACOS_SERVICE_IDENTITY.md` lists them and the verification recipe); nothing on the user's machine can repair an unsigned identity. One further prompt and one Background Items notification per service are expected on the first update that introduces the launcher.
+
 ## livekit-server Crash-Loops With No Log Output (Code Signature Invalid)
 
 ### Symptoms Seen
