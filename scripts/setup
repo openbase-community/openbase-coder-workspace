@@ -207,6 +207,12 @@ pushd "${ROOT_DIR}"/cli
 uv run openbase-coder setup "${SETUP_ARGS[@]}"
 popd
 
+# pnpm can report an installed Electron package while its downloaded runtime
+# is absent. Verify/repair that runtime through the existing build policy.
+if [ -f "$ROOT_DIR/desktop/package.json" ]; then
+  node "$SCRIPT_DIR/ensure-electron-runtime.mjs" "$ROOT_DIR"
+fi
+
 echo "Setup complete. The Openbase services and browser dashboard are ready."
 
 # Visual developer surfaces are optional. Electron never owns setup in a

@@ -112,6 +112,12 @@ launch_menu_bar() {
   echo "Opened the Swift Openbase networking menu-bar UI."
 }
 
+# Check/repair Electron before building or publishing either visual surface.
+# This also covers --electron-dev and the packaged-app direct-launch fallback.
+if [ "$LAUNCH_ELECTRON" = true ]; then
+  node "$SCRIPT_DIR/ensure-electron-runtime.mjs" "$ROOT_DIR"
+fi
+
 if [ "$LAUNCH_MENU_BAR" = true ]; then
   launch_menu_bar
 fi
@@ -126,16 +132,8 @@ if [ "$LAUNCH_ELECTRON" = true ]; then
   # process: no dev server, no file watchers. Rebuild only when the renderer
   # sources are newer than the last build.
   DESKTOP_DIR="$ROOT_DIR/desktop"
-  # Unpackaged runs read the menu-bar app name from Electron's own bundle
-  # before any of our code executes; brand the dev bundle once per install.
-  ELECTRON_PLIST="$DESKTOP_DIR/node_modules/electron/dist/Electron.app/Contents/Info.plist"
-  if [ -f "$ELECTRON_PLIST" ] && [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$ELECTRON_PLIST" 2>/dev/null)" != "Openbase" ]; then
-    /usr/libexec/PlistBuddy -c 'Set :CFBundleName Openbase' "$ELECTRON_PLIST"
-    /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName Openbase' "$ELECTRON_PLIST" 2>/dev/null || \
-      /usr/libexec/PlistBuddy -c 'Add :CFBundleDisplayName string Openbase' "$ELECTRON_PLIST"
-    codesign --force --sign - "$DESKTOP_DIR/node_modules/electron/dist/Electron.app" >/dev/null 2>&1 || true
-    echo "Branded the dev Electron bundle as Openbase."
-  fi
+  # Keep the upstream Electron bundle intact; the app sets its own display name.
+  ELECTRON_APP="$(cd "$DESKTOP_DIR/node_modules/electron/dist/Electron.app" && pwd -P)"
   DIST_INDEX="$DESKTOP_DIR/dist/index.html"
   if [ ! -f "$DIST_INDEX" ] || ! node "$ROOT_DIR/scripts/check-renderer-freshness.cjs" "$ROOT_DIR" desktop || [ -n "$(find "$DESKTOP_DIR/src" "$DESKTOP_DIR/index.html" "$DESKTOP_DIR/vite.config"* "$ROOT_DIR/coder-react/src" "$ROOT_DIR/multi-react/src" "$ROOT_DIR/boilersync-react/src" -newer "$DIST_INDEX" -print -quit 2>/dev/null)" ]; then
     echo "Building the dashboard renderer…"
@@ -154,7 +152,11 @@ if [ "$LAUNCH_ELECTRON" = true ]; then
     echo "Launching Electron in developer dashboard-only mode (setup is disabled)."
     exec pnpm --dir "$DESKTOP_DIR" start
   fi
-  rm -rf "$APP_DIR"
+  DESTINATION="$APP_DIR"
+  STAGING_DIR="$(mktemp -d "${TMPDIR:-/tmp}/openbase-dev-launch.XXXXXX")"
+  trap 'rm -rf "$STAGING_DIR"' EXIT
+  APP_DIR="$STAGING_DIR/Openbase.app"
+  MARKER="$APP_DIR/Contents/Resources/.openbase-dev-launcher"
   mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
   cp "$DESKTOP_DIR/assets/openbase-coder-icon.icns" "$APP_DIR/Contents/Resources/openbase.icns"
   cat > "$APP_DIR/Contents/Info.plist" <<PLIST
@@ -174,7 +176,6 @@ if [ "$LAUNCH_ELECTRON" = true ]; then
   <key>LSUIElement</key><true/>
 </dict></plist>
 PLIST
-  ELECTRON_APP="$(cd "$DESKTOP_DIR/node_modules/electron/dist/Electron.app" && pwd -P)"
   cat > "$APP_DIR/Contents/MacOS/Openbase" <<LAUNCH
 #!/bin/bash
 # Run-and-exit launcher. Staying alive is a trap either way: exec'ing Electron
@@ -202,7 +203,20 @@ exit 0
 LAUNCH
   chmod +x "$APP_DIR/Contents/MacOS/Openbase"
   touch "$MARKER"
-  codesign --force --sign - "$APP_DIR" >/dev/null 2>&1 || true
+  codesign --force --sign - "$APP_DIR"
+  # Reuse native staging's verified atomic publication. Preparation, signing or
+  # publication failure leaves the existing launcher intact; swapped bundles
+  # are retained so running code is never unlinked in place.
+  node --input-type=module - "$DESKTOP_DIR" "$APP_DIR" "$DESTINATION" <<'NODE'
+import { cpSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+import path from "node:path";
+const [desktop, prepared, destination] = process.argv.slice(2);
+const { stageNativeBundle } = await import(pathToFileURL(path.join(desktop, "scripts/native-bundle-staging.mjs")));
+stageNativeBundle(destination, (incoming) => cpSync(prepared, incoming, { recursive: true }));
+NODE
+  rm -rf "$STAGING_DIR"
+  trap - EXIT
   echo "Launching the Openbase dev dashboard (setup is disabled)."
-  exec open "$APP_DIR"
+  exec open "$DESTINATION"
 fi
