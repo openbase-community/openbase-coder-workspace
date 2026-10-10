@@ -30,6 +30,10 @@ tail -n 360 ~/.openbase/logs/livekit-agent.log | rg -i 'received job request|Con
 tail -n 360 ~/.openbase/logs/livekit-server.log | rg -i 'participant active|without connection|SIGNAL_SOURCE_CLOSE|dtls timeout|ice connection state change'
 ```
 
+Container and Maritime (cloud DevSpace) workspaces keep the same files under the data directory (`$OPENBASE_CODER_CLI_DATA_DIR/logs/<service>.log`, `/data/openbase/logs/` on Maritime): the entrypoint supervisor mirrors each service's output through `services/container_log_sink.py`, which trims a file back to its tail once it passes 4 MiB. Before that sink (2026-10-09) service output went only to the VM serial console and was unrecoverable after a call, so a workspace booted on an older image has no such files. Read them through Maritime exec with the same bounded tails; Maritime's own `GET /api/agents/<id>/logs` returns only its start/stop/build events, never service output.
+
+For a live-engine call, every bridge line ends in `call=<room name>` and the stages `live_forced_delegation` (utterance decision, `key=`), `live_delegation_turn_bound` (`key=` → Super Agents `turn_id=`), `live_append_commentary|thinking|instructions` (what was handed to GPT-Live, hashed) and `live_call_summary` (counts for the whole call, on close) join one call across the service log, the Super Agents turn store and the Cloud gateway's `live_voice_session_started|ended` lines (which carry the user id and GPT-Live session id). Spoken text itself is never logged, only its length and hash.
+
 Useful connectivity checks:
 
 ```sh
