@@ -90,7 +90,7 @@ require_command multi "uv tool install multi-workspace"
 # Developer installs build the embedded Openbase Direct transport from the
 # checked-out Go source. Check this up front with the other workspace tools so
 # choosing Direct cannot fail after the console and Python environment build.
-require_command go "Download the current Go toolchain from https://go.dev/dl/"
+require_command go "brew install go   # or download the current toolchain from https://go.dev/dl/"
 
 # The dev-workspace console build hard-requires pnpm (pnpm workspace with
 # workspace:* deps — npm is not a fallback). Check the same locations the CLI
