@@ -75,10 +75,22 @@ check_existing_installation
 # "command not found".
 MISSING_PREREQ=false
 
+# `uv tool install` (multi) and the standalone uv installer (uv itself) put
+# their executables in uv's tool bin dir, which a fresh macOS shell does not
+# have on PATH. Reporting those as "not installed" sends the user into a loop
+# (reinstalling says it is already installed), so use the tool from there for
+# this run and print the PATH fix instead.
+UV_TOOL_BIN="${UV_TOOL_BIN_DIR:-${XDG_BIN_HOME:-${HOME}/.local/bin}}"
+OFF_PATH_TOOLS=""
+
 require_command() {
   local cmd="$1"
   local fix="$2"
   if ! command -v "$cmd" >/dev/null 2>&1; then
+    if [ -x "$UV_TOOL_BIN/$cmd" ]; then
+      OFF_PATH_TOOLS="${OFF_PATH_TOOLS:+$OFF_PATH_TOOLS, }$cmd"
+      return
+    fi
     echo "Error: '$cmd' is required but was not found on PATH. Install it with:" >&2
     echo "  $fix" >&2
     MISSING_PREREQ=true
@@ -91,6 +103,15 @@ require_command multi "uv tool install multi-workspace"
 # checked-out Go source. Check this up front with the other workspace tools so
 # choosing Direct cannot fail after the console and Python environment build.
 require_command go "brew install go   # or download the current toolchain from https://go.dev/dl/"
+
+if [ -n "$OFF_PATH_TOOLS" ]; then
+  export PATH="$UV_TOOL_BIN:$PATH"
+  echo "Note: found ${OFF_PATH_TOOLS} in ${UV_TOOL_BIN}, which is not on your PATH." >&2
+  echo "Setup uses ${OFF_PATH_TOOLS} from there for this run. To fix PATH for new terminals, run:" >&2
+  echo "  uv tool update-shell   # then open a new terminal" >&2
+  echo "or add this line to your shell profile:" >&2
+  echo "  export PATH=\"${UV_TOOL_BIN}:\$PATH\"" >&2
+fi
 
 # The dev-workspace console build hard-requires pnpm (pnpm workspace with
 # workspace:* deps — npm is not a fallback). Check the same locations the CLI
