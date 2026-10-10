@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { electronRuntime, ensureElectronRuntime } from "./ensure-electron-runtime.mjs";
+
+const helper = path.join(path.dirname(fileURLToPath(import.meta.url)), "electron-artifact.cjs");
 
 function fixture(t) {
   const workspace = mkdtempSync(path.join(os.tmpdir(), "electron-readiness-"));
@@ -117,4 +121,69 @@ test("an override cannot validate one runtime and launch another", (t) => {
     env: { ELECTRON_OVERRIDE_DIST_PATH: "alternate" },
     run() { assert.fail("unexpected command"); },
   }), /ELECTRON_OVERRIDE_DIST_PATH/);
+});
+
+// Node 26: electron's approved install.js exits 0 after extracting only the
+// first zip entry, so dist/ exists but holds just LICENSES.chromium.html.
+function truncatedInstall(f) {
+  mkdirSync(path.join(f.packageDir, "dist"), { recursive: true });
+  writeFileSync(path.join(f.packageDir, "dist/LICENSES.chromium.html"), "licenses");
+}
+
+test("a truncated install-script extraction is finished natively from the verified zip", { skip: process.platform !== "darwin" }, (t) => {
+  const f = fixture(t);
+  // A real zip, extracted by the real ditto, with the upstream archive layout.
+  const source = path.join(f.workspace, "zip-source");
+  mkdirSync(path.join(source, "Electron.app/Contents/MacOS"), { recursive: true });
+  writeFileSync(path.join(source, "Electron.app/Contents/MacOS/Electron"), "#!/bin/sh\n", { mode: 0o755 });
+  writeFileSync(path.join(source, "version"), "39.8.10");
+  writeFileSync(path.join(source, "electron.d.ts"), "types");
+  writeFileSync(path.join(source, "LICENSES.chromium.html"), "licenses");
+  const zip = path.join(f.workspace, "electron-v39.8.10-darwin-arm64.zip");
+  execFileSync("ditto", ["-c", "-k", source, zip]);
+  const commands = [];
+  const run = (command, args, options) => {
+    commands.push(command);
+    if (args.includes("config")) return "undefined";
+    if (args.includes("rebuild")) return truncatedInstall(f);
+    if (command === process.execPath) {
+      assert.deepEqual(args, [helper, f.packageDir]);
+      return `${zip}\n`;
+    }
+    if (command === "ditto") return execFileSync(command, args, options);
+    assert.equal(command, f.executable);
+    return "39.8.10";
+  };
+  assert.equal(ensureElectronRuntime(f.workspace, { run, env: {}, platform: "darwin", log() {} }), realpathSync(f.executable));
+  assert.deepEqual(commands, ["pnpm", "pnpm", process.execPath, "ditto", f.executable]);
+  assert.equal(readFileSync(path.join(f.packageDir, "path.txt"), "utf8"), "Electron.app/Contents/MacOS/Electron");
+  assert.equal(readFileSync(path.join(f.packageDir, "electron.d.ts"), "utf8"), "types");
+  assert.equal(existsSync(path.join(f.packageDir, "dist/electron.d.ts")), false);
+  assert.deepEqual(readdirSync(f.packageDir).filter((name) => name.startsWith("dist.")), []);
+});
+
+test("a native extraction that yields no runtime still fails setup loudly", (t) => {
+  const f = fixture(t);
+  assert.throws(() => ensureElectronRuntime(f.workspace, {
+    platform: "linux", env: {}, log() {},
+    run(command, args) {
+      if (args.includes("config")) return "undefined";
+      if (args.includes("rebuild")) return truncatedInstall(f);
+      if (command === process.execPath) return "/cache/electron.zip";
+      assert.deepEqual([command, args.slice(0, 2)], ["unzip", ["-q", "-o"]]);
+    },
+  }), /still missing after pnpm rebuild/);
+  assert.deepEqual(readdirSync(f.packageDir).filter((name) => name.startsWith("dist.")), []);
+});
+
+test("a failed artifact download is propagated, not reported as ready", (t) => {
+  const f = fixture(t);
+  assert.throws(() => ensureElectronRuntime(f.workspace, {
+    platform: "darwin", env: {}, log() {},
+    run(command, args) {
+      if (args.includes("config")) return "undefined";
+      if (args.includes("rebuild")) return truncatedInstall(f);
+      throw new Error("checksum mismatch");
+    },
+  }), /checksum mismatch/);
 });

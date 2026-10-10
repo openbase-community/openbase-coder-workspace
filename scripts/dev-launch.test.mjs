@@ -22,8 +22,10 @@ function fixture(t, { runtime = false, repair = false, signingFailure = false } 
   // Route the script's sole fixed installation destination into this disposable
   // tree; no test may write to /Applications or invoke the real open command.
   assert.equal(source.split('APP_DIR="/Applications/Openbase.app"').length, 2);
-  writeFileSync(path.join(root, "scripts/dev-launch"), source.replace('APP_DIR="/Applications/Openbase.app"', `APP_DIR="${destination}"`));
-  cpSync(path.join(scripts, "ensure-electron-runtime.mjs"), path.join(root, "scripts/ensure-electron-runtime.mjs"));
+  writeFileSync(path.join(root, "scripts/dev-launch"), source.replace('APP_DIR="/Applications/Openbase.app"', `APP_DIR="${destination}"`), { mode: 0o755 });
+  for (const name of ["ensure-electron-runtime.mjs", "electron-artifact.cjs"]) {
+    cpSync(path.join(scripts, name), path.join(root, "scripts", name));
+  }
   writeFileSync(path.join(root, "scripts/check-renderer-freshness.cjs"), "process.exit(0)");
   for (const name of ["native-bundle-staging.mjs", "native-bundle-swap.c"]) {
     cpSync(path.join(scripts, "../desktop/scripts", name), path.join(root, "desktop/scripts", name));
@@ -56,7 +58,7 @@ esac
   return { root, destination, env, run: (flag) => spawnSync("bash", [path.join(root, "scripts/dev-launch"), flag], { env, encoding: "utf8" }) };
 }
 
-for (const flag of ["--electron", "--electron-dev", "--all"]) {
+for (const flag of ["--electron", "--electron-dev", "--all", "--build-only"]) {
   test(`${flag}: failed repair preserves launcher and prevents visual-surface commands`, (t) => {
     const f = fixture(t);
     const result = f.run(flag);
@@ -87,6 +89,27 @@ test("repaired runtime publishes a signed launcher atomically and retains the pr
   assert.equal(readFileSync(path.join(f.root, "opened"), "utf8").trim(), f.destination);
 });
 
+test("--build-only publishes the launcher without launching anything", { skip: process.platform !== "darwin" }, (t) => {
+  const f = fixture(t, { runtime: true });
+  rmSync(path.join(f.root, "desktop/dist/index.html"));
+  const result = f.run("--build-only");
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /Built the Openbase developer app/);
+  assert.match(readFileSync(path.join(f.root, "commands"), "utf8"), / build\n/);
+  assert.equal(existsSync(path.join(f.destination, "Contents/MacOS/Openbase")), true);
+  assert.equal(existsSync(path.join(f.root, "opened")), false);
+});
+
+test("--build-only leaves a packaged app in place", { skip: process.platform !== "darwin" }, (t) => {
+  const f = fixture(t, { runtime: true });
+  rmSync(path.join(f.destination, "Contents/Resources/.openbase-dev-launcher"));
+  const result = f.run("--build-only");
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /without replacing it/);
+  assert.equal(readFileSync(path.join(f.destination, "preserved"), "utf8"), "existing launcher");
+  assert.equal(existsSync(path.join(f.root, "opened")), false);
+});
+
 test("valid runtime in HMR mode uses the existing dev command without rebuilding", { skip: process.platform !== "darwin" }, (t) => {
   const f = fixture(t, { runtime: true });
   const result = f.run("--electron-dev");
@@ -110,7 +133,9 @@ for (const repair of [false, true]) {
     const result = spawnSync("bash", [path.join(f.root, "scripts/setup"), "--non-interactive"], { env: f.env, encoding: "utf8" });
     if (repair) {
       assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.match(result.stdout, /runtime is ready[\s\S]*Setup complete/);
+      assert.match(result.stdout, /runtime is ready[\s\S]*Built the Openbase developer app[\s\S]*Setup complete/);
+      assert.equal(existsSync(path.join(f.destination, "Contents/MacOS/Openbase")), true);
+      assert.equal(existsSync(path.join(f.root, "opened")), false);
     } else {
       assert.notEqual(result.status, 0);
       assert.doesNotMatch(result.stdout, /Setup complete/);

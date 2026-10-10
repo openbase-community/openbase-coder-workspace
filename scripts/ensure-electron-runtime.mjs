@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { accessSync, constants, readFileSync, realpathSync } from "node:fs";
+import { accessSync, constants, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,6 +40,38 @@ export function electronRuntime(desktop, platform = process.platform) {
   return { version, executable, ready };
 }
 
+// electron's install.js unzips with extract-zip 2 / yauzl 2, whose entry
+// stream never settles on Node 26: the process drains its event loop and exits
+// 0 after the first entry, leaving dist/ with only LICENSES.chromium.html and
+// no path.txt. Extract the same checksum-verified cached zip with the
+// platform's own unzip instead, staged beside dist/ and renamed into place.
+export function extractElectronRuntime(desktop, platform = process.platform, { run = execFileSync, env = process.env } = {}) {
+  const packageDir = path.join(desktop, "node_modules/electron");
+  const helper = path.join(path.dirname(fileURLToPath(import.meta.url)), "electron-artifact.cjs");
+  const zipPath = run(process.execPath, [helper, packageDir], {
+    env, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"],
+  }).trim();
+  const staging = path.join(packageDir, `dist.extracting-${process.pid}`);
+  rmSync(staging, { recursive: true, force: true });
+  mkdirSync(staging);
+  try {
+    const [command, args] = {
+      // ditto preserves the app bundle's symlinks, modes and framework layout.
+      darwin: ["ditto", ["-x", "-k", zipPath, staging]],
+      linux: ["unzip", ["-q", "-o", zipPath, "-d", staging]],
+      win32: ["tar", ["-x", "-f", zipPath, "-C", staging]],
+    }[platform];
+    run(command, args, { env, stdio: "inherit" });
+    const typeDefinitions = path.join(staging, "electron.d.ts");
+    if (existsSync(typeDefinitions)) renameSync(typeDefinitions, path.join(packageDir, "electron.d.ts"));
+    rmSync(path.join(packageDir, "dist"), { recursive: true, force: true });
+    renameSync(staging, path.join(packageDir, "dist"));
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
+  writeFileSync(path.join(packageDir, "path.txt"), executablePaths[platform]);
+}
+
 export function ensureElectronRuntime(workspace, {
   run = execFileSync,
   env = process.env,
@@ -69,6 +101,13 @@ export function ensureElectronRuntime(workspace, {
       env, stdio: "inherit",
     });
     runtime = electronRuntime(desktop, platform);
+    if (!runtime.ready && existsSync(path.join(desktop, "node_modules/electron/dist"))) {
+      // The approved install script ran but left a partial dist/ (see
+      // extractElectronRuntime): finish its job from the same verified zip.
+      log(`Electron's installer left an incomplete runtime under Node ${process.versions.node}; extracting it natively…`);
+      extractElectronRuntime(desktop, platform, { run, env });
+      runtime = electronRuntime(desktop, platform);
+    }
     if (!runtime.ready) {
       throw new Error("Electron runtime is still missing after pnpm rebuild. Check pnpm's Electron build approval and download output, then retry; no launcher was replaced.");
     }

@@ -207,19 +207,23 @@ pushd "${ROOT_DIR}"/cli
 uv run openbase-coder setup "${SETUP_ARGS[@]}"
 popd
 
-# pnpm can report an installed Electron package while its downloaded runtime
-# is absent. Verify/repair that runtime through the existing build policy.
+# The Electron developer app is a required part of a source install, not an
+# optional extra: verify/repair its runtime (any platform) and, on macOS, build
+# the renderer and publish the /Applications launcher. Each step fails setup
+# loudly; "Setup complete" is only printed once the app is built.
 if [ -f "$ROOT_DIR/desktop/package.json" ]; then
   node "$SCRIPT_DIR/ensure-electron-runtime.mjs" "$ROOT_DIR"
+  if [ "$(uname -s)" = "Darwin" ]; then
+    "$ROOT_DIR/scripts/dev-launch" --build-only
+  fi
 fi
 
-echo "Setup complete. The Openbase services and browser dashboard are ready."
+echo "Setup complete. The Openbase services, browser dashboard and developer app are ready."
 
-# Visual developer surfaces are optional. Electron never owns setup in a
-# source-workspace install: dev-launch forces dashboard-only mode, while this
-# script remains the sole setup authority.
-if [ "$USER_ARG_COUNT" -eq 0 ] && [ -t 0 ] && [ -d "$ROOT_DIR/desktop" ]; then
-  printf "Build the optional Openbase developer app (dashboard in /Applications) and Swift menu-bar UI now? [y/N] "
+# Electron never owns setup in a source-workspace install: dev-launch forces
+# dashboard-only mode, while this script remains the sole setup authority.
+if [ "$USER_ARG_COUNT" -eq 0 ] && [ -t 0 ] && [ -d "$ROOT_DIR/desktop" ] && [ "$(uname -s)" = "Darwin" ]; then
+  printf "Launch the Openbase developer app and build the Swift menu-bar UI now? [y/N] "
   DEV_LAUNCH_REPLY=""
   read -r DEV_LAUNCH_REPLY || true
   case "$DEV_LAUNCH_REPLY" in
@@ -227,8 +231,8 @@ if [ "$USER_ARG_COUNT" -eq 0 ] && [ -t 0 ] && [ -d "$ROOT_DIR/desktop" ]; then
       exec "$ROOT_DIR/scripts/dev-launch" --all
       ;;
     *)
-      echo "You can build the developer app any time later:"
-      echo "  ./scripts/dev-launch --electron    # dashboard app (thin launcher in /Applications)"
+      echo "Open Openbase from /Applications any time, or run:"
+      echo "  ./scripts/dev-launch --electron    # dashboard app"
       echo "  ./scripts/dev-launch --menu-bar    # Swift status menu-bar UI"
       echo "  ./scripts/dev-launch --all         # both"
       ;;

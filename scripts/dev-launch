@@ -7,16 +7,19 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 INSTALLATION_PATH="${HOME}/.openbase/installation.json"
 LAUNCH_ELECTRON=false
 LAUNCH_MENU_BAR=false
+BUILD_ONLY=false
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/dev-launch [--all | --electron | --electron-dev | --menu-bar]
+Usage: ./scripts/dev-launch [--all | --electron | --electron-dev | --menu-bar | --build-only]
 
-Launch optional visual surfaces for an existing development installation.
+Launch visual surfaces for an existing development installation.
 Electron runs dashboard/status-only: it cannot invoke the bundled setup flow.
 --electron builds the renderer once and runs Electron alone (no vite dev
 server); --electron-dev runs the vite dev server + HMR for working on the
-dashboard UI itself.
+dashboard UI itself. --build-only verifies Electron, builds the renderer and
+publishes the /Applications launcher without launching anything; setup runs
+it as a required step.
 EOF
 }
 
@@ -40,6 +43,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --menu-bar)
       LAUNCH_MENU_BAR=true
+      ;;
+    --build-only)
+      LAUNCH_ELECTRON=true
+      BUILD_ONLY=true
       ;;
     --help|-h)
       usage
@@ -147,6 +154,11 @@ if [ "$LAUNCH_ELECTRON" = true ]; then
   APP_DIR="/Applications/Openbase.app"
   MARKER="$APP_DIR/Contents/Resources/.openbase-dev-launcher"
   if [ -e "$APP_DIR" ] && [ ! -f "$MARKER" ] && [ "${OPENBASE_DEV_DASHBOARD_REPLACE_APP:-0}" != "1" ]; then
+    if [ "$BUILD_ONLY" = true ]; then
+      echo "A packaged app already occupies $APP_DIR; built the dashboard without replacing it."
+      echo "(Set OPENBASE_DEV_DASHBOARD_REPLACE_APP=1 to replace it with the dev launcher.)"
+      exit 0
+    fi
     echo "A packaged app already occupies $APP_DIR; launching the dashboard directly."
     echo "(Set OPENBASE_DEV_DASHBOARD_REPLACE_APP=1 to replace it with the dev launcher.)"
     echo "Launching Electron in developer dashboard-only mode (setup is disabled)."
@@ -217,6 +229,10 @@ stageNativeBundle(destination, (incoming) => cpSync(prepared, incoming, { recurs
 NODE
   rm -rf "$STAGING_DIR"
   trap - EXIT
+  if [ "$BUILD_ONLY" = true ]; then
+    echo "Built the Openbase developer app: $DESTINATION"
+    exit 0
+  fi
   echo "Launching the Openbase dev dashboard (setup is disabled)."
   exec open "$DESTINATION"
 fi
