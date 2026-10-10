@@ -38,6 +38,8 @@ Do not reuse production login tokens after changing the endpoint; run `openbase-
 
 The **Openbase VPN companion** is a separate axis from the workspace branch. Its prebuilt channel is resolved in this order: an explicit `OPENBASE_CODER_RELEASE_PREFIX`, the staging Cloud endpoint (`OPENBASE_CODER_CLI_WEB_BACKEND_URL=https://app-staging.openbase.cloud` selects `mac-staging`), a package version containing `-staging.`, then production `mac`. The companion remains control-plane-agnostic at runtime — it joins whichever Headscale URL accompanies the enrollment key — but staging setup deliberately downloads the staging prebuilt so an unreleased companion dependency can be tested without crossing release channels. Set a full `OPENBASE_NETMESH_COMPANION_URL` only when intentionally sampling a specific artifact.
 
+On macOS, the developer LiveKit installer extracts only `bin/livekit-server` from the matching architecture's standalone package. A PEP 440 development source version or a configured staging Cloud endpoint selects the staging release feed; stable source versions otherwise select stable. This engine download does not change the Cloud endpoint or install a standalone runtime. Setup verifies the release manifest signature, archive SHA-256, and the executable's exact version against `livekit_version.py` before atomically installing it. A channel whose package has not yet adopted the pin fails verification; an older engine is never accepted as the pinned installation. Linux and Windows continue to use the upstream version-specific engine releases.
+
 ## 3. Authenticate
 
 ```bash
