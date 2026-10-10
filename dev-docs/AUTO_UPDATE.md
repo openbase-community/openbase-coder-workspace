@@ -90,6 +90,12 @@ Every push to `staging` cuts a **staging-channel release** the same way: the ver
 - The release build stamps the release version into the packaged CLI via the **unsuffixed** `SETUPTOOLS_SCM_PRETEND_VERSION` so `openbase-coder --version` matches the package version. hatch-vcs silently ignores the `SETUPTOOLS_SCM_PRETEND_VERSION_FOR_<dist>` variant and would fall back to a dev version, so the release build sets (and a build-time guard checks) the unsuffixed form only.
 - `ERR_PNPM_OUTDATED_LOCKFILE` in the release build's frozen install means a frontend member repo (console, coder-react, multi-react, boilersync-react) changed npm dependencies without regenerating **both** lockfiles: the workspace-root `pnpm-lock.yaml` (dev workspace and promote precheck assembly) and the pinned `cli/scripts/release-workspace/pnpm-lock.yaml` that the release build actually installs from (regenerate with `cli/scripts/update-release-lockfile.sh`, run against up-to-date local member checkouts). Commit both on develop and re-promote; the local dev workspace won't catch the pinned one drifting because only the release build consumes it (this failed the 2026-09-08 release cut).
 
+## Container and Android build versions
+
+Docker image builds use the shared `cli/.github/scripts/release-version.sh` helper for a valid PEP 440 version stamp. A staging build can compute the upcoming release version before its tag exists; concurrent releases can change the tag baseline, so the stamp is not a guarantee that two independently started builds chose the same version. Builds on main and staging clone internal siblings from the matching branch, with multi-react and boilersync-react fixed to main. Sibling HEADs contribute to the Docker cache key. Staging promotions can dispatch an amd64-only image with a custom tag while the CLI release builds.
+
+Android CI assigns `versionCode = 1000 + github.run_number` across main and staging and appends `-staging.<run_number>` to staging version names. Reruns retain their run number. Local builds retain the Gradle defaults. The upload script applies the same overrides to object names and metadata. The VPN AAR cache includes the netmesh-go commit, build script and workflow, runner platform and image version (including its preinstalled Android SDK tools), and resolved Go/JDK versions; gomobile and gobind are built from netmesh-go's pinned module dependencies.
+
 ## Inspecting versions
 
 Every versioned piece is inspectable without MCP:
