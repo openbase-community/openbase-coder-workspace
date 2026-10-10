@@ -77,7 +77,6 @@ Then pick the surface you're testing:
 
 Setup and both Electron launch modes verify the installed Electron executable and its package version. If the runtime download is missing, they run a selected `pnpm rebuild electron@<installed-version>` under the existing build approval policy, including when pnpm has no pending builds. They do not upgrade Electron or change package-age policy. An explicit `ignore-scripts` or `ELECTRON_SKIP_BINARY_DOWNLOAD` setting blocks repair with an actionable error. After resolving that setting or a download failure, rerun `./scripts/dev-launch --electron`; no full setup retry is needed. The launcher is prepared and signed before atomic publication using the existing native bundle staging helper (Xcode command-line tools required); failures preserve the existing app, and replaced bundles are retained alongside it. The upstream Electron runtime bundle is no longer rebranded or re-signed in place.
 
-
 ## 5. Iterating
 
 - **cli (Python):** the workspace venv's editable install picks changes up immediately for new invocations; running services need `openbase-coder restart` or `openbase-coder restart --service <name>` (`livekit-agent` for voice-session code, `django-cli` for API/console-serving code). There is no `services restart` subcommand. Wait for the restarted routes and doctor checks to pass before starting a phone call.

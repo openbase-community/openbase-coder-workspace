@@ -87,7 +87,7 @@ test("repaired runtime publishes a signed launcher atomically and retains the pr
   assert.equal(readFileSync(path.join(f.root, "opened"), "utf8").trim(), f.destination);
 });
 
-test("valid runtime in HMR mode uses the existing dev command without rebuilding", (t) => {
+test("valid runtime in HMR mode uses the existing dev command without rebuilding", { skip: process.platform !== "darwin" }, (t) => {
   const f = fixture(t, { runtime: true });
   const result = f.run("--electron-dev");
   assert.equal(result.status, 0, result.stderr);
@@ -97,7 +97,7 @@ test("valid runtime in HMR mode uses the existing dev command without rebuilding
 });
 
 for (const repair of [false, true]) {
-  test(`setup ${repair ? "repairs Electron before reporting completion" : "fails explicitly when Electron repair fails"}`, (t) => {
+  test(`setup ${repair ? "repairs Electron before reporting completion" : "fails explicitly when Electron repair fails"}`, { skip: process.platform !== "darwin" }, (t) => {
     const f = fixture(t, { repair });
     mkdirSync(path.join(f.root, "cli"));
     cpSync(path.join(scripts, "setup"), path.join(f.root, "scripts/setup"));
