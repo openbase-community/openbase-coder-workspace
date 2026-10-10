@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -65,8 +65,10 @@ export function checkWorkspaceBranches(workspaceRoot, installSet) {
   return false;
 }
 
-const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : "";
-if (invokedPath === fileURLToPath(import.meta.url)) {
+// Compare real paths: import.meta.url is symlink-resolved, so a checkout
+// reached through a symlink (macOS /tmp is /private/tmp) would otherwise
+// skip the CLI entry point and print nothing.
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const workspaceRoot = path.resolve(process.argv[2] ?? process.cwd());
   const installSet = process.argv[3] ?? "default";
   if (!checkWorkspaceBranches(workspaceRoot, installSet)) process.exit(1);

@@ -177,6 +177,10 @@ fi
 # managed ignores and makes the remaining dev repos appear untracked. A fresh
 # public checkout still uses default and does not require private repo access.
 INSTALL_SET="$(node "$SCRIPT_DIR/detect-install-set.mjs" "$ROOT_DIR")"
+if [ -z "$INSTALL_SET" ]; then
+  echo "Error: could not detect the Multi install set for $ROOT_DIR." >&2
+  exit 1
+fi
 echo "Syncing the Multi '${INSTALL_SET}' install set."
 pushd "$ROOT_DIR"
 multi sync --install-set "$INSTALL_SET"

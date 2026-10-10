@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { copyFileSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -49,4 +50,17 @@ test("still detects internal from the legacy dev set name", async (t) => {
   mkdirSync(path.join(root, "ios"), { recursive: true });
   writeFileSync(path.join(root, "ios", ".git"), "gitdir: elsewhere\n");
   assert.equal(detectInstallSet(root), "internal");
+});
+
+test("prints the install set when run through a symlinked checkout path", async (t) => {
+  const root = await workspaceWith({ repos: [{ name: "cli", installSets: ["default"] }] });
+  const link = `${root}-link`;
+  t.after(() => rm(root, { force: true, recursive: true }));
+  t.after(() => rm(link, { force: true }));
+  mkdirSync(path.join(root, "scripts"));
+  copyFileSync(new URL("./detect-install-set.mjs", import.meta.url), path.join(root, "scripts/detect-install-set.mjs"));
+  symlinkSync(root, link);
+  const result = spawnSync(process.execPath, [path.join(link, "scripts/detect-install-set.mjs"), link], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), "default");
 });
