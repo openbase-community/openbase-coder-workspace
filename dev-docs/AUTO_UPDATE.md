@@ -37,6 +37,8 @@ The macOS runtime package includes the relocatable CLI launcher, the pinned Live
 
 The release workflow builds macOS LiveKit from its official source tag using `cli/scripts/build-pinned-livekit.sh` and verifies the resulting version against `livekit_version.py`. Homebrew's floating formula must not determine the packaged engine or block releases when it advances past the pin.
 
+Developer macOS installs consume the engine artifact declared for their exact LiveKit version and architecture in `cli/openbase_coder_cli/livekit_artifacts.py`. This declaration pins a tagged standalone archive, its SHA-256, the exact regular-file member and its SHA-256; installation also requires the executable to report the declared engine version successfully. It is independent of the CLI update channel and never resolves through `releases/latest`. When bumping the engine pin, publish and verify a matching macOS artifact and update this declaration; missing version/architecture entries fail explicitly. The current verified declaration covers Apple Silicon. Reusing a staging package as a checksum-pinned engine source does not install its CLI or select staging services.
+
 Manifest schema (`manifest_schema` 1):
 
 ```json
