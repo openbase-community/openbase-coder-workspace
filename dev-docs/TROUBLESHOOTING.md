@@ -298,7 +298,7 @@ Also check the livekit-agent: while the server was down it may have exhausted it
 
 ### Symptoms Seen
 
-`netmesh-ctl status` hangs indefinitely instead of erroring; the console shows the critical warning "This device's registration has no Openbase VPN identity"; `livekit-server.log` fills with `LIVEKIT_NODE_IP is required for Tailscale LiveKit signaling and media` and the service crash-loops (no listener on 7880, iOS calls can't connect); `openbase-coder setup` reports "The netmesh companion did not become ready: timed out" and `serve-set`/`status` netmesh-ctl invocations time out. Meanwhile the VPN data plane still works — the previously started root `tailscaled` keeps forwarding, so tailnet ping/SSH succeed, which makes the control-plane hang easy to misread.
+`netmesh-ctl status` hangs indefinitely instead of erroring; the console shows the critical warning "This device's registration has no Openbase VPN identity"; `livekit-server.log` shows `No tailnet IP yet (VPN not enrolled); serving LiveKit on loopback until the VPN connects.` on a machine that is already paired (7880 listens on loopback only, so iOS calls can't connect; before 2026-10-09 the service instead crash-looped on `LIVEKIT_NODE_IP is required for Tailscale LiveKit signaling and media`); `openbase-coder setup` reports "The netmesh companion did not become ready: timed out" and `serve-set`/`status` netmesh-ctl invocations time out. Meanwhile the VPN data plane still works — the previously started root `tailscaled` keeps forwarding, so tailnet ping/SSH succeed, which makes the control-plane hang easy to misread.
 
 ### Diagnosis
 
@@ -306,7 +306,7 @@ Also check the livekit-agent: while the server was down it may have exhausted it
 launchctl print system/cloud.openbase.netmesh.helper | grep -E 'state|last exit|runs'
 ```
 
-The tell is `last exit code = 78: EX_CONFIG` with a climbing `runs` count and `state = spawn scheduled`: launchd cannot spawn the registered SMAppService helper, typically because the `OpenbaseNetmeshCompanion.app` bundle it points into (`desktop/companion-build/`) was replaced or re-signed underneath the registration (e.g. by a concurrent desktop/companion rebuild). launchd keeps the Mach endpoint alive while spawns fail, so every XPC client — `netmesh-ctl`, the companion, and `tailscale_ip()` (LiveKit's node-IP lookup) — blocks forever instead of failing fast. A running `livekit-server` survives (it resolved its IP at startup); any restart while the helper is wedged puts it into the crash loop above.
+The tell is `last exit code = 78: EX_CONFIG` with a climbing `runs` count and `state = spawn scheduled`: launchd cannot spawn the registered SMAppService helper, typically because the `OpenbaseNetmeshCompanion.app` bundle it points into (`desktop/companion-build/`) was replaced or re-signed underneath the registration (e.g. by a concurrent desktop/companion rebuild). launchd keeps the Mach endpoint alive while spawns fail, so every XPC client — `netmesh-ctl`, the companion, and `tailscale_ip()` (LiveKit's node-IP lookup) — blocks forever instead of failing fast. A running `livekit-server` survives (it resolved its IP at startup); any restart while the helper is wedged drops it to the loopback-only mode above until the `tailnet_transition` sync-workers job sees the address again.
 
 `helper_launchd_health()` in `openbase_coder_cli/services/netmesh_companion.py` automates this probe, and `openbase-coder setup` runs it before the services phase so a wedged helper fails setup loudly instead of silently taking LiveKit down.
 
