@@ -139,8 +139,6 @@ if [ "$LAUNCH_ELECTRON" = true ]; then
   # process: no dev server, no file watchers. Rebuild only when the renderer
   # sources are newer than the last build.
   DESKTOP_DIR="$ROOT_DIR/desktop"
-  # Keep the upstream Electron bundle intact; the app sets its own display name.
-  ELECTRON_APP="$(cd "$DESKTOP_DIR/node_modules/electron/dist/Electron.app" && pwd -P)"
   DIST_INDEX="$DESKTOP_DIR/dist/index.html"
   if [ ! -f "$DIST_INDEX" ] || ! node "$ROOT_DIR/scripts/check-renderer-freshness.cjs" "$ROOT_DIR" desktop || [ -n "$(find "$DESKTOP_DIR/src" "$DESKTOP_DIR/index.html" "$DESKTOP_DIR/vite.config"* "$ROOT_DIR/coder-react/src" "$ROOT_DIR/multi-react/src" "$ROOT_DIR/boilersync-react/src" -newer "$DIST_INDEX" -print -quit 2>/dev/null)" ]; then
     echo "Building the dashboard renderer…"
@@ -164,6 +162,11 @@ if [ "$LAUNCH_ELECTRON" = true ]; then
     echo "Launching Electron in developer dashboard-only mode (setup is disabled)."
     exec pnpm --dir "$DESKTOP_DIR" start
   fi
+  # The menu bar names the running bundle, so the launcher opens a branded
+  # clone of the workspace Electron. node_modules' upstream bundle is never
+  # modified; the clone is rebuilt only when that runtime changes.
+  ELECTRON_APP="$DESKTOP_DIR/dev-runtime/Openbase.app"
+  node "$SCRIPT_DIR/brand-dev-runtime.mjs" "$DESKTOP_DIR" "$ELECTRON_APP"
   DESTINATION="$APP_DIR"
   STAGING_DIR="$(mktemp -d "${TMPDIR:-/tmp}/openbase-dev-launch.XXXXXX")"
   trap 'rm -rf "$STAGING_DIR"' EXIT

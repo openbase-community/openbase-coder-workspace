@@ -23,7 +23,7 @@ function fixture(t, { runtime = false, repair = false, signingFailure = false } 
   // tree; no test may write to /Applications or invoke the real open command.
   assert.equal(source.split('APP_DIR="/Applications/Openbase.app"').length, 2);
   writeFileSync(path.join(root, "scripts/dev-launch"), source.replace('APP_DIR="/Applications/Openbase.app"', `APP_DIR="${destination}"`), { mode: 0o755 });
-  for (const name of ["ensure-electron-runtime.mjs", "electron-artifact.cjs"]) {
+  for (const name of ["ensure-electron-runtime.mjs", "electron-artifact.cjs", "brand-dev-runtime.mjs"]) {
     cpSync(path.join(scripts, name), path.join(root, "scripts", name));
   }
   writeFileSync(path.join(root, "scripts/check-renderer-freshness.cjs"), "process.exit(0)");
@@ -40,7 +40,10 @@ function fixture(t, { runtime = false, repair = false, signingFailure = false } 
 printf '39.8.10' > "$FIXTURE_ROOT/desktop/node_modules/electron/dist/version"
 printf 'Electron.app/Contents/MacOS/Electron' > "$FIXTURE_ROOT/desktop/node_modules/electron/path.txt"
 printf '#!/bin/sh\\nprintf 39.8.10\\n' > "$FIXTURE_ROOT/desktop/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"
-chmod +x "$FIXTURE_ROOT/desktop/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"`;
+chmod +x "$FIXTURE_ROOT/desktop/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"
+mkdir -p "$FIXTURE_ROOT/desktop/node_modules/electron/dist/Electron.app/Contents/Resources"
+printf 'upstream icon' > "$FIXTURE_ROOT/desktop/node_modules/electron/dist/Electron.app/Contents/Resources/electron.icns"
+printf '%s' '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleName</key><string>Electron</string><key>CFBundleDisplayName</key><string>Electron</string><key>CFBundleExecutable</key><string>Electron</string><key>CFBundleIconFile</key><string>electron.icns</string><key>CFBundleIdentifier</key><string>com.github.Electron</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>' > "$FIXTURE_ROOT/desktop/node_modules/electron/dist/Electron.app/Contents/Info.plist"`;
   const env = { ...process.env, HOME: path.join(root, "home"), FIXTURE_ROOT: root, PATH: `${root}/bin:${process.env.PATH}` };
   delete env.ELECTRON_OVERRIDE_DIST_PATH;
   delete env.ELECTRON_SKIP_BINARY_DOWNLOAD;
@@ -108,6 +111,26 @@ test("--build-only leaves a packaged app in place", { skip: process.platform !==
   assert.match(result.stdout, /without replacing it/);
   assert.equal(readFileSync(path.join(f.destination, "preserved"), "utf8"), "existing launcher");
   assert.equal(existsSync(path.join(f.root, "opened")), false);
+});
+
+test("the launcher opens a branded runtime clone and never edits node_modules' Electron", { skip: process.platform !== "darwin" }, (t) => {
+  const f = fixture(t, { runtime: true });
+  const upstream = path.join(f.root, "desktop/node_modules/electron/dist/Electron.app");
+  const branded = path.join(f.root, "desktop/dev-runtime/Openbase.app");
+  const plist = (app, key) => spawnSync("/usr/libexec/PlistBuddy", ["-c", `Print :${key}`, path.join(app, "Contents/Info.plist")], { encoding: "utf8" }).stdout.trim();
+  const first = f.run("--build-only");
+  assert.equal(first.status, 0, first.stdout + first.stderr);
+  assert.match(first.stdout, /Branding the Electron 39\.8\.10 runtime as Openbase/);
+  assert.equal(plist(branded, "CFBundleName"), "Openbase");
+  assert.equal(plist(branded, "CFBundleDisplayName"), "Openbase");
+  assert.equal(readFileSync(path.join(branded, "Contents/Resources/electron.icns"), "utf8"), "fixture");
+  assert.equal(spawnSync("codesign", ["--verify", "--strict", "--deep", branded]).status, 0);
+  assert.equal(plist(upstream, "CFBundleName"), "Electron");
+  assert.equal(readFileSync(path.join(upstream, "Contents/Resources/electron.icns"), "utf8"), "upstream icon");
+  assert.match(readFileSync(path.join(f.destination, "Contents/MacOS/Openbase"), "utf8"), /dev-runtime\/Openbase\.app/);
+  const second = f.run("--build-only");
+  assert.equal(second.status, 0, second.stdout + second.stderr);
+  assert.doesNotMatch(second.stdout, /Branding/);
 });
 
 test("valid runtime in HMR mode uses the existing dev command without rebuilding", { skip: process.platform !== "darwin" }, (t) => {
