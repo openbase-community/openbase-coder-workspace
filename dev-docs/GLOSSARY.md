@@ -94,6 +94,8 @@ This glossary defines Openbase Coder workspace terms as they appear in docs, ins
 
 **MCP elicitation**: A structured request from an MCP tool or backend asking the agent to collect user input before continuing, such as a plan-mode question.
 
+**Background-task wait**: A coding turn whose model response has finished but whose spawned tools are still active, such as a login shell waiting for authorization. It remains interruptible and active; it is not evidence that the model is still generating a reply or that user input is necessarily required. The phone shows this separately from explicit backend waiting-for-input status. Ordinary assistant login instructions do not create an MCP elicitation.
+
 **Skill**: A local instruction bundle that teaches an agent a specialized workflow, tool integration, or domain convention. Skills are loaded when a task matches their trigger.
 
 **Skills auto-link**: An off-by-default setting, toggled from the console skills settings, that symlinks every personal skill under `~/.agents/skills` into both shared agent homes: `~/.codex/skills` and `~/.claude/skills`. Auto-linked skills share one source copy; the `openbase-routines` service re-syncs the links roughly every five minutes, so newly added personal skills appear without a restart.
