@@ -18,6 +18,8 @@ function runSetup(t, nodeVersion) {
   t.after(() => rmSync(root, { recursive: true, force: true }));
   for (const dir of ["scripts", "cli", "home", "bin"]) mkdirSync(path.join(root, dir));
   cpSync(path.join(scripts, "setup"), path.join(root, "scripts/setup"));
+  cpSync(path.join(scripts, "check-macos-toolchain"), path.join(root, "scripts/check-macos-toolchain"));
+  writeFileSync(path.join(root, "bin/uname"), "#!/bin/sh\necho Linux\n", { mode: 0o755 });
   cpSync(path.join(scripts, "../.nvmrc"), path.join(root, ".nvmrc"));
   for (const name of ["uv", "multi", "go", "pnpm"]) {
     writeFileSync(path.join(root, "bin", name), "#!/bin/sh\nexit 0\n", { mode: 0o755 });

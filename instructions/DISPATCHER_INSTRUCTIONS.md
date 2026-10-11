@@ -34,7 +34,17 @@ delegate real work to Openbase Super Agents.
   `openbase-coder user transfer-to-agent "<agent name>"`
 - When the user asks to transfer by thread id, run:
   `openbase-coder user transfer-to-thread "<thread id>"`
+- When the same request also says something for that agent ("connect me to
+  Marian. Marian, what's in your folder?"), the agent does not hear it
+  through the transfer: send that part to the agent with super_agents_steer
+  (`name` set to the agent) before or right after transferring, so the agent
+  answers it once the caller is with them. Do not answer it yourself.
 - Keep spoken confirmations concise.
+
+## Screen sharing
+
+- When the user asks to see or share this computer's screen, or to stop sharing, load the `phone-app-control` skill and run its screen-share command yourself; the apps have no Share button.
+- A share often ends without you (the user's Stop, hanging up, the phone going to the background), so never tell the user a share is or "may still be" on from memory. Mention a share only after `openbase-coder desktop screen-share status` (on Linux, `openbase-coder computer-use status`) reports it as sharing.
 
 ## Reports
 

@@ -23,7 +23,7 @@ function fixture(t, { runtime = false, repair = false, signingFailure = false } 
   // tree; no test may write to /Applications or invoke the real open command.
   assert.equal(source.split('APP_DIR="/Applications/Openbase.app"').length, 2);
   writeFileSync(path.join(root, "scripts/dev-launch"), source.replace('APP_DIR="/Applications/Openbase.app"', `APP_DIR="${destination}"`), { mode: 0o755 });
-  for (const name of ["ensure-electron-runtime.mjs", "electron-artifact.cjs", "brand-dev-runtime.mjs"]) {
+  for (const name of ["ensure-electron-runtime.mjs", "electron-artifact.cjs", "brand-dev-runtime.mjs", "dev-launch-main.c", "check-macos-toolchain"]) {
     cpSync(path.join(scripts, name), path.join(root, "scripts", name));
   }
   writeFileSync(path.join(root, "scripts/check-renderer-freshness.cjs"), "process.exit(0)");
@@ -53,6 +53,7 @@ echo "$*" >> "$FIXTURE_ROOT/commands"
 case "$*" in
   *"config get ignore-scripts"*) echo undefined;;
   *"rebuild electron@"*) ${repair ? install : "exit 7"};;
+  *"companion:stage:mac"*) [ -n "$FIXTURE_NO_COMPANION" ] || mkdir -p "$FIXTURE_ROOT/desktop/companion-build/OpenbaseScreenShareCompanion.app/Contents/MacOS";;
   *) exit 0;;
 esac
 `, { mode: 0o755 });
@@ -81,11 +82,24 @@ test("signing failure leaves existing launcher intact", { skip: process.platform
   assert.equal(existsSync(path.join(f.root, "opened")), false);
 });
 
+test("native compilation failure leaves the existing launcher intact", { skip: process.platform !== "darwin" }, (t) => {
+  const f = fixture(t, { runtime: true });
+  writeFileSync(path.join(f.root, "scripts/dev-launch-main.c"), "#error fixture compile failure\n");
+  const result = f.run("--electron");
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /fixture compile failure/);
+  assert.equal(readFileSync(path.join(f.destination, "preserved"), "utf8"), "existing launcher");
+  assert.equal(existsSync(path.join(f.root, "opened")), false);
+});
+
 test("repaired runtime publishes a signed launcher atomically and retains the prior bundle", { skip: process.platform !== "darwin" }, (t) => {
   const f = fixture(t, { repair: true });
   const result = f.run("--electron");
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(existsSync(path.join(f.destination, "Contents/MacOS/Openbase")), true);
+  const native = readFileSync(path.join(f.destination, "Contents/MacOS/Openbase"));
+  assert.notEqual(native.subarray(0, 2).toString(), "#!");
+  assert.equal(existsSync(path.join(f.destination, "Contents/Resources/launch-dashboard.sh")), true);
   assert.equal(existsSync(path.join(f.destination, "preserved")), false);
   const retained = readdirSync(path.dirname(f.destination)).find((name) => name.startsWith(".native-stage-"));
   assert.equal(readFileSync(path.join(path.dirname(f.destination), retained, "Openbase.app/preserved"), "utf8"), "existing launcher");
@@ -100,7 +114,36 @@ test("--build-only publishes the launcher without launching anything", { skip: p
   assert.match(result.stdout, /Built the Openbase developer app/);
   assert.match(readFileSync(path.join(f.root, "commands"), "utf8"), / build\n/);
   assert.equal(existsSync(path.join(f.destination, "Contents/MacOS/Openbase")), true);
+  const native = readFileSync(path.join(f.destination, "Contents/MacOS/Openbase"));
+  assert.notEqual(native.subarray(0, 2).toString(), "#!");
+  assert.equal(existsSync(path.join(f.destination, "Contents/Resources/launch-dashboard.sh")), true);
   assert.equal(existsSync(path.join(f.root, "opened")), false);
+
+  // Execute the real native shim from an unrelated cwd. Only the final open
+  // command is stubbed: this checks bundle-relative script lookup and the
+  // existing Electron arguments without launching a host application.
+  const launched = spawnSync(path.join(f.destination, "Contents/MacOS/Openbase"), [], {
+    cwd: os.tmpdir(), env: f.env, encoding: "utf8",
+  });
+  assert.equal(launched.status, 0, launched.stdout + launched.stderr);
+  assert.equal(readFileSync(path.join(f.root, "opened"), "utf8").trim(),
+    `-n -a ${f.root}/desktop/dev-runtime/Openbase.app --args ${f.root}/desktop --openbase-dev-dashboard`);
+});
+
+test("--build-only stages the screen-share companion and fails without it", { skip: process.platform !== "darwin" }, (t) => {
+  const f = fixture(t, { runtime: true });
+  const staged = f.run("--build-only");
+  assert.equal(staged.status, 0, staged.stdout + staged.stderr);
+  assert.match(readFileSync(path.join(f.root, "commands"), "utf8"), /companion:stage:mac\n/);
+  assert.equal(existsSync(path.join(f.root, "desktop/companion-build/OpenbaseScreenShareCompanion.app")), true);
+
+  rmSync(path.join(f.root, "desktop/companion-build"), { recursive: true, force: true });
+  const missing = spawnSync("bash", [path.join(f.root, "scripts/dev-launch"), "--build-only"], {
+    env: { ...f.env, FIXTURE_NO_COMPANION: "1" },
+    encoding: "utf8",
+  });
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /screen-share companion was not staged/);
 });
 
 test("--build-only leaves a packaged app in place", { skip: process.platform !== "darwin" }, (t) => {
@@ -127,7 +170,7 @@ test("the launcher opens a branded runtime clone and never edits node_modules' E
   assert.equal(spawnSync("codesign", ["--verify", "--strict", "--deep", branded]).status, 0);
   assert.equal(plist(upstream, "CFBundleName"), "Electron");
   assert.equal(readFileSync(path.join(upstream, "Contents/Resources/electron.icns"), "utf8"), "upstream icon");
-  assert.match(readFileSync(path.join(f.destination, "Contents/MacOS/Openbase"), "utf8"), /dev-runtime\/Openbase\.app/);
+  assert.match(readFileSync(path.join(f.destination, "Contents/Resources/launch-dashboard.sh"), "utf8"), /dev-runtime\/Openbase\.app/);
   const second = f.run("--build-only");
   assert.equal(second.status, 0, second.stdout + second.stderr);
   assert.doesNotMatch(second.stdout, /Branding/);
@@ -145,6 +188,10 @@ test("valid runtime in HMR mode uses the existing dev command without rebuilding
 function setupFixture(t, options) {
   const f = fixture(t, options);
   mkdirSync(path.join(f.root, "cli"));
+  cpSync(path.join(scripts, "../.nvmrc"), path.join(f.root, ".nvmrc"));
+  const pinned = readFileSync(path.join(scripts, "../.nvmrc"), "utf8").trim();
+  writeFileSync(path.join(f.root, "bin/node"), `#!/bin/sh\nif [ "$1" = --version ]; then echo v${pinned}; else exec "${process.execPath}" "$@"; fi\n`, { mode: 0o755 });
+  writeFileSync(path.join(f.root, "scripts/wait-api-ready.mjs"), 'console.log("API health check fixture passed")');
   // Route setup's packaged-app check into the fixture tree as well.
   const source = readFileSync(path.join(scripts, "setup"), "utf8");
   assert.equal(source.split('APP_PATH="/Applications/Openbase.app"').length, 2);
@@ -168,6 +215,9 @@ for (const repair of [false, true]) {
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.match(result.stdout, /runtime is ready[\s\S]*Built the Openbase developer app[\s\S]*Setup complete/);
       assert.equal(existsSync(path.join(f.destination, "Contents/MacOS/Openbase")), true);
+      const native = readFileSync(path.join(f.destination, "Contents/MacOS/Openbase"));
+      assert.notEqual(native.subarray(0, 2).toString(), "#!");
+      assert.equal(existsSync(path.join(f.destination, "Contents/Resources/launch-dashboard.sh")), true);
       assert.equal(existsSync(path.join(f.root, "opened")), false);
       assert.match(result.stdout, /Setup complete[\s\S]*uv run openbase-coder app-download-qr[\s\S]*Last step: install the Openbase iOS or Android app/);
     } else {
@@ -189,3 +239,12 @@ test("setup in a desktop session launches the developer app, then prints the pho
   assert.match(uv[0], /^run openbase-coder setup --defer-app-qr /);
   assert.equal(uv.at(-1), "run openbase-coder app-download-qr");
 });
+
+ test("setup does not report completion or print the app QR after health failure", { skip: process.platform !== "darwin" }, t => {
+  const f=setupFixture(t,{runtime:true});
+  writeFileSync(path.join(f.root,"scripts/wait-api-ready.mjs"),'throw new Error("API health failed")');
+  const r=spawnSync("bash",[path.join(f.root,"scripts/setup")],{env:{...f.env,OPENBASE_SETUP_NO_LAUNCH:"1"},encoding:"utf8"});
+  assert.notEqual(r.status,0);
+  assert.doesNotMatch(r.stdout,/Setup complete/);
+  assert.doesNotMatch(readFileSync(path.join(f.root,"uv-commands"),"utf8"),/app-download-qr/);
+ });
