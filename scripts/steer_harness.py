@@ -225,9 +225,16 @@ async def run_inprocess(
             from super_agents.app_server_client import CodexAppServerClient
 
             client = CodexAppServerClient(backend_identity=backend)
-        thread = await client.start_thread({"name": f"steer-harness-{int(time.time())}", "cwd": directory})
-        result.thread_id = thread_id = thread["threadId"]
-        turn = await client.start_turn_by_label(LabelQueryInput(thread_id=thread_id), {"prompt": TASK.format(pause=pause)})
+        name = f"steer-harness-{int(time.time())}"
+        thread = await client.start_thread({"name": name, "cwd": directory})
+        result.thread_id = thread_id = thread.get("threadId") or (thread.get("thread") or {}).get("id")
+        # Claude resolves a thread id; the Codex client keys label queries by name.
+        query = (lambda **extra: LabelQueryInput(thread_id=thread_id, **extra)) if backend == "claude_code" else (
+            lambda **extra: LabelQueryInput(label=name, cwd=directory, **extra)
+        )
+        turn = await client.start_turn_by_label(query(), {"prompt": TASK.format(pause=pause), "cwd": directory})
+        if not isinstance(turn, dict) or not (turn.get("turnId") or turn.get("turn_id")):
+            raise RuntimeError(f"unexpected start_turn result: {str(turn)[:200]}")
         result.turn_id = turn_id = turn.get("turnId") or turn.get("turn_id")
 
         while time.monotonic() - started < steer_after:
@@ -235,12 +242,10 @@ async def run_inprocess(
         result.files_before_steer = list_files()
         steer_started = time.monotonic()
         try:
-            steer = await client.steer_by_label(
-                LabelQueryInput(thread_id=thread_id, turn_id=turn_id, prefer="latest_active"),
-                STEER,
-                {"cwd": directory},
-            )
-            result.steer_accepted = bool(steer.get("steered"))
+            steer = await client.steer_by_label(query(turn_id=turn_id, prefer="latest_active"), STEER, {"cwd": directory})
+            # Claude answers {"steered": true}; the Codex app-server answers with the
+            # steered turn's id (turn/steer result), so either counts as accepted.
+            result.steer_accepted = bool(steer.get("steered")) or steer.get("turnId") == turn_id
         except Exception as exc:  # noqa: BLE001 - report, never crash
             steer = {"error": f"{type(exc).__name__}: {exc}"}
         result.steer_http_ms = int((time.monotonic() - steer_started) * 1000)
@@ -248,8 +253,19 @@ async def run_inprocess(
         result.steer_response = {k: v for k, v in steer.items() if k in ("steered", "turnId", "queued", "delivery", "confirmed", "error", "reason")}
 
         while True:
-            progress = await client.progress_by_label(LabelQueryInput(thread_id=thread_id))
+            try:
+                progress = await client.progress_by_label(query())
+            except ValueError as exc:
+                if "No active Super Agents session" in str(exc):
+                    # Codex: the turn finished and the label is no longer active.
+                    result.final_status = "completed"
+                    break
+                raise
+            if not isinstance(progress, dict):
+                raise RuntimeError(f"unexpected progress result: {str(progress)[:200]}")
             turns = progress.get("turns") or []
+            if not turns and isinstance(progress.get("turn"), dict):
+                turns = [progress["turn"]]
             this_turn = next((t for t in turns if (t.get("turnId") or t.get("id")) == turn_id), None)
             if this_turn is not None:
                 result.steer_recorded_on_turn = any(STEER[:20] in (s.get("text") or "") for s in (this_turn.get("steers") or []))
