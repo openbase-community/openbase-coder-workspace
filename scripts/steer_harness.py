@@ -272,6 +272,8 @@ async def run_inprocess(
     deadline: float,
     list_files,
     inject: str | None = None,
+    extra_steers: int = 0,
+    extra_steer_gap: float = 8.0,
 ) -> RunResult:
     """Drive super-agents directly (no local API): the backend's own steer path."""
     import asyncio
@@ -322,6 +324,17 @@ async def run_inprocess(
         result.steer_http_ms = int((time.monotonic() - steer_started) * 1000)
         result.steer_sent_at_s = round(steer_started - started, 2)
         result.steer_response = {k: v for k, v in steer.items() if k in ("steered", "turnId", "queued", "delivery", "confirmed", "error", "reason")}
+        for extra in range(1, extra_steers + 1):
+            await asyncio.sleep(extra_steer_gap)
+            try:
+                more = await client.steer_by_label(
+                    query(turn_id=turn_id, prefer="latest_active"), f"Steer {extra + 1}: {EXTRA_STEER}", {"cwd": directory}
+                )
+                result.extra_steer_responses.append(
+                    {k: more.get(k) for k in ("steered", "queued", "turnId", "delivery", "startedImmediately")}
+                )
+            except Exception as exc:  # noqa: BLE001
+                result.extra_steer_responses.append({"error": f"{type(exc).__name__}: {exc}"[:200]})
 
         while True:
             try:
@@ -415,6 +428,8 @@ def main(argv: list[str] | None = None) -> int:
                 deadline=args.deadline,
                 list_files=list_files,
                 inject=args.inject,
+                extra_steers=args.extra_steers,
+                extra_steer_gap=args.extra_steer_gap,
             )
         )
     else:
