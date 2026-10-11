@@ -288,7 +288,8 @@ if [ -f "$ROOT_DIR/desktop/package.json" ]; then
   fi
 fi
 
-echo "Setup complete. The Openbase services, browser dashboard and developer app are ready."
+node "$SCRIPT_DIR/wait-api-ready.mjs"
+echo "Setup complete. The local API health check passed."
 cat "$SETUP_NOTES_FILE"
 echo
 
