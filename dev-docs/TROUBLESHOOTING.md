@@ -451,3 +451,50 @@ tail -n 400 ~/.openbase/logs/livekit-agent.log | rg -i 'Live voice is unavailabl
 ```
 
 To force the classic engine while debugging, set the voice model to `pipeline` (`openbase-coder defaults voice-model pipeline`); it applies to the next call, no restart. Unit tests never need a key or the gateway: `cli/tests/test_live_voice.py` runs a fake gateway on loopback.
+
+## Agent Turns Fail A Minute After They Start ("didn't reach the coding agent", "couldn't start on your computer")
+
+### Symptoms Seen
+
+Every Claude Code turn on a Mac (a Tart VM, a developer install) fails about 60 s after it starts with no answer text. The voice side says "Sorry — that request didn't reach the coding agent" and the stall watcher adds "Heads up — <agent> couldn't start on your computer"; the Super Agents store shows `last_error = Control request timeout: initialize`. The Dispatcher (cwd `~`) keeps working. `pgrep -fl _bundled/claude` lists one stuck `claude` process per failed turn, each about 4 MB, 0 % CPU. VM2, 2026-10-11 03:19–03:40Z.
+
+### Root cause
+
+A pending macOS folder-consent dialog for `Openbase Services` (the signed launcher every service runs through, TCC client `cloud.openbase.coder.services`). The first access to Desktop, Documents or Downloads blocks inside the kernel until the dialog is answered, and tccd serialises prompts, so a pending Documents prompt also holds every later Desktop open. A Claude Code process spawned into `~/Desktop/<project>` hangs in `getcwd()` before it can answer the SDK's initialize request. On a headless VM nobody clicks the dialog, so the hang is permanent.
+
+### Diagnosis
+
+```bash
+sample <claude pid> 2 | head -40                      # stuck in __getcwd → open$NOCANCEL = waiting on TCC
+sudo sqlite3 ~/Library/Application\ Support/com.apple.TCC/TCC.db \
+  "select service, client, auth_value from access where client like '%openbase%'"   # auth_value 2 = allowed
+perl -e 'alarm 5; exec "ls", "$ENV{HOME}/Documents"' || echo blocked                # hangs while the prompt is pending
+rg -n 'claude_cwd_access_blocked|blocked_permission_dialog' ~/.openbase/logs/django-cli.log ~/.openbase/logs/livekit-agent.log | tail
+```
+
+Since super-agents 6af0383 the spawning service probes the folder first, so instead of a 60 s failure the thread's observed state reads "macOS is waiting for permission: Openbase Services needs access to your Desktop folder. Click Allow …" within 2 s (turn `errorKind` `blocked_permission_dialog`), the stall watcher speaks it in a call (cli 676f081), and the same turn continues by itself once the dialog is answered. The local API also lists the three folders once at start-up so the dialogs show at setup time.
+
+### Fix
+
+Click Allow on the Mac. On a headless VM, grant it in the user TCC database by cloning an existing allowed row (keeps the code requirement) and restarting tccd, then kill the stuck processes (they survive SIGTERM):
+
+```bash
+DB="$HOME/Library/Application Support/com.apple.TCC/TCC.db"
+for svc in kTCCServiceSystemPolicyDocumentsFolder kTCCServiceSystemPolicyDownloadsFolder; do
+  sudo sqlite3 "$DB" "insert or replace into access select '$svc', client, client_type, auth_value, auth_reason, auth_version, csreq, policy_id, indirect_object_identifier_type, indirect_object_identifier, indirect_object_code_identity, flags, strftime('%s','now'), pid, pid_version, boot_uuid, last_reminded from access where service='kTCCServiceSystemPolicyDesktopFolder' and client='cloud.openbase.coder.services'"
+done
+sudo killall tccd
+pkill -9 -f _bundled/claude
+```
+
+## Steering Diagnostics (Is A Mid-Turn Message Reaching The Agent?)
+
+`scripts/steer_harness.py` (workspace root) measures steering end to end without a phone: it starts a paced multi-file turn, steers it part-way through, and reports whether the steer was accepted, how long until the agent acknowledged it, whether behaviour changed, and whether anything was lost, duplicated, queued to the end or left running. Against a local API (a VM through an SSH tunnel, a Maritime workspace):
+
+```bash
+ssh -N -L 17999:127.0.0.1:7999 admin@<vm-ip> &
+python3 scripts/steer_harness.py --api http://127.0.0.1:17999 --token-file <copy of the host's ~/.openbase/local-api-token> \
+  --directory /Users/admin/Desktop/steer-harness/run1 --list-files-cmd "ssh admin@<vm-ip> ls /Users/admin/Desktop/steer-harness/run1"
+```
+
+Against a developer's own backends with no local API, drive super-agents directly (`cd super-agents && uv run --extra claude python ../scripts/steer_harness.py --inprocess claude_code|codex --directory <scratch dir> --list-files-cmd "ls <scratch dir>"`). `--inject "<shell command>"` runs a failure injection just before the steer (restart django-cli on the host, `pkill -9 -P $PPID -f _bundled/claude`, …) and `--expect clean_failure` passes when the turn ends in a terminal state instead of sticking at running. Healthy numbers on 2026-10-11: steer accepted in 10–20 ms, acknowledged in 5–10 s, same turn, nothing queued.
