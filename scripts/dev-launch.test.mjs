@@ -53,6 +53,7 @@ echo "$*" >> "$FIXTURE_ROOT/commands"
 case "$*" in
   *"config get ignore-scripts"*) echo undefined;;
   *"rebuild electron@"*) ${repair ? install : "exit 7"};;
+  *"companion:stage:mac"*) [ -n "$FIXTURE_NO_COMPANION" ] || mkdir -p "$FIXTURE_ROOT/desktop/companion-build/OpenbaseScreenShareCompanion.app/Contents/MacOS";;
   *) exit 0;;
 esac
 `, { mode: 0o755 });
@@ -101,6 +102,22 @@ test("--build-only publishes the launcher without launching anything", { skip: p
   assert.match(readFileSync(path.join(f.root, "commands"), "utf8"), / build\n/);
   assert.equal(existsSync(path.join(f.destination, "Contents/MacOS/Openbase")), true);
   assert.equal(existsSync(path.join(f.root, "opened")), false);
+});
+
+test("--build-only stages the screen-share companion and fails without it", { skip: process.platform !== "darwin" }, (t) => {
+  const f = fixture(t, { runtime: true });
+  const staged = f.run("--build-only");
+  assert.equal(staged.status, 0, staged.stdout + staged.stderr);
+  assert.match(readFileSync(path.join(f.root, "commands"), "utf8"), /companion:stage:mac\n/);
+  assert.equal(existsSync(path.join(f.root, "desktop/companion-build/OpenbaseScreenShareCompanion.app")), true);
+
+  rmSync(path.join(f.root, "desktop/companion-build"), { recursive: true, force: true });
+  const missing = spawnSync("bash", [path.join(f.root, "scripts/dev-launch"), "--build-only"], {
+    env: { ...f.env, FIXTURE_NO_COMPANION: "1" },
+    encoding: "utf8",
+  });
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /screen-share companion was not staged/);
 });
 
 test("--build-only leaves a packaged app in place", { skip: process.platform !== "darwin" }, (t) => {

@@ -86,6 +86,25 @@ if [ ! -d "$ROOT_DIR/desktop" ]; then
   exit 1
 fi
 
+# The screen-share capture companion (OpenbaseScreenShareCompanion.app) is a
+# required part of the developer app on macOS, like the Electron runtime: the
+# Electron app launches it from desktop/companion-build when the user asks an
+# agent to share the screen. Stage it (Xcode build, or the signed prebuilt
+# without Xcode) and fail loudly when it is still missing, so "Setup complete"
+# never hides a screen share that cannot start.
+stage_screen_share_companion() {
+  [ "$(uname -s)" = "Darwin" ] || return 0
+  local staged="$ROOT_DIR/desktop/companion-build/OpenbaseScreenShareCompanion.app"
+  if ! pnpm --dir "$ROOT_DIR/desktop" run companion:stage:mac; then
+    echo "Staging the screen-share companion failed; screen sharing from the phone needs it." >&2
+    exit 1
+  fi
+  if [ ! -d "$staged" ]; then
+    echo "The screen-share companion was not staged at $staged." >&2
+    exit 1
+  fi
+}
+
 launch_menu_bar() {
   if [ "$(uname -s)" != "Darwin" ]; then
     echo "The Swift menu-bar UI is available on macOS only; skipping it."
@@ -123,6 +142,7 @@ launch_menu_bar() {
 # This also covers --electron-dev and the packaged-app direct-launch fallback.
 if [ "$LAUNCH_ELECTRON" = true ]; then
   node "$SCRIPT_DIR/ensure-electron-runtime.mjs" "$ROOT_DIR"
+  stage_screen_share_companion
 fi
 
 if [ "$LAUNCH_MENU_BAR" = true ]; then
