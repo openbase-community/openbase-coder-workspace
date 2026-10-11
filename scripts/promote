@@ -119,7 +119,7 @@ plan_pinned_repos() {
 # Trigger repos: a check runs only when this promotion moves at least one of
 # them ("." is the workspace root). All selected checks run concurrently.
 PRECHECKS=(
-    "cli test suite|cli|uv run --frozen --extra dev --with pytest-xdist pytest -q -p no:cacheprovider -n 8|fatal|committed|cli super-agents"
+    "cli test suite|cli|uv run --frozen --extra dev --with pytest-xdist pytest -q -p no:cacheprovider -n 8|fatal|committed|cli super-agents skills"
     "console typecheck|console|pnpm exec tsc --noEmit -p tsconfig.app.json|fatal|committed|console coder-react ."
     "desktop typecheck|desktop|pnpm exec tsc --noEmit -p tsconfig.app.json|fatal|committed|desktop coder-react ."
     "desktop mac-release prereqs|desktop|pnpm run release:preflight:mac|warn|local|desktop"
@@ -283,7 +283,9 @@ build_precheck_assembly() {
     local ws="${PRECHECK_ASSEMBLY}/ws" r
     git -C "$ROOT_DIR" worktree add --detach --quiet "$ws" "$(assembly_ref "$ROOT_DIR")" || return 1
     PRECHECK_ASSEMBLY_WORKTREES+=("${ROOT_DIR}#${ws}")
-    for r in console desktop coder-react cli super-agents; do
+    # skills: cli tests cross-check the bundled skills (for example the
+    # Dispatcher's announcement policy in openbase-super-agent-dispatcher).
+    for r in console desktop coder-react cli super-agents skills; do
         git -C "${ROOT_DIR}/${r}" worktree add --detach --quiet "${ws}/${r}" \
             "$(assembly_ref "${ROOT_DIR}/${r}")" || return 1
         PRECHECK_ASSEMBLY_WORKTREES+=("${ROOT_DIR}/${r}#${ws}/${r}")
