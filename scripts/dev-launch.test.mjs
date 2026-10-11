@@ -142,23 +142,34 @@ test("valid runtime in HMR mode uses the existing dev command without rebuilding
   assert.doesNotMatch(commands, /rebuild/);
 });
 
+function setupFixture(t, options) {
+  const f = fixture(t, options);
+  mkdirSync(path.join(f.root, "cli"));
+  // Route setup's packaged-app check into the fixture tree as well.
+  const source = readFileSync(path.join(scripts, "setup"), "utf8");
+  assert.equal(source.split('APP_PATH="/Applications/Openbase.app"').length, 2);
+  writeFileSync(path.join(f.root, "scripts/setup"), source.replace('APP_PATH="/Applications/Openbase.app"', `APP_PATH="${f.destination}"`), { mode: 0o755 });
+  writeFileSync(path.join(f.root, "scripts/detect-install-set.mjs"), 'console.log("default")');
+  writeFileSync(path.join(f.root, "scripts/check-workspace-branches.mjs"), "process.exit(0)");
+  writeFileSync(path.join(f.root, "desktop/package.json"), "{}");
+  for (const name of ["multi", "go"]) {
+    writeFileSync(path.join(f.root, "bin", name), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  }
+  writeFileSync(path.join(f.root, "bin/uv"), `#!/bin/sh\necho "uv $*"\necho "$*" >> "$FIXTURE_ROOT/uv-commands"\n`, { mode: 0o755 });
+  return f;
+}
+
 for (const repair of [false, true]) {
   test(`setup ${repair ? "repairs Electron before reporting completion" : "fails explicitly when Electron repair fails"}`, { skip: process.platform !== "darwin" }, (t) => {
-    const f = fixture(t, { repair });
-    mkdirSync(path.join(f.root, "cli"));
-    cpSync(path.join(scripts, "setup"), path.join(f.root, "scripts/setup"));
-    writeFileSync(path.join(f.root, "scripts/detect-install-set.mjs"), 'console.log("default")');
-    writeFileSync(path.join(f.root, "scripts/check-workspace-branches.mjs"), "process.exit(0)");
-    writeFileSync(path.join(f.root, "desktop/package.json"), "{}");
-    for (const name of ["multi", "uv", "go"]) {
-      writeFileSync(path.join(f.root, "bin", name), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
-    }
-    const result = spawnSync("bash", [path.join(f.root, "scripts/setup"), "--non-interactive"], { env: f.env, encoding: "utf8" });
+    const f = setupFixture(t, { repair });
+    const env = { ...f.env, OPENBASE_SETUP_NO_LAUNCH: "1" };
+    const result = spawnSync("bash", [path.join(f.root, "scripts/setup"), "--non-interactive"], { env, encoding: "utf8" });
     if (repair) {
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.match(result.stdout, /runtime is ready[\s\S]*Built the Openbase developer app[\s\S]*Setup complete/);
       assert.equal(existsSync(path.join(f.destination, "Contents/MacOS/Openbase")), true);
       assert.equal(existsSync(path.join(f.root, "opened")), false);
+      assert.match(result.stdout, /Setup complete[\s\S]*uv run openbase-coder app-download-qr[\s\S]*Last step: install the Openbase iOS or Android app/);
     } else {
       assert.notEqual(result.status, 0);
       assert.doesNotMatch(result.stdout, /Setup complete/);
@@ -166,3 +177,15 @@ for (const repair of [false, true]) {
     }
   });
 }
+
+test("setup in a desktop session launches the developer app, then prints the phone-app QR code last", { skip: process.platform !== "darwin" }, (t) => {
+  const f = setupFixture(t, { runtime: true });
+  writeFileSync(path.join(f.root, "bin/launchctl"), "#!/bin/sh\necho Aqua\n", { mode: 0o755 });
+  const result = spawnSync("bash", [path.join(f.root, "scripts/setup"), "--non-interactive"], { env: f.env, encoding: "utf8" });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /Opened the Swift Openbase networking menu-bar UI[\s\S]*Launching the Openbase dev dashboard[\s\S]*Setup complete[\s\S]*app-download-qr[\s\S]*Last step/);
+  assert.match(readFileSync(path.join(f.root, "opened"), "utf8"), new RegExp(`${f.destination}\n$`));
+  const uv = readFileSync(path.join(f.root, "uv-commands"), "utf8").trim().split("\n");
+  assert.match(uv[0], /^run openbase-coder setup --defer-app-qr /);
+  assert.equal(uv.at(-1), "run openbase-coder app-download-qr");
+});

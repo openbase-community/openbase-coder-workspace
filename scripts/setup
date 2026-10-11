@@ -103,6 +103,12 @@ require_command multi "uv tool install multi-workspace"
 # checked-out Go source. Check this up front with the other workspace tools so
 # choosing Direct cannot fail after the console and Python environment build.
 require_command go "brew install go   # or download the current toolchain from https://go.dev/dl/"
+# Internal checkouts build the Swift menu-bar UI from netmesh-macos when setup
+# launches the developer app; check its tools now rather than at the end.
+if [ "$(uname -s)" = "Darwin" ] && [ -d "$ROOT_DIR/netmesh-macos" ]; then
+  require_command xcodegen "brew install xcodegen"
+  require_command xcodebuild "Install Xcode from the App Store, then run: sudo xcode-select -s /Applications/Xcode.app"
+fi
 
 if [ -n "$OFF_PATH_TOOLS" ]; then
   export PATH="$UV_TOOL_BIN:$PATH"
@@ -228,38 +234,53 @@ if [ "$USER_ARG_COUNT" -eq 0 ] && [ -t 0 ]; then
   prepend_setup_args --interactive
 fi
 
+# The phone-app QR code is the last thing setup prints, after the developer
+# app is built and launched, so the CLI step leaves it to this script.
+prepend_setup_args --defer-app-qr
+
 pushd "${ROOT_DIR}"/cli
 uv run openbase-coder setup "${SETUP_ARGS[@]}"
 popd
 
+# Launch GUI apps only in a logged-in macOS desktop session (not over SSH or
+# from a background job). OPENBASE_SETUP_NO_LAUNCH=1 opts out.
+has_gui_session() {
+  [ "$(uname -s)" = "Darwin" ] || return 1
+  [ "${OPENBASE_SETUP_NO_LAUNCH:-0}" != "1" ] || return 1
+  [ "$(launchctl managername 2>/dev/null)" = "Aqua" ]
+}
+
 # The Electron developer app is a required part of a source install, not an
 # optional extra: verify/repair its runtime (any platform) and, on macOS, build
-# the renderer and publish the /Applications launcher. Each step fails setup
-# loudly; "Setup complete" is only printed once the app is built.
+# the renderer, publish the /Applications launcher and launch it together with
+# the Swift menu-bar UI. Each step fails setup loudly; "Setup complete" is only
+# printed once the app is built.
 if [ -f "$ROOT_DIR/desktop/package.json" ]; then
   node "$SCRIPT_DIR/ensure-electron-runtime.mjs" "$ROOT_DIR"
   if [ "$(uname -s)" = "Darwin" ]; then
-    "$ROOT_DIR/scripts/dev-launch" --build-only
+    APP_PATH="/Applications/Openbase.app"
+    # dev-launch runs Electron in the foreground when a packaged app occupies
+    # /Applications, which would hold setup open; only launch the launcher.
+    if [ -e "$APP_PATH" ] && [ ! -f "$APP_PATH/Contents/Resources/.openbase-dev-launcher" ] && [ "${OPENBASE_DEV_DASHBOARD_REPLACE_APP:-0}" != "1" ]; then
+      PACKAGED_APP_PRESENT=true
+    else
+      PACKAGED_APP_PRESENT=false
+    fi
+    if has_gui_session && [ "$PACKAGED_APP_PRESENT" = false ]; then
+      # Electron never owns setup in a source-workspace install: dev-launch
+      # forces dashboard-only mode; this script stays the setup authority.
+      "$ROOT_DIR/scripts/dev-launch" --all
+    else
+      "$ROOT_DIR/scripts/dev-launch" --build-only
+      echo "Launch the developer app and the Swift menu-bar UI with:"
+      echo "  ./scripts/dev-launch --all"
+    fi
   fi
 fi
 
 echo "Setup complete. The Openbase services, browser dashboard and developer app are ready."
 
-# Electron never owns setup in a source-workspace install: dev-launch forces
-# dashboard-only mode, while this script remains the sole setup authority.
-if [ "$USER_ARG_COUNT" -eq 0 ] && [ -t 0 ] && [ -d "$ROOT_DIR/desktop" ] && [ "$(uname -s)" = "Darwin" ]; then
-  printf "Launch the Openbase developer app and build the Swift menu-bar UI now? [y/N] "
-  DEV_LAUNCH_REPLY=""
-  read -r DEV_LAUNCH_REPLY || true
-  case "$DEV_LAUNCH_REPLY" in
-    y|Y|yes|YES)
-      exec "$ROOT_DIR/scripts/dev-launch" --all
-      ;;
-    *)
-      echo "Open Openbase from /Applications any time, or run:"
-      echo "  ./scripts/dev-launch --electron    # dashboard app"
-      echo "  ./scripts/dev-launch --menu-bar    # Swift status menu-bar UI"
-      echo "  ./scripts/dev-launch --all         # both"
-      ;;
-  esac
-fi
+pushd "${ROOT_DIR}"/cli >/dev/null
+uv run openbase-coder app-download-qr
+popd >/dev/null
+echo "Last step: install the Openbase iOS or Android app from the link above and sign in."
