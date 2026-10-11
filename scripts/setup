@@ -71,6 +71,8 @@ check_existing_installation() {
 
 check_existing_installation
 
+bash "$SCRIPT_DIR/check-macos-toolchain"
+
 # Fail fast on missing prerequisites instead of dying mid-setup on a raw
 # "command not found".
 MISSING_PREREQ=false

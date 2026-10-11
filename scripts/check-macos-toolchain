@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+[ "$(uname -s)" = "Darwin" ] || exit 0
+
+# Finding xcrun is insufficient: a stale developer path or missing SDK can
+# still prevent compilation. Check headers and linking before any build work.
+PROBE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/openbase-toolchain.XXXXXX")"
+trap 'rm -rf "$PROBE_DIR"' EXIT
+cat > "$PROBE_DIR/probe.c" <<'C'
+#include <mach-o/dyld.h>
+#include <stdio.h>
+
+int main(void) {
+    return puts("Openbase compiler check") < 0;
+}
+C
+
+if ! xcrun clang -Wall -Wextra -Werror "$PROBE_DIR/probe.c" -o "$PROBE_DIR/probe"; then
+  cat >&2 <<'ERROR'
+Error: the macOS C compiler/SDK check failed. Openbase's developer launcher requires a working Xcode toolchain.
+Install Apple's Command Line Tools:
+  xcode-select --install
+If Command Line Tools are already installed, repair the selected developer path:
+  sudo xcode-select -s /Library/Developer/CommandLineTools
+Then rerun this command. If DEVELOPER_DIR or SDKROOT is set, check that it points to an installed toolchain or SDK.
+ERROR
+  exit 1
+fi

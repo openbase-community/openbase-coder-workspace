@@ -7,6 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
+const pinned = readFileSync(path.join(scripts, "../.nvmrc"), "utf8").trim();
 
 // Runs scripts/setup's prerequisite checks on a PATH that holds only stub
 // tools, so the result does not depend on what the host has installed. The
@@ -19,8 +20,11 @@ function runSetup(t, { onPath = [], inToolBin = [], env: extraEnv = {} } = {}) {
   const toolBin = path.join(home, ".local/bin");
   for (const dir of [path.join(root, "scripts"), bin, toolBin]) mkdirSync(dir, { recursive: true });
   cpSync(path.join(scripts, "setup"), path.join(root, "scripts/setup"));
+  cpSync(path.join(scripts, "check-macos-toolchain"), path.join(root, "scripts/check-macos-toolchain"));
+  writeFileSync(path.join(root, "bin/uname"), "#!/bin/sh\necho Linux\n", { mode: 0o755 });
+  cpSync(path.join(scripts, "../.nvmrc"), path.join(root, ".nvmrc"));
   const stubs = {
-    node: '#!/bin/sh\nif [ "$1" = --version ]; then echo v22.0.0; else echo default; fi\n',
+    node: `#!/bin/sh\nif [ "$1" = --version ]; then echo v${pinned}; else echo default; fi\n`,
     pnpm: "#!/bin/sh\nexit 0\n",
     go: "#!/bin/sh\nexit 0\n",
     uv: "#!/bin/sh\nexit 0\n",

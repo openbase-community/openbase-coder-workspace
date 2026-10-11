@@ -23,7 +23,7 @@ function fixture(t, { runtime = false, repair = false, signingFailure = false } 
   // tree; no test may write to /Applications or invoke the real open command.
   assert.equal(source.split('APP_DIR="/Applications/Openbase.app"').length, 2);
   writeFileSync(path.join(root, "scripts/dev-launch"), source.replace('APP_DIR="/Applications/Openbase.app"', `APP_DIR="${destination}"`), { mode: 0o755 });
-  for (const name of ["ensure-electron-runtime.mjs", "electron-artifact.cjs", "brand-dev-runtime.mjs", "dev-launch-main.c"]) {
+  for (const name of ["ensure-electron-runtime.mjs", "electron-artifact.cjs", "brand-dev-runtime.mjs", "dev-launch-main.c", "check-macos-toolchain"]) {
     cpSync(path.join(scripts, name), path.join(root, "scripts", name));
   }
   writeFileSync(path.join(root, "scripts/check-renderer-freshness.cjs"), "process.exit(0)");

@@ -86,6 +86,8 @@ if [ ! -d "$ROOT_DIR/desktop" ]; then
   exit 1
 fi
 
+bash "$SCRIPT_DIR/check-macos-toolchain"
+
 # The screen-share capture companion (OpenbaseScreenShareCompanion.app) is a
 # required part of the developer app on macOS, like the Electron runtime: the
 # Electron app launches it from desktop/companion-build when the user asks an
