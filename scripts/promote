@@ -84,7 +84,6 @@ plan_pinned_repos() {
             PLAN_DETAIL+=("pinned @${branch}; not checked out here — origin/${branch} ships")
             continue
         fi
-        git -C "$dir" fetch origin --quiet "$branch" || true
         local_sha="$(git -C "$dir" rev-parse --verify --quiet "refs/heads/${branch}" || true)"
         origin_sha="$(git -C "$dir" rev-parse --verify --quiet "origin/${branch}" || true)"
         dirty="$(git -C "$dir" status --porcelain 2>/dev/null | grep -cv 'sync-conflict' || true)"
@@ -105,22 +104,25 @@ plan_pinned_repos() {
 
 # These are the authoritative pre-release gates for production promotions
 # (TO is main/master), unless --skip-checks. Format:
-# "label|repo dir|command|severity" where
+# "label|repo dir|command|severity|context|trigger repos" where
 # severity is `fatal` (failure aborts the whole promotion) or `warn` (failure
 # only prints a warning). Edit this list to change what a production promotion
 # gates on.
 # Context column: `committed` checks run in a temporary assembly built from
 # the origin/FROM refs, so another agent's dirty/untracked working-tree files
-# can never fail (or pass) a promotion gate — tsc compiles everything under
-# src/, including foreign scratch files, which is exactly how two promotions
-# were force-skipped in Aug 2026. `local` checks stay in the real checkout:
-# the cli suite needs its established venv, and the mac preflight inspects
-# machine-local signing credentials by design.
+# (or a trunk venv missing dev dependencies) can never fail (or pass) a
+# promotion gate — tsc compiles everything under src/, including foreign
+# scratch files, which is exactly how two promotions were force-skipped in Aug
+# 2026. The cli suite gets its own uv venv there (seconds, from the uv cache)
+# and runs under pytest-xdist (3m45s serial -> ~45s). `local` checks stay in the real checkout: the
+# mac preflight inspects machine-local signing credentials by design.
+# Trigger repos: a check runs only when this promotion moves at least one of
+# them ("." is the workspace root). All selected checks run concurrently.
 PRECHECKS=(
-    "cli test suite|cli|uv run pytest -q|fatal|local"
-    "console typecheck|console|pnpm exec tsc --noEmit -p tsconfig.app.json|fatal|committed"
-    "desktop typecheck|desktop|pnpm exec tsc --noEmit -p tsconfig.app.json|fatal|committed"
-    "desktop mac-release prereqs|desktop|pnpm run release:preflight:mac|warn|local"
+    "cli test suite|cli|uv run --frozen --extra dev --with pytest-xdist pytest -q -p no:cacheprovider -n 8|fatal|committed|cli super-agents"
+    "console typecheck|console|pnpm exec tsc --noEmit -p tsconfig.app.json|fatal|committed|console coder-react ."
+    "desktop typecheck|desktop|pnpm exec tsc --noEmit -p tsconfig.app.json|fatal|committed|desktop coder-react ."
+    "desktop mac-release prereqs|desktop|pnpm run release:preflight:mac|warn|local|desktop"
 )
 
 usage() {
@@ -147,6 +149,8 @@ push. Other targets skip the checks.
 Options:
   --dry-run          Show the plan and exit without pushing (no checks run).
   --skip-checks      Skip the pre-release checks (still gated on fast-forward).
+  --checks-only      Plan, run the pre-release checks for TO, then exit
+                     without pushing (a rehearsal of the gate).
   --exclude REPO     Hold REPO back (repeatable; comma-separated allowed).
                      Use for consumers that must wait on an earlier repo's
                      release, e.g. --exclude desktop while the cli release
@@ -168,6 +172,7 @@ DRY_RUN=0
 ASSUME_YES=0
 WAIT_CI=1
 SKIP_CHECKS=0
+CHECKS_ONLY=0
 AGENT_THREAD_ID="${AGENT_SESSION_ID:-${CODEX_THREAD_ID:-}}"
 declare -a EXCLUDE=()
 FROM=""
@@ -177,6 +182,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --dry-run) DRY_RUN=1 ;;
         --skip-checks) SKIP_CHECKS=1 ;;
+        --checks-only) CHECKS_ONLY=1 ;;
         --agent-thread-id)
             shift
             [[ $# -gt 0 ]] || { echo "--agent-thread-id needs a value" >&2; usage >&2; exit 2; }
@@ -240,10 +246,11 @@ check_branch_refs() {
 }
 
 # Assembly of the committed origin/FROM refs for `committed`-context checks.
-# Shape mirrors the real pnpm workspace: the workspace-root repo as the base
-# worktree (manifests, lockfile, e2e), sibling JS repos as worktrees, and the
-# externally-symlinked multi-react/boilersync-react as real copies (pnpm
-# drops their importers otherwise). Built lazily, removed on exit.
+# Shape mirrors the real workspace: the workspace-root repo as the base
+# worktree (manifests, lockfiles, the uv workspace), sibling repos as
+# worktrees, and the externally-symlinked multi-react/boilersync-react as real
+# copies (pnpm drops their importers otherwise). Built once, removed on exit;
+# `pnpm install` runs only when a selected check needs node_modules.
 PRECHECK_ASSEMBLY=""
 PRECHECK_ASSEMBLY_WORKTREES=()
 
@@ -260,32 +267,66 @@ cleanup_precheck_assembly() {
 }
 trap cleanup_precheck_assembly EXIT
 
+# The ref a repo ships after this promotion: origin/FROM, or origin/TO for a
+# repo that has no FROM branch (it is skipped, so TO's content stays).
+assembly_ref() {
+    if git -C "$1" rev-parse --verify --quiet "origin/${FROM}" >/dev/null; then
+        echo "origin/${FROM}"
+    else
+        echo "origin/${TO}"
+    fi
+}
+
 build_precheck_assembly() {
     [[ -n "$PRECHECK_ASSEMBLY" ]] && return 0
     PRECHECK_ASSEMBLY="$(mktemp -d "${TMPDIR:-/tmp}/promote-prechecks.XXXXXX")"
     local ws="${PRECHECK_ASSEMBLY}/ws" r
-    git -C "$ROOT_DIR" worktree add --detach --quiet "$ws" "origin/${FROM}" || return 1
+    git -C "$ROOT_DIR" worktree add --detach --quiet "$ws" "$(assembly_ref "$ROOT_DIR")" || return 1
     PRECHECK_ASSEMBLY_WORKTREES+=("${ROOT_DIR}#${ws}")
-    for r in console desktop coder-react; do
-        git -C "${ROOT_DIR}/${r}" worktree add --detach --quiet "${ws}/${r}" "origin/${FROM}" || return 1
+    for r in console desktop coder-react cli super-agents; do
+        git -C "${ROOT_DIR}/${r}" worktree add --detach --quiet "${ws}/${r}" \
+            "$(assembly_ref "${ROOT_DIR}/${r}")" || return 1
         PRECHECK_ASSEMBLY_WORKTREES+=("${ROOT_DIR}/${r}#${ws}/${r}")
     done
     for r in multi-react boilersync-react; do
         rsync -aL --exclude node_modules --exclude .git --exclude dist \
             "${ROOT_DIR}/${r}/" "${ws}/${r}/" || return 1
     done
-    ( cd "$ws" && pnpm install --prefer-offline --ignore-scripts ) \
-        >"${PRECHECK_ASSEMBLY}/pnpm-install.log" 2>&1 || {
-        echo "      pnpm install in the precheck assembly failed:"
-        sed 's/^/      /' "${PRECHECK_ASSEMBLY}/pnpm-install.log" | tail -n 12
-        return 1
-    }
+}
+
+precheck_pnpm_install() {
+    ( cd "${PRECHECK_ASSEMBLY}/ws" && pnpm install --prefer-offline --ignore-scripts ) \
+        >"${PRECHECK_ASSEMBLY}/pnpm-install.log" 2>&1
+}
+
+# Is any of the space-separated repos in $1 moved by this promotion?
+promotion_moves_any() {
+    local want i
+    for want in $1; do
+        for i in "${!REPOS[@]}"; do
+            [[ "${REPOS[$i]}" == "$want" ]] || continue
+            [[ "${PLAN_ACTION[$i]}" == "push" || "${PLAN_ACTION[$i]}" == "tree" ]] && return 0
+        done
+    done
+    return 1
+}
+
+# One check, result in $PRECHECK_ASSEMBLY/results/<n>.{status,log}.
+run_one_precheck() { # n dir cmd
+    local res="${PRECHECK_ASSEMBLY}/results/$1" start=$SECONDS
+    if ( cd "$2" && eval "$3" ) >"${res}.log" 2>&1; then
+        echo "ok $((SECONDS - start))" >"${res}.status"
+    else
+        echo "fail $((SECONDS - start))" >"${res}.status"
+    fi
 }
 
 # Run the pre-release checks before a production promotion. Only gates when
 # promoting into main/master; other targets (develop->staging,
 # feature->staging) skip the heavy suite. --skip-checks bypasses entirely. A
-# fatal check that fails aborts before anything is pushed.
+# fatal check that fails aborts before anything is pushed. Checks whose
+# trigger repos this promotion does not move are skipped, and the rest run
+# concurrently (the pnpm-based ones after a single shared `pnpm install`).
 run_prechecks() {
     case "$TO" in
         main|master) : ;;
@@ -296,46 +337,108 @@ run_prechecks() {
         return 0
     fi
     echo "Running pre-release checks before promoting to ${TO} ..."
-    echo "(typechecks run against the committed origin/${FROM} refs, not working trees)"
-    local failed=0 entry label reldir cmd sev ctx dir out
-    for entry in "${PRECHECKS[@]}"; do
-        IFS='|' read -r label reldir cmd sev ctx <<<"$entry"
+    echo "(committed checks run against the origin/${FROM} refs, not working trees)"
+    local failed=0 n entry label reldir cmd sev ctx triggers dir status secs started=$SECONDS
+    local -a selected=() pnpm_jobs=() pids=()
+    for n in "${!PRECHECKS[@]}"; do
+        IFS='|' read -r label reldir cmd sev ctx triggers <<<"${PRECHECKS[$n]}"
+        if ! promotion_moves_any "$triggers"; then
+            printf '  %-30s SKIP (none of: %s moves)\n' "$label" "$triggers"
+            continue
+        fi
+        selected+=("$n")
+    done
+    ((${#selected[@]})) || return 0
+    if ! build_precheck_assembly; then
+        echo "  FAIL: could not build the committed-refs assembly" >&2
+        exit 1
+    fi
+    mkdir -p "${PRECHECK_ASSEMBLY}/results"
+    for n in "${selected[@]}"; do
+        IFS='|' read -r label reldir cmd sev ctx triggers <<<"${PRECHECKS[$n]}"
         if [[ "$ctx" == "committed" ]]; then
-            if ! build_precheck_assembly; then
-                printf '  %-30s FAIL (could not build committed-refs assembly)\n' "$label"
-                failed=1
-                continue
-            fi
             dir="${PRECHECK_ASSEMBLY}/ws/${reldir}"
         else
             dir="${ROOT_DIR}/${reldir}"
-            if [[ "$cmd" == *tsc* && ! -d "$dir/node_modules" ]]; then
-                printf '  %-30s SKIP (node_modules not installed)\n' "$label"
-                continue
-            fi
         fi
         if [[ ! -d "$dir" ]]; then
-            printf '  %-30s SKIP (no %s)\n' "$label" "$reldir"
+            echo "skip 0 (no ${reldir})" >"${PRECHECK_ASSEMBLY}/results/${n}.status"
             continue
         fi
-        printf '  %-30s ... ' "$label"
-        out="$(mktemp)"
-        if ( cd "$dir" && eval "$cmd" ) >"$out" 2>&1; then
-            echo "ok"
-        elif [[ "$sev" == "warn" ]]; then
-            echo "WARN (non-blocking)"
-            sed 's/^/      /' "$out" | tail -n 12
-        else
-            echo "FAIL"
-            sed 's/^/      /' "$out" | tail -n 30
-            failed=1
+        if [[ "$ctx" == "committed" && "$cmd" == pnpm* ]]; then
+            pnpm_jobs+=("$n#$dir#$cmd")
+            continue
         fi
-        rm -f "$out"
+        run_one_precheck "$n" "$dir" "$cmd" &
+        pids+=("$!")
     done
+    if ((${#pnpm_jobs[@]})); then
+        (
+            if ! precheck_pnpm_install; then
+                for entry in "${pnpm_jobs[@]}"; do
+                    cp "${PRECHECK_ASSEMBLY}/pnpm-install.log" "${PRECHECK_ASSEMBLY}/results/${entry%%#*}.log"
+                    echo "fail 0 (pnpm install in the assembly failed)" >"${PRECHECK_ASSEMBLY}/results/${entry%%#*}.status"
+                done
+                exit 0
+            fi
+            for entry in "${pnpm_jobs[@]}"; do
+                IFS='#' read -r n dir cmd <<<"$entry"
+                run_one_precheck "$n" "$dir" "$cmd" &
+            done
+            wait
+        ) &
+        pids+=("$!")
+    fi
+    wait "${pids[@]}" || true
+    for n in "${selected[@]}"; do
+        IFS='|' read -r label reldir cmd sev ctx triggers <<<"${PRECHECKS[$n]}"
+        read -r status secs _ <"${PRECHECK_ASSEMBLY}/results/${n}.status" || status=fail
+        case "$status" in
+            ok) printf '  %-30s ok (%ss)\n' "$label" "$secs" ;;
+            skip) printf '  %-30s SKIP (no %s)\n' "$label" "$reldir" ;;
+            *)
+                if [[ "$sev" == "warn" ]]; then
+                    printf '  %-30s WARN (non-blocking, %ss)\n' "$label" "$secs"
+                    sed 's/^/      /' "${PRECHECK_ASSEMBLY}/results/${n}.log" | tail -n 12
+                else
+                    printf '  %-30s FAIL (%ss)\n' "$label" "$secs"
+                    sed 's/^/      /' "${PRECHECK_ASSEMBLY}/results/${n}.log" | tail -n 30
+                    failed=1
+                fi
+                ;;
+        esac
+    done
+    echo "Pre-release checks took $((SECONDS - started))s."
     if [[ "$failed" == "1" ]]; then
         echo "Aborting: pre-release checks failed. Fix them, or re-run with --skip-checks to override." >&2
         exit 1
     fi
+}
+
+# Fetch every repo concurrently up front; the planning loop below then only
+# reads refs (serial fetches were ~11s of a no-op plan).
+fetch_all_repos() {
+    local repo entry dir
+    local -a pids=() names=()
+    for repo in "${REPOS[@]}"; do
+        is_excluded "$repo" && continue
+        git -C "${ROOT_DIR}/${repo}" fetch origin --quiet &
+        pids+=("$!"); names+=("$(repo_label "$repo")")
+    done
+    for entry in ${MULTI_PINNED[@]+"${MULTI_PINNED[@]}"}; do
+        dir="${ROOT_DIR}/${entry%%:*}"
+        [[ -e "${dir}/.git" ]] || continue
+        git -C "$dir" fetch origin --quiet "${entry##*:}" >/dev/null 2>&1 &
+    done
+    local i rc=0
+    for i in "${!pids[@]}"; do
+        if ! wait "${pids[$i]}"; then
+            echo "git fetch failed for ${names[$i]}" >&2
+            rc=1
+        fi
+    done
+    wait
+    return "$rc"
 }
 
 declare -a PLAN_REPO PLAN_ACTION PLAN_DETAIL
@@ -343,6 +446,7 @@ FAILED=0
 ANDROID_PROMOTED=0
 
 echo "Planning promotion ${FROM} -> ${TO} ..."
+fetch_all_repos
 if [[ -n "${EXTERNAL_NOTE:-}" ]]; then
     echo "note: ${EXTERNAL_NOTE}"
 fi
@@ -353,7 +457,6 @@ for repo in "${REPOS[@]}"; do
         PLAN_REPO+=("$label"); PLAN_ACTION+=(skip); PLAN_DETAIL+=("excluded (--exclude)")
         continue
     fi
-    git -C "$dir" fetch origin --quiet
     if ! from_sha="$(git -C "$dir" rev-parse --verify --quiet "origin/${FROM}")"; then
         PLAN_REPO+=("$label"); PLAN_ACTION+=(skip); PLAN_DETAIL+=("no origin/${FROM} branch")
         continue
@@ -434,6 +537,10 @@ if [[ "$DRY_RUN" == "1" ]]; then
 fi
 
 run_prechecks
+if [[ "$CHECKS_ONLY" == "1" ]]; then
+    echo "Checks only: nothing pushed."
+    exit 0
+fi
 
 if [[ "$ASSUME_YES" != "1" ]]; then
     printf 'Push %s repo(s) %s -> %s? Releases/rebuilds may be triggered. [y/N] ' "$PUSH_COUNT" "$FROM" "$TO"

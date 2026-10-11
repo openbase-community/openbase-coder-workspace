@@ -1,0 +1,273 @@
+#!/usr/bin/env bash
+
+# Build a committed ref of the iOS or Android app and install it straight onto
+# a USB/Wi-Fi-paired phone — no TestFlight, no APK upload.
+#
+#   scripts/ship-to-phone ios     [--backend production|staging] [--device NAME|ID]
+#   scripts/ship-to-phone android [--backend production|staging] [--device SERIAL]
+#
+# Backend picks the app variant, which is what selects the cloud:
+#   production -> iOS scheme Openbase (com.openbase.coder, app.openbase.cloud)
+#                 Android assembleDebug (com.openbase.android)
+#   staging    -> iOS scheme OpenbaseFieldTest (com.openbase.coder.field-test,
+#                 app-staging.openbase.cloud); Android assembleFieldTest.
+# A production iOS build installs over the TestFlight/App Store app with the
+# same bundle id, so its existing Openbase VPN configuration and sign-in stay
+# (no new "Add VPN Configurations" passcode prompt). It is development-signed:
+# APNs pushes from production (inbound-call pushes) do not reach it until the
+# phone goes back to a TestFlight build.
+#
+# Speed comes from a persistent cache (default ~/Library/Caches/openbase-ship-to-phone,
+# override with OPENBASE_SHIP_CACHE): sources are refreshed with checksum rsync
+# so unchanged files keep their mtimes, DerivedData/Gradle outputs persist, so
+# rebuilds are incremental; NetmeshGo/TailscaleKit/netmeshgo.aar are rebuilt
+# only when their pinned source revision changes; `tuist generate` reruns only
+# when the manifests or vendored frameworks change. Builds never touch the
+# trunk checkouts (only `git fetch` + `git archive`).
+#
+# Options:
+#   --ref REF        Ref to build in each app repo (default origin/develop;
+#                    netmesh-go always ships origin/main, its fixedBranch).
+#   --no-fetch       Do not `git fetch` first.
+#   --build-only     Build but do not install.
+#   --launch         Launch the app after installing.
+#   -h, --help       Show this help.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+WS="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+CACHE="${OPENBASE_SHIP_CACHE:-$HOME/Library/Caches/openbase-ship-to-phone}"
+# Heavy builds take turns on shared hosts: wrap them in build-lock when one is
+# configured (OPENBASE_BUILD_LOCK) or on PATH.
+BUILD_LOCK="${OPENBASE_BUILD_LOCK:-$(command -v build-lock || true)}"
+
+PLATFORM=""; BACKEND=production; DEVICE=""; REF=origin/develop
+FETCH=1; INSTALL=1; LAUNCH=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        ios|android) PLATFORM="$1" ;;
+        --backend) shift; BACKEND="${1:-}" ;;
+        --device) shift; DEVICE="${1:-}" ;;
+        --ref) shift; REF="${1:-}" ;;
+        --no-fetch) FETCH=0 ;;
+        --build-only) INSTALL=0 ;;
+        --launch) LAUNCH=1 ;;
+        -h|--help) sed -n '3,36p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "Unknown argument: $1" >&2; exit 2 ;;
+    esac
+    shift
+done
+[[ -n "$PLATFORM" ]] || { echo "usage: $(basename "$0") ios|android [options] (see --help)" >&2; exit 2; }
+case "$BACKEND" in production|staging) ;; *) echo "--backend must be production or staging" >&2; exit 2 ;; esac
+
+T0=$SECONDS
+step() { printf '[%4ds] %s\n' "$((SECONDS - T0))" "$*"; }
+locked() { if [[ -n "$BUILD_LOCK" ]]; then "$BUILD_LOCK" "$@"; else "$@"; fi; }
+
+SRC="$CACHE/src"
+mkdir -p "$SRC" "$CACHE/logs"
+
+# Mirror <repo>@<ref> into $SRC/<repo>. Checksum rsync without -t leaves
+# unchanged files' mtimes alone, so Xcode/Gradle stay incremental. Generated
+# and vendored paths are excluded, which also protects them from --delete.
+sync_repo() { # repo ref
+    local repo="$1" ref="$2" dir="$WS/$1" sha tmp
+    [[ -e "$dir/.git" ]] || { echo "missing checkout: $dir" >&2; return 1; }
+    if [[ "$FETCH" == 1 && "$ref" == origin/* ]]; then
+        git -C "$dir" fetch --quiet origin "${ref#origin/}"
+    fi
+    sha="$(git -C "$dir" rev-parse --verify "${ref}^{commit}")"
+    if [[ "$(cat "$SRC/.$repo.sha" 2>/dev/null)" != "$sha" ]]; then
+        tmp="$(mktemp -d "$CACHE/archive.XXXXXX")"
+        git -C "$dir" archive "$sha" | tar -x -C "$tmp"
+        mkdir -p "$SRC/$repo"
+        rsync -rlc --delete \
+            --exclude '/Vendor/' --exclude '/Frameworks/' --exclude '/Derived/' \
+            --exclude '*.xcodeproj' --exclude '*.xcworkspace' --exclude '.build/' \
+            --exclude 'build/' --exclude '.gradle/' --exclude '.kotlin/' \
+            --exclude '/app/libs/' --exclude 'local.properties' \
+            "$tmp/" "$SRC/$repo/"
+        rm -rf "$tmp"
+        echo "$sha" >"$SRC/.$repo.sha"
+    fi
+    printf '  %-26s %s\n' "$repo" "${sha:0:10}"
+}
+
+# netmesh-go's build stamps its framework with `git rev-parse HEAD`, so it is
+# mirrored as a real (object-sharing) clone rather than an archive.
+sync_git_repo() { # repo ref
+    local repo="$1" ref="$2" dir="$WS/$1" sha
+    if [[ "$FETCH" == 1 && "$ref" == origin/* ]]; then
+        git -C "$dir" fetch --quiet origin "${ref#origin/}"
+    fi
+    sha="$(git -C "$dir" rev-parse --verify "${ref}^{commit}")"
+    [[ -d "$SRC/$repo/.git" ]] || git clone --quiet --shared --no-checkout "$dir" "$SRC/$repo"
+    if [[ "$(git -C "$SRC/$repo" rev-parse --verify --quiet HEAD)" != "$sha" ]]; then
+        git -C "$SRC/$repo" fetch --quiet "$dir" "$sha"
+        git -C "$SRC/$repo" checkout --quiet --force --detach "$sha"
+    fi
+    echo "$sha" >"$SRC/.$repo.sha"
+    printf '  %-26s %s\n' "$repo" "${sha:0:10}"
+}
+
+# --- iOS ---------------------------------------------------------------------
+
+resolve_ios_device() {
+    local json="$CACHE/devices.json"
+    xcrun devicectl list devices --json-output "$json" >/dev/null 2>&1
+    python3 - "$json" "$DEVICE" <<'PY'
+import json, sys
+want = sys.argv[2].lower()
+devs = []
+for d in json.load(open(sys.argv[1]))["result"]["devices"]:
+    if d.get("hardwareProperties", {}).get("platform") != "iOS":
+        continue
+    ids = [d["identifier"], d["hardwareProperties"].get("udid", "")]
+    name = d["deviceProperties"]["name"]
+    ok = d.get("connectionProperties", {}).get("pairingState") == "paired" \
+        and d.get("connectionProperties", {}).get("tunnelState") != "unavailable"
+    if want and want not in [i.lower() for i in ids] and want not in name.lower():
+        continue
+    if ok:
+        devs.append((d["hardwareProperties"]["udid"], name, d["hardwareProperties"].get("marketingName", "")))
+if len(devs) != 1:
+    print("matching paired iOS devices: " + (", ".join(f"{n} ({m}, {u})" for u, n, m in devs) or "none"), file=sys.stderr)
+    print("pass --device NAME|UDID to pick exactly one", file=sys.stderr)
+    sys.exit(1)
+print("\t".join(devs[0]))
+PY
+}
+
+ship_ios() {
+    local scheme bundle udid name model
+    if [[ "$BACKEND" == production ]]; then
+        scheme=Openbase; bundle=com.openbase.coder
+    else
+        scheme=OpenbaseFieldTest; bundle=com.openbase.coder.field-test
+    fi
+    if [[ "$INSTALL" == 1 ]]; then
+        IFS=$'\t' read -r udid name model < <(resolve_ios_device)
+        step "device: ${name} (${model}, ${udid})"
+    fi
+
+    step "syncing sources"
+    sync_repo ios "$REF"
+    sync_repo allauth-client-swift "$REF"
+    sync_repo openbase-agent-ui-swift "$REF"
+    sync_git_repo netmesh-go origin/main
+
+    local ios="$SRC/ios" key
+    mkdir -p "$ios/Vendor"
+    key="$(tr -d '[:space:]' <"$ios/scripts/tailscalekit-source-revision.txt") $(shasum -a 256 "$ios/scripts/patches/libtailscale-udp-datagrams.patch" | cut -c1-64)"
+    if [[ "$(cat "$CACHE/tailscalekit.key" 2>/dev/null)" != "$key" || ! -d "$ios/Vendor/TailscaleKit.xcframework" ]]; then
+        step "building TailscaleKit (pinned revision changed)"
+        ( cd "$ios" && TAILSCALEKIT_CHECKOUT="$CACHE/libtailscale" locked ./scripts/build-tailscalekit.sh ) \
+            >"$CACHE/logs/tailscalekit.log" 2>&1 || { tail -20 "$CACHE/logs/tailscalekit.log"; return 1; }
+        echo "$key" >"$CACHE/tailscalekit.key"
+    fi
+    # fetch-netmeshgo.sh rebuilds ../netmesh-go/Frameworks only when its
+    # revision stamp differs, then copies it into Vendor/.
+    key="$(cat "$SRC/.netmesh-go.sha")"
+    if [[ "$(cat "$CACHE/netmeshgo-ios.key" 2>/dev/null)" != "$key" || ! -d "$ios/Vendor/NetmeshGo.xcframework" ]]; then
+        step "staging NetmeshGo.xcframework (netmesh-go ${key:0:10})"
+        ( cd "$ios" && locked ./scripts/fetch-netmeshgo.sh ) \
+            >"$CACHE/logs/netmeshgo-ios.log" 2>&1 || { tail -20 "$CACHE/logs/netmeshgo-ios.log"; return 1; }
+        echo "$key" >"$CACHE/netmeshgo-ios.key"
+    fi
+
+    key="$(cd "$ios" && { cat Project.swift Tuist/Package.swift Tuist/Package.resolved 2>/dev/null; ls Vendor; cat ../allauth-client-swift/Package.swift ../openbase-agent-ui-swift/Package.swift; } | shasum -a 256 | cut -c1-64)"
+    if [[ "$(cat "$CACHE/tuist.key" 2>/dev/null)" != "$key" || ! -d "$ios/Openbase.xcworkspace" ]]; then
+        step "tuist generate"
+        ( cd "$ios" && tuist generate --no-open ) >"$CACHE/logs/tuist.log" 2>&1 \
+            || { tail -20 "$CACHE/logs/tuist.log"; return 1; }
+        echo "$key" >"$CACHE/tuist.key"
+    fi
+
+    local dest="generic/platform=iOS" build_no
+    [[ "$INSTALL" == 1 ]] && dest="id=${udid}"
+    build_no="$(date +%s)"
+    step "xcodebuild ${scheme} (build ${build_no})"
+    ( cd "$ios" && locked xcodebuild -workspace Openbase.xcworkspace -scheme "$scheme" \
+        -configuration Debug -destination "$dest" -derivedDataPath "$CACHE/DerivedData" \
+        -allowProvisioningUpdates DEVELOPMENT_TEAM=E6GA9X89TN \
+        CURRENT_PROJECT_VERSION="$build_no" build ) >"$CACHE/logs/xcodebuild.log" 2>&1 || {
+        grep -E "error:|BUILD FAILED" "$CACHE/logs/xcodebuild.log" | head -20
+        echo "full log: $CACHE/logs/xcodebuild.log" >&2
+        return 1
+    }
+    local app="$CACHE/DerivedData/Build/Products/Debug-iphoneos/${scheme}.app"
+    step "built ${app}"
+    [[ "$INSTALL" == 1 ]] || return 0
+
+    step "installing ${bundle} on ${name}"
+    xcrun devicectl device install app --device "$udid" "$app" >"$CACHE/logs/install.log" 2>&1 \
+        || { tail -20 "$CACHE/logs/install.log"; return 1; }
+    if [[ "$LAUNCH" == 1 ]]; then
+        xcrun devicectl device process launch --device "$udid" --terminate-existing "$bundle" >/dev/null
+        step "launched ${bundle}"
+    fi
+}
+
+# --- Android -----------------------------------------------------------------
+
+ship_android() {
+    local adb="${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb" task apk pkg
+    export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
+    if [[ -z "${JAVA_HOME:-}" ]] && command -v brew >/dev/null; then
+        JAVA_HOME="$(brew --prefix openjdk@17 2>/dev/null)/libexec/openjdk.jdk/Contents/Home"
+        export JAVA_HOME
+    fi
+    if [[ "$BACKEND" == production ]]; then
+        task=assembleDebug; apk=debug/app-debug.apk
+    else
+        task=assembleFieldTest; apk=fieldTest/app-fieldTest.apk
+    fi
+    if [[ "$INSTALL" == 1 ]]; then
+        if [[ -z "$DEVICE" ]]; then
+            DEVICE="$("$adb" devices | awk 'NR>1 && $2=="device" {print $1}')"
+            [[ "$(wc -w <<<"$DEVICE")" -eq 1 ]] || { echo "connected Android devices: ${DEVICE:-none}; pass --device SERIAL" >&2; return 1; }
+        fi
+        step "device: ${DEVICE} ($("$adb" -s "$DEVICE" shell getprop ro.product.model | tr -d '\r'))"
+    fi
+
+    step "syncing sources"
+    sync_repo android "$REF"
+    sync_repo allauth-client-kotlin "$REF"
+    sync_repo openbase-agent-ui-kotlin "$REF"
+    sync_git_repo netmesh-go origin/main
+
+    local android="$SRC/android" key
+    key="$(cat "$SRC/.netmesh-go.sha")"
+    if [[ "$(cat "$CACHE/netmeshgo-android.key" 2>/dev/null)" != "$key" || ! -f "$android/app/libs/netmeshgo.aar" ]]; then
+        step "building netmeshgo.aar (netmesh-go ${key:0:10})"
+        ( cd "$android" && locked ./scripts/build-netmeshgo-aar.sh ) >"$CACHE/logs/netmeshgo-aar.log" 2>&1 \
+            || { tail -20 "$CACHE/logs/netmeshgo-aar.log"; return 1; }
+        echo "$key" >"$CACHE/netmeshgo-android.key"
+    fi
+
+    step "gradle ${task}"
+    ( cd "$android" && locked ./gradlew --quiet ":app:${task}" ) >"$CACHE/logs/gradle.log" 2>&1 \
+        || { grep -E "^e:|error:|FAILED" "$CACHE/logs/gradle.log" | head -20; echo "full log: $CACHE/logs/gradle.log" >&2; return 1; }
+    apk="$android/app/build/outputs/apk/$apk"
+    step "built ${apk}"
+    [[ "$INSTALL" == 1 ]] || return 0
+
+    step "installing on ${DEVICE}"
+    "$adb" -s "$DEVICE" install -r "$apk" >"$CACHE/logs/install.log" 2>&1 \
+        || { tail -20 "$CACHE/logs/install.log"; return 1; }
+    if [[ "$LAUNCH" == 1 ]]; then
+        pkg="$(aapt2_pkg "$apk")"
+        "$adb" -s "$DEVICE" shell monkey -p "$pkg" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+        step "launched ${pkg}"
+    fi
+}
+
+aapt2_pkg() {
+    local aapt
+    aapt="$(ls -d "$ANDROID_HOME"/build-tools/*/aapt2 2>/dev/null | sort -V | tail -1)"
+    "$aapt" dump packagename "$1"
+}
+
+"ship_${PLATFORM}"
+step "done (${PLATFORM}, ${BACKEND}, ${REF})"

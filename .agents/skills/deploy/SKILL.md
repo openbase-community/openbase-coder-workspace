@@ -163,7 +163,9 @@ If the macOS job fails late with `Electron failed to install correctly`, the wor
 
 | Deploy | Typical duration |
 |---|---|
-| Coder workspace `scripts/promote` to main (prechecks dominate: cli pytest suite, assembly pnpm install, typechecks) | 30+ min |
+| Coder workspace `scripts/promote` to main: planning (concurrent fetches) | ~2 s |
+| Coder workspace pre-release checks (committed-refs assembly, own uv venv, cli suite under pytest-xdist, typechecks concurrently; only for repos that move; rehearse with `--checks-only`) | ~70 s (was 4–5 min serial, measured 2026-10-11) |
+| Coder workspace `scripts/promote` to main end to end when desktop moves (desktop push waits for the CLI auto-release, then watches the desktop rebuild) | 35–45 min; without desktop a few minutes |
 | Coder or Cloud `scripts/promote` to staging (no prechecks; pushes only) | < 1 min |
 | CLI auto-release (GHA, measured 2026-10-09) | 4–6 min |
 | Cloud workspace image (`docker-image.yml`, both arches; amd64 alone is the same wall clock) | ~4–5 min |
