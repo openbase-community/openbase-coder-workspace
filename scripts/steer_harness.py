@@ -206,8 +206,19 @@ def run_once(
         result.steer_response = steer
 
         ack_at = None
+        outage_started = None
         while True:
-            detail = api.call("GET", f"/threads/{thread_id}/")
+            try:
+                detail = api.call("GET", f"/threads/{thread_id}/")
+            except (RuntimeError, OSError) as exc:
+                # The API host may be restarting (an injection): keep polling
+                # for up to 45 s so the turn's eventual fate is still observed.
+                outage_started = outage_started or time.monotonic()
+                if time.monotonic() - outage_started > 45:
+                    raise RuntimeError(f"API unreachable for 45 s: {exc}") from None
+                time.sleep(2.0)
+                continue
+            outage_started = None
             current = detail.get("current_turn")
             history = detail.get("turn_history") or []
             turns = [t for t in ([current] if current else []) + history if t]
