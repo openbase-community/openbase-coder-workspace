@@ -2,6 +2,9 @@
   "name": "openbase-coder-workspace",
   "private": true,
   "packageManager": "pnpm@10.18.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "build": "pnpm --recursive --if-present build",
     "test": "pnpm --recursive --if-present test",
