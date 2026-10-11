@@ -36,7 +36,7 @@ For a developer-flow field test or a targeted diagnostic, build the real bundled
   --display 1600x900pt
 ```
 
-`build-app.sh` needs the desktop/CLI toolchain: Xcode, Go, uv, pnpm, Node 20 or newer, and a local `livekit-server` binary. `manual-vm.sh` itself needs only Tart and `sshpass`.
+`build-app.sh` needs the desktop/CLI toolchain: Xcode, Go, uv, pnpm, the Node LTS pinned in the workspace `.nvmrc` (currently Node 24, installed with nvm), and a local `livekit-server` binary. `manual-vm.sh` itself needs only Tart and `sshpass`.
 
 ## VM lifecycle
 
