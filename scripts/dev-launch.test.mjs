@@ -23,7 +23,7 @@ function fixture(t, { runtime = false, repair = false, signingFailure = false } 
   // tree; no test may write to /Applications or invoke the real open command.
   assert.equal(source.split('APP_DIR="/Applications/Openbase.app"').length, 2);
   writeFileSync(path.join(root, "scripts/dev-launch"), source.replace('APP_DIR="/Applications/Openbase.app"', `APP_DIR="${destination}"`), { mode: 0o755 });
-  for (const name of ["ensure-electron-runtime.mjs", "electron-artifact.cjs", "brand-dev-runtime.mjs"]) {
+  for (const name of ["ensure-electron-runtime.mjs", "electron-artifact.cjs", "brand-dev-runtime.mjs", "dev-launch-main.c"]) {
     cpSync(path.join(scripts, name), path.join(root, "scripts", name));
   }
   writeFileSync(path.join(root, "scripts/check-renderer-freshness.cjs"), "process.exit(0)");
@@ -86,6 +86,9 @@ test("repaired runtime publishes a signed launcher atomically and retains the pr
   const result = f.run("--electron");
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(existsSync(path.join(f.destination, "Contents/MacOS/Openbase")), true);
+  const native = readFileSync(path.join(f.destination, "Contents/MacOS/Openbase"));
+  assert.notEqual(native.subarray(0, 2).toString(), "#!");
+  assert.equal(existsSync(path.join(f.destination, "Contents/Resources/launch-dashboard.sh")), true);
   assert.equal(existsSync(path.join(f.destination, "preserved")), false);
   const retained = readdirSync(path.dirname(f.destination)).find((name) => name.startsWith(".native-stage-"));
   assert.equal(readFileSync(path.join(path.dirname(f.destination), retained, "Openbase.app/preserved"), "utf8"), "existing launcher");
@@ -100,6 +103,9 @@ test("--build-only publishes the launcher without launching anything", { skip: p
   assert.match(result.stdout, /Built the Openbase developer app/);
   assert.match(readFileSync(path.join(f.root, "commands"), "utf8"), / build\n/);
   assert.equal(existsSync(path.join(f.destination, "Contents/MacOS/Openbase")), true);
+  const native = readFileSync(path.join(f.destination, "Contents/MacOS/Openbase"));
+  assert.notEqual(native.subarray(0, 2).toString(), "#!");
+  assert.equal(existsSync(path.join(f.destination, "Contents/Resources/launch-dashboard.sh")), true);
   assert.equal(existsSync(path.join(f.root, "opened")), false);
 });
 
@@ -127,7 +133,7 @@ test("the launcher opens a branded runtime clone and never edits node_modules' E
   assert.equal(spawnSync("codesign", ["--verify", "--strict", "--deep", branded]).status, 0);
   assert.equal(plist(upstream, "CFBundleName"), "Electron");
   assert.equal(readFileSync(path.join(upstream, "Contents/Resources/electron.icns"), "utf8"), "upstream icon");
-  assert.match(readFileSync(path.join(f.destination, "Contents/MacOS/Openbase"), "utf8"), /dev-runtime\/Openbase\.app/);
+  assert.match(readFileSync(path.join(f.destination, "Contents/Resources/launch-dashboard.sh"), "utf8"), /dev-runtime\/Openbase\.app/);
   const second = f.run("--build-only");
   assert.equal(second.status, 0, second.stdout + second.stderr);
   assert.doesNotMatch(second.stdout, /Branding/);
@@ -145,6 +151,9 @@ test("valid runtime in HMR mode uses the existing dev command without rebuilding
 function setupFixture(t, options) {
   const f = fixture(t, options);
   mkdirSync(path.join(f.root, "cli"));
+  cpSync(path.join(scripts, "../.nvmrc"), path.join(f.root, ".nvmrc"));
+  const pinned = readFileSync(path.join(scripts, "../.nvmrc"), "utf8").trim();
+  writeFileSync(path.join(f.root, "bin/node"), `#!/bin/sh\nif [ "$1" = --version ]; then echo v${pinned}; else exec "${process.execPath}" "$@"; fi\n`, { mode: 0o755 });
   // Route setup's packaged-app check into the fixture tree as well.
   const source = readFileSync(path.join(scripts, "setup"), "utf8");
   assert.equal(source.split('APP_PATH="/Applications/Openbase.app"').length, 2);
@@ -168,6 +177,9 @@ for (const repair of [false, true]) {
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.match(result.stdout, /runtime is ready[\s\S]*Built the Openbase developer app[\s\S]*Setup complete/);
       assert.equal(existsSync(path.join(f.destination, "Contents/MacOS/Openbase")), true);
+  const native = readFileSync(path.join(f.destination, "Contents/MacOS/Openbase"));
+  assert.notEqual(native.subarray(0, 2).toString(), "#!");
+  assert.equal(existsSync(path.join(f.destination, "Contents/Resources/launch-dashboard.sh")), true);
       assert.equal(existsSync(path.join(f.root, "opened")), false);
       assert.match(result.stdout, /Setup complete[\s\S]*uv run openbase-coder app-download-qr[\s\S]*Last step: install the Openbase iOS or Android app/);
     } else {
