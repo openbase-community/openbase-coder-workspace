@@ -61,6 +61,17 @@ When this developer install is sampled in a field test, use this runbook only fo
 
 ## 4. Verify, then exercise the product
 
+Phone pairing does not prove that voice media has a route. An iOS developer
+build without the system VPN extension can use the embedded network while
+the computer uses Openbase VPN. This combination requires the computer's
+private voice relay. The CLI installs `openbase-voice-turn` for Openbase VPN;
+it reuses the existing VPN address and does not enroll another network node.
+Openbase Direct continues to use the relay in `openbase-tunneld`.
+The authenticated onboarding status must advertise live `voice_turn`
+credentials before an embedded phone starts a call. Relay credentials must
+never be pasted into settings, logs, or reports. Test a real phone call after
+setup and after a VPN restart; do not substitute API health for voice media.
+
 ```bash
 openbase-coder version          # dev install, channel, update flags
 openbase-coder doctor           # services, ports, selected phone-access network, credentials, auth
