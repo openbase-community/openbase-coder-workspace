@@ -145,6 +145,10 @@ test("valid runtime in HMR mode uses the existing dev command without rebuilding
 function setupFixture(t, options) {
   const f = fixture(t, options);
   mkdirSync(path.join(f.root, "cli"));
+  cpSync(path.join(scripts, "../.nvmrc"), path.join(f.root, ".nvmrc"));
+  const pinned = readFileSync(path.join(scripts, "../.nvmrc"), "utf8").trim();
+  writeFileSync(path.join(f.root, "bin/node"), `#!/bin/sh\nif [ "$1" = --version ]; then echo v${pinned}; else exec "${process.execPath}" "$@"; fi\n`, { mode: 0o755 });
+  writeFileSync(path.join(f.root, "scripts/wait-api-ready.mjs"), 'console.log("API health check fixture passed")');
   // Route setup's packaged-app check into the fixture tree as well.
   const source = readFileSync(path.join(scripts, "setup"), "utf8");
   assert.equal(source.split('APP_PATH="/Applications/Openbase.app"').length, 2);
@@ -189,3 +193,12 @@ test("setup in a desktop session launches the developer app, then prints the pho
   assert.match(uv[0], /^run openbase-coder setup --defer-app-qr /);
   assert.equal(uv.at(-1), "run openbase-coder app-download-qr");
 });
+
+ test("setup does not report completion or print the app QR after health failure", { skip: process.platform !== "darwin" }, t => {
+  const f=setupFixture(t,{runtime:true});
+  writeFileSync(path.join(f.root,"scripts/wait-api-ready.mjs"),'throw new Error("API health failed")');
+  const r=spawnSync("bash",[path.join(f.root,"scripts/setup")],{env:{...f.env,OPENBASE_SETUP_NO_LAUNCH:"1"},encoding:"utf8"});
+  assert.notEqual(r.status,0);
+  assert.doesNotMatch(r.stdout,/Setup complete/);
+  assert.doesNotMatch(readFileSync(path.join(f.root,"uv-commands"),"utf8"),/app-download-qr/);
+ });
