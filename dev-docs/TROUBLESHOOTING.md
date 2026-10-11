@@ -210,7 +210,7 @@ The user speaks, hears nothing back for a long stretch, and the server log shows
 
 ### This Mute Is Intended — Do Not Report It As A Bug
 
-The client muting its microphone here is the designed voice-delivery flow, not a stuck state: after the user goes quiet and their utterance is accepted, the agent emits `safe_to_mute_user` (see the voice lifecycle packet entry in `GLOSSARY.md` and the `voice_delivery.py` module docstring), the client mutes, and the mic reopens on `safe_to_unmute` after the agent's spoken reply. A slow coding-backend turn stretches that muted window for the turn's full duration — 2026-09-04 field example: a wedged first model call took 148s, the mic stayed muted throughout, then the reply played and the mic reopened correctly. Confirmed intended behavior; do not add unmute watchdogs or "fix" the sustained mute.
+The client muting its microphone around the agent's audio is the designed voice-delivery flow: after the user goes quiet and their utterance is accepted, the agent emits `safe_to_mute_user` (see the voice lifecycle packet entry in `GLOSSARY.md` and the `voice_delivery.py` module docstring) and the client mutes. Since 2026-10-11 the mic is released again (`safe_to_unmute`, reason `backend_working`) as soon as the request is committed to the coding backend, so the caller can steer the running turn by voice; it closes again with the reply's `agent_audio_started` and reopens on `safe_to_unmute` after the spoken reply. A call that stays muted through a long backend turn is therefore a bug on a current build (look for `mic_released_for_backend` in the delivery log), not the old deliberate sustained mute.
 
 ### What To Actually Investigate
 
