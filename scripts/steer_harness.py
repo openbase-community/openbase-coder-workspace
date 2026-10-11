@@ -1,0 +1,245 @@
+#!/usr/bin/env python3
+"""Headless steer harness: steer a running turn through the local API and measure.
+
+Runs against any Openbase Coder local API (a dev install, a Tart VM through an
+SSH tunnel, a Maritime workspace) with no phone: starts a turn that does
+several slow tool calls, sends a steer part-way through, and reports whether
+the steer was accepted, how long until the agent acknowledged it, whether the
+behaviour changed, and whether anything was lost, duplicated, queued until the
+end, or left the thread stuck at running.
+
+    uv run scripts/steer_harness.py --api http://127.0.0.1:17999 --token-file ~/vm2-token \
+        --directory /Users/admin/Desktop/steer-harness --backend openbase_cloud
+
+Each run creates its own thread in ``--directory`` (which must exist on the
+API host); files are written under a fresh run subfolder so runs never collide.
+Prints one JSON line per run (``--json``) or a short human summary.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+import urllib.error
+import urllib.request
+from dataclasses import asdict, dataclass, field
+
+TASK = (
+    "Create five text files one at a time in the current folder, named one.txt, two.txt, "
+    "three.txt, four.txt and five.txt. Each file contains just its number spelled out in "
+    "English. Between files run `sleep {pause}` in the shell so the work is paced. Do not "
+    "create any file ahead of time. When finished, say 'Done.'"
+)
+STEER = (
+    "Change of plan: do not create any more numbered files after the one you are on. "
+    "Instead create README.md containing the single line 'steered' and then stop."
+)
+STEER_ACK_WORDS = ("readme", "change of plan", "steer", "stop", "instead")
+
+
+@dataclass
+class RunResult:
+    api: str
+    backend: str | None
+    thread_id: str | None = None
+    turn_id: str | None = None
+    steer_sent_at_s: float | None = None
+    steer_http_ms: int | None = None
+    steer_accepted: bool = False
+    steer_response: dict = field(default_factory=dict)
+    ack_after_steer_s: float | None = None
+    files_before_steer: list[str] = field(default_factory=list)
+    files_final: list[str] = field(default_factory=list)
+    behaviour_changed: bool | None = None
+    steer_recorded_on_turn: bool | None = None
+    extra_turns: int = 0
+    queued_turns_at_end: int = 0
+    final_status: str | None = None
+    stuck_running: bool = False
+    total_s: float | None = None
+    error: str | None = None
+
+    @property
+    def passed(self) -> bool:
+        return (
+            self.error is None
+            and self.steer_accepted
+            and self.behaviour_changed is True
+            and not self.stuck_running
+            and self.extra_turns == 0
+            and self.queued_turns_at_end == 0
+        )
+
+
+class Api:
+    def __init__(self, base: str, token: str) -> None:
+        self.base = base.rstrip("/")
+        self.token = token
+
+    def call(self, method: str, path: str, body: dict | None = None, timeout: float = 30) -> dict:
+        data = json.dumps(body).encode() if body is not None else None
+        request = urllib.request.Request(
+            f"{self.base}/api{path}",
+            data=data,
+            method=method,
+            headers={"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                raw = response.read()
+        except urllib.error.HTTPError as exc:
+            raw = exc.read()
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                payload = {"error": raw.decode(errors="replace")}
+            raise RuntimeError(f"{method} {path} -> {exc.code}: {payload}") from None
+        return json.loads(raw) if raw else {}
+
+
+def _turn_key(turn: dict) -> str | None:
+    return turn.get("turn_id") or turn.get("id")
+
+
+def _assistant_text_after_steer(turn: dict | None) -> str:
+    """Assistant text that follows the steer's own user message on the turn."""
+    if not turn:
+        return ""
+    messages = turn.get("messages") or turn.get("items") or []
+    seen_steer = False
+    chunks = []
+    for message in messages:
+        text = message.get("text") or message.get("content") or ""
+        if not isinstance(text, str):
+            continue
+        if message.get("role") == "user" and text.startswith(STEER[:20]):
+            seen_steer = True
+            continue
+        if seen_steer and message.get("role") == "assistant":
+            chunks.append(text.lower())
+    return "\n".join(chunks)
+
+
+def run_once(
+    api: Api,
+    *,
+    directory: str,
+    backend: str | None,
+    model: str | None,
+    pause: int,
+    steer_after: float,
+    deadline: float,
+    list_files,
+) -> RunResult:
+    result = RunResult(api=api.base, backend=backend)
+    started = time.monotonic()
+    try:
+        body = {"directory": directory}
+        if backend:
+            body["backend"] = backend
+        if model:
+            body["model"] = model
+        created = api.call("POST", "/threads/", body)
+        result.thread_id = thread_id = created["thread_id"]
+        turn = api.call("POST", f"/threads/{thread_id}/turns/", {"prompt": TASK.format(pause=pause)})
+        result.turn_id = turn_id = turn["turn_id"]
+
+        # Wait until the agent has actually started producing files, then steer.
+        while time.monotonic() - started < steer_after:
+            time.sleep(0.5)
+        result.files_before_steer = list_files()
+        steer_started = time.monotonic()
+        try:
+            steer = api.call("POST", f"/threads/{thread_id}/turns/steer/", {"prompt": STEER})
+            result.steer_accepted = bool(steer.get("steered"))
+        except RuntimeError as exc:
+            steer = {"error": str(exc)}
+        result.steer_http_ms = int((time.monotonic() - steer_started) * 1000)
+        result.steer_sent_at_s = round(steer_started - started, 2)
+        result.steer_response = steer
+
+        ack_at = None
+        while True:
+            detail = api.call("GET", f"/threads/{thread_id}/")
+            current = detail.get("current_turn")
+            history = detail.get("turn_history") or []
+            turns = [t for t in ([current] if current else []) + history if t]
+            this_turn = next((t for t in turns if _turn_key(t) == turn_id), None)
+            texts = _assistant_text_after_steer(this_turn)
+            if ack_at is None and any(word in texts for word in STEER_ACK_WORDS):
+                ack_at = time.monotonic()
+                result.ack_after_steer_s = round(ack_at - steer_started, 2)
+            status = detail.get("status")
+            result.final_status = status
+            result.queued_turns_at_end = len(detail.get("queued_turns") or [])
+            if this_turn is not None:
+                steers = this_turn.get("steers") or []
+                result.steer_recorded_on_turn = any(STEER[:20] in (s.get("text") or "") for s in steers)
+            result.extra_turns = len([t for t in turns if _turn_key(t) != turn_id])
+            if status not in ("running", "waiting", "in_progress") and current is None:
+                break
+            if time.monotonic() - started > deadline:
+                result.stuck_running = True
+                break
+            time.sleep(1.0)
+        result.files_final = list_files()
+        numbered = [f for f in result.files_final if f in ("three.txt", "four.txt", "five.txt")]
+        result.behaviour_changed = "README.md" in result.files_final and len(numbered) <= 1
+    except Exception as exc:  # noqa: BLE001 - the harness reports, never crashes
+        result.error = f"{type(exc).__name__}: {exc}"
+    result.total_s = round(time.monotonic() - started, 2)
+    return result
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--api", required=True, help="local API base, e.g. http://127.0.0.1:7999")
+    parser.add_argument("--token-file", required=True, help="file holding the local API token")
+    parser.add_argument("--directory", required=True, help="project folder on the API host (must exist)")
+    parser.add_argument("--backend", default=None)
+    parser.add_argument("--model", default=None)
+    parser.add_argument("--pause", type=int, default=6, help="seconds the agent sleeps between files")
+    parser.add_argument("--steer-after", type=float, default=12.0, help="seconds after start to send the steer")
+    parser.add_argument("--deadline", type=float, default=90.0, help="seconds before the run is called stuck")
+    parser.add_argument("--list-files-cmd", required=True, help="shell command printing the run folder's file names, one per line")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+
+    import shlex
+    import subprocess
+
+    def list_files() -> list[str]:
+        out = subprocess.run(shlex.split(args.list_files_cmd), capture_output=True, text=True, timeout=20)
+        return sorted(line.strip() for line in out.stdout.splitlines() if line.strip())
+
+    with open(args.token_file) as handle:
+        token = handle.read().strip()
+    api = Api(args.api, token)
+    result = run_once(
+        api,
+        directory=args.directory,
+        backend=args.backend,
+        model=args.model,
+        pause=args.pause,
+        steer_after=args.steer_after,
+        deadline=args.deadline,
+        list_files=list_files,
+    )
+    payload = asdict(result)
+    payload["passed"] = result.passed
+    if args.json:
+        print(json.dumps(payload))
+    else:
+        print(f"{'PASS' if result.passed else 'FAIL'} thread={result.thread_id} turn={result.turn_id}")
+        print(f"  steer accepted={result.steer_accepted} http={result.steer_http_ms} ms sent at {result.steer_sent_at_s} s")
+        print(f"  ack after steer={result.ack_after_steer_s} s  behaviour changed={result.behaviour_changed}")
+        print(f"  files before={result.files_before_steer} final={result.files_final}")
+        print(f"  steer on turn={result.steer_recorded_on_turn} extra turns={result.extra_turns} queued={result.queued_turns_at_end}")
+        print(f"  final status={result.final_status} stuck={result.stuck_running} total={result.total_s} s error={result.error}")
+    return 0 if result.passed else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
