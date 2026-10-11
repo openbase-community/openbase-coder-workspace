@@ -60,9 +60,21 @@ class RunResult:
     stuck_running: bool = False
     total_s: float | None = None
     error: str | None = None
+    injection: dict | None = None
+    steer_attempts: int = 0
+    expect: str = "steer"
 
     @property
     def passed(self) -> bool:
+        if self.expect == "clean_failure":
+            # Failure injection: the turn must end in a terminal state with a
+            # reason, never stuck at running, and never duplicated.
+            return (
+                self.error is None
+                and not self.stuck_running
+                and self.final_status in ("failed", "cancelled", "completed")
+                and self.extra_turns == 0
+            )
         return (
             self.error is None
             and self.steer_accepted
@@ -122,6 +134,29 @@ def _assistant_text_after_steer(turn: dict | None) -> str:
     return "\n".join(chunks)
 
 
+def _run_injection(command: str | None, result: RunResult) -> None:
+    """Run a failure-injection shell command right before the steer (e.g. an
+    SSH command that restarts django-cli on the API host, or kills the
+    backend's CLI child). Its outcome is recorded, never fatal."""
+    if not command:
+        return
+    import shlex
+    import subprocess
+
+    started = time.monotonic()
+    try:
+        completed = subprocess.run(shlex.split(command), capture_output=True, text=True, timeout=60)
+        result.injection = {
+            "command": command,
+            "returncode": completed.returncode,
+            "stdout": completed.stdout.strip()[-300:],
+            "stderr": completed.stderr.strip()[-300:],
+            "elapsed_ms": int((time.monotonic() - started) * 1000),
+        }
+    except Exception as exc:  # noqa: BLE001
+        result.injection = {"command": command, "error": f"{type(exc).__name__}: {exc}"}
+
+
 def run_once(
     api: Api,
     *,
@@ -132,6 +167,8 @@ def run_once(
     steer_after: float,
     deadline: float,
     list_files,
+    inject: str | None = None,
+    steer_retries: int = 0,
 ) -> RunResult:
     result = RunResult(api=api.base, backend=backend)
     started = time.monotonic()
@@ -150,12 +187,20 @@ def run_once(
         while time.monotonic() - started < steer_after:
             time.sleep(0.5)
         result.files_before_steer = list_files()
+        _run_injection(inject, result)
         steer_started = time.monotonic()
-        try:
-            steer = api.call("POST", f"/threads/{thread_id}/turns/steer/", {"prompt": STEER})
-            result.steer_accepted = bool(steer.get("steered"))
-        except RuntimeError as exc:
-            steer = {"error": str(exc)}
+        steer: dict = {}
+        for attempt in range(steer_retries + 1):
+            try:
+                steer = api.call("POST", f"/threads/{thread_id}/turns/steer/", {"prompt": STEER})
+                result.steer_accepted = bool(steer.get("steered"))
+                result.steer_attempts = attempt + 1
+                break
+            except (RuntimeError, OSError) as exc:
+                steer = {"error": str(exc)}
+                result.steer_attempts = attempt + 1
+                if attempt < steer_retries:
+                    time.sleep(2.0)
         result.steer_http_ms = int((time.monotonic() - steer_started) * 1000)
         result.steer_sent_at_s = round(steer_started - started, 2)
         result.steer_response = steer
@@ -202,6 +247,7 @@ async def run_inprocess(
     steer_after: float,
     deadline: float,
     list_files,
+    inject: str | None = None,
 ) -> RunResult:
     """Drive super-agents directly (no local API): the backend's own steer path."""
     import asyncio
@@ -240,6 +286,7 @@ async def run_inprocess(
         while time.monotonic() - started < steer_after:
             await asyncio.sleep(0.5)
         result.files_before_steer = list_files()
+        _run_injection(inject, result)
         steer_started = time.monotonic()
         try:
             steer = await client.steer_by_label(query(turn_id=turn_id, prefer="latest_active"), STEER, {"cwd": directory})
@@ -270,6 +317,8 @@ async def run_inprocess(
             if this_turn is not None:
                 result.steer_recorded_on_turn = any(STEER[:20] in (s.get("text") or "") for s in (this_turn.get("steers") or []))
                 status = this_turn.get("status")
+                if this_turn.get("error") or this_turn.get("lastError") or this_turn.get("errorKind"):
+                    result.steer_response = {**result.steer_response, "turnError": this_turn.get("lastError") or this_turn.get("error"), "errorKind": this_turn.get("errorKind")}
             else:
                 status = progress.get("status")
             result.final_status = status
@@ -314,6 +363,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--steer-after", type=float, default=12.0, help="seconds after start to send the steer")
     parser.add_argument("--deadline", type=float, default=90.0, help="seconds before the run is called stuck")
     parser.add_argument("--list-files-cmd", required=True, help="shell command printing the run folder's file names, one per line")
+    parser.add_argument("--inject", default=None, help="failure injection: shell command run just before the steer (restart the API, kill the CLI child, ...)")
+    parser.add_argument("--steer-retries", type=int, default=0, help="API mode: retry the steer POST this many times, 2 s apart, when it fails")
+    parser.add_argument("--expect", choices=["steer", "clean_failure"], default="steer", help="pass criterion: a landed steer, or a clean terminal failure (for injections)")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
@@ -336,6 +388,7 @@ def main(argv: list[str] | None = None) -> int:
                 steer_after=args.steer_after,
                 deadline=args.deadline,
                 list_files=list_files,
+                inject=args.inject,
             )
         )
     else:
@@ -353,7 +406,10 @@ def main(argv: list[str] | None = None) -> int:
             steer_after=args.steer_after,
             deadline=args.deadline,
             list_files=list_files,
+            inject=args.inject,
+            steer_retries=args.steer_retries,
         )
+    result.expect = args.expect
     payload = asdict(result)
     payload["passed"] = result.passed
     if args.json:
@@ -365,6 +421,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  files before={result.files_before_steer} final={result.files_final}")
         print(f"  steer on turn={result.steer_recorded_on_turn} extra turns={result.extra_turns} queued={result.queued_turns_at_end}")
         print(f"  final status={result.final_status} stuck={result.stuck_running} total={result.total_s} s error={result.error}")
+        if result.injection:
+            print(f"  injection={result.injection} steer attempts={result.steer_attempts} response={result.steer_response}")
     return 0 if result.passed else 1
 
 
