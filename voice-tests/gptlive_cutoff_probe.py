@@ -329,7 +329,7 @@ async def run_probe(args) -> int:
         return current["r"]
 
     # --- S1: raw gateway events -------------------------------------------------
-    # Simulated speakerphone echo: the model's own output, attenuated and
+    # Simulated speakerphone echo: what the output plays, attenuated and
     # delayed, mixed into the caller's microphone.
     echo_gain = 10 ** (args.echo_db / 20) if args.echo_db is not None else 0.0
     echo_buf = bytearray()
@@ -348,8 +348,6 @@ async def run_probe(args) -> int:
             rms = r.s1.add(raw)
             if args.dump:
                 r.s1_pcm += raw
-            if echo_gain:
-                echo_buf.extend(scale_pcm(raw, echo_gain))
             if rms <= AUDIBLE_FLOOR_DBFS:
                 return
             if r.first_delta_at is None:
@@ -558,6 +556,8 @@ async def run_probe(args) -> int:
             self._segment_samples = 0
             self._pending: list[bytes] = []
             self._paused = False
+            self._started = False
+            self._finish_position: float | None = None
             self._player = asyncio.create_task(self._play())
 
         async def _play(self) -> None:
@@ -565,9 +565,19 @@ async def run_probe(args) -> int:
             while True:
                 next_at += FRAME_MS / 1000
                 await asyncio.sleep(max(0.0, next_at - time.monotonic()))
+                if not self._pending and self._finish_position is not None:
+                    # Like the room output: a segment finishes once heard.
+                    position, self._finish_position = self._finish_position, None
+                    self._started = False
+                    self.on_playback_finished(
+                        playback_position=position, interrupted=False
+                    )
                 if self._paused or not self._pending:
                     next_at = time.monotonic()
                     continue
+                if not self._started:
+                    self._started = True
+                    self.on_playback_started(created_at=time.time())
                 need = FRAME_SAMPLES * 2
                 out = bytearray()
                 while self._pending and len(out) < need:
@@ -578,6 +588,9 @@ async def run_probe(args) -> int:
                         self._pending.pop(0)
                     else:
                         self._pending[0] = chunk[len(take):]
+                if echo_gain:
+                    # What plays is what echoes back, announcer clips included.
+                    echo_buf.extend(scale_pcm(bytes(out), echo_gain))
                 r = rec()
                 if r is not None:
                     r.s3.add(bytes(out))
@@ -601,9 +614,8 @@ async def run_probe(args) -> int:
 
         def flush(self) -> None:
             super().flush()
-            position = self._segment_samples / SAMPLE_RATE
+            self._finish_position = self._segment_samples / SAMPLE_RATE
             self._segment_samples = 0
-            self.on_playback_finished(playback_position=position, interrupted=False)
 
         def clear_buffer(self) -> None:
             r = rec()
@@ -616,6 +628,8 @@ async def run_probe(args) -> int:
                 r.events.append(f"{now():7.2f} output_cleared ms={dropped * 1000 // (SAMPLE_RATE * 2)} audible_ms={stats.audible_ms}")
             self._pending.clear()
             self._paused = False
+            self._started = False
+            self._finish_position = None
             position = self._segment_samples / SAMPLE_RATE
             self._segment_samples = 0
             self.on_playback_finished(playback_position=position, interrupted=True)
@@ -694,6 +708,7 @@ async def run_probe(args) -> int:
 
     stimulus_frames = read_wav_frames(Path(args.wav))
     barge_frames = read_wav_frames(Path(args.barge_wav)) if args.barge_at is not None else []
+    announce_frames = read_wav_frames(Path(args.announce)) if args.announce else []
     answers = args.answers or DEFAULT_ANSWERS
     print(
         f"probe: gateway={base_url} model={args.model} voice={args.voice} "
@@ -740,6 +755,35 @@ async def run_probe(args) -> int:
                     pass
             if args.answer_delay:
                 await asyncio.sleep(args.answer_delay)
+            if announce_frames:
+                # A transfer: the route announcer plays through session.say,
+                # then the bridge asks the new character for its greeting.
+                async def clip():
+                    for chunk in announce_frames:
+                        yield rtc.AudioFrame(
+                            data=chunk,
+                            sample_rate=SAMPLE_RATE,
+                            num_channels=1,
+                            samples_per_channel=len(chunk) // 2,
+                        )
+
+                # As live_characters announces: the gate is told the session
+                # itself is playing agent audio.
+                tracked = hasattr(speech_gate, "external_playout_started")
+                if tracked:
+                    speech_gate.external_playout_started(args.announce_text)
+                try:
+                    handle = session.say(
+                        args.announce_text,
+                        audio=clip(),
+                        allow_interruptions=False,
+                        add_to_chat_ctx=False,
+                    )
+                    await handle.wait_for_playout()
+                finally:
+                    if tracked:
+                        speech_gate.external_playout_ended()
+                r.events.append(f"{now():7.2f} announcer_played")
             r.delegation_id = delegation_seen["id"]
             speech_gate.authorize()
             r.appended_at = now()
@@ -1101,6 +1145,8 @@ def main() -> None:
         help="feed the model's own output back as caller audio at this level (e.g. -20): speakerphone echo",
     )
     parser.add_argument("--echo-delay-ms", type=int, default=150)
+    parser.add_argument("--announce", default=None, help="WAV played through session.say before each answer (route announcer)")
+    parser.add_argument("--announce-text", default="Voice route transferred.")
     parser.add_argument("--barge-in-min", type=float, default=None, help="LiveSpeechGate barge_in_min_seconds (agent default 0.5)")
     parser.add_argument("--gate-module", default=None, help="load live_speech_gate from this file instead of the installed one")
     parser.add_argument("--no-framework-interrupt", action="store_true", help="AgentSession interruption enabled=False")
