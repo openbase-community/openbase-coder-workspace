@@ -234,9 +234,12 @@ if [ "$USER_ARG_COUNT" -eq 0 ] && [ -t 0 ]; then
   prepend_setup_args --interactive
 fi
 
-# The phone-app QR code is the last thing setup prints, after the developer
-# app is built and launched, so the CLI step leaves it to this script.
-prepend_setup_args --defer-app-qr
+# The ℹ️ setup summaries and then the phone-app QR code are the last things
+# setup prints, after the developer app is built and launched, so the CLI step
+# leaves them to this script.
+SETUP_NOTES_FILE="$(mktemp "${TMPDIR:-/tmp}/openbase-setup-notes.XXXXXX")"
+trap 'rm -f "$SETUP_NOTES_FILE"' EXIT
+prepend_setup_args --defer-app-qr --deferred-notes-file "$SETUP_NOTES_FILE"
 
 pushd "${ROOT_DIR}"/cli
 uv run openbase-coder setup "${SETUP_ARGS[@]}"
@@ -279,6 +282,8 @@ if [ -f "$ROOT_DIR/desktop/package.json" ]; then
 fi
 
 echo "Setup complete. The Openbase services, browser dashboard and developer app are ready."
+cat "$SETUP_NOTES_FILE"
+echo
 
 pushd "${ROOT_DIR}"/cli >/dev/null
 uv run openbase-coder app-download-qr
