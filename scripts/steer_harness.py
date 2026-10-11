@@ -193,10 +193,104 @@ def run_once(
     return result
 
 
+async def run_inprocess(
+    *,
+    backend: str,
+    directory: str,
+    store_path: str,
+    pause: int,
+    steer_after: float,
+    deadline: float,
+    list_files,
+) -> RunResult:
+    """Drive super-agents directly (no local API): the backend's own steer path."""
+    import asyncio
+    import os
+
+    from pathlib import Path
+
+    from super_agents.agent_store import Store
+    from super_agents.app_models import LabelQueryInput
+
+    result = RunResult(api=f"inprocess:{backend}", backend=backend)
+    started = time.monotonic()
+    client = None
+    try:
+        os.environ.setdefault("OPENBASE_CODING_BACKEND", backend)
+        if backend == "claude_code":
+            from super_agents.claude_sdk import ClaudeAgentSdkClient
+
+            client = ClaudeAgentSdkClient(store=Store(Path(store_path)))
+        else:
+            from super_agents.app_server_client import CodexAppServerClient
+
+            client = CodexAppServerClient(backend_identity=backend)
+        thread = await client.start_thread({"name": f"steer-harness-{int(time.time())}", "cwd": directory})
+        result.thread_id = thread_id = thread["threadId"]
+        turn = await client.start_turn_by_label(LabelQueryInput(thread_id=thread_id), {"prompt": TASK.format(pause=pause)})
+        result.turn_id = turn_id = turn.get("turnId") or turn.get("turn_id")
+
+        while time.monotonic() - started < steer_after:
+            await asyncio.sleep(0.5)
+        result.files_before_steer = list_files()
+        steer_started = time.monotonic()
+        try:
+            steer = await client.steer_by_label(
+                LabelQueryInput(thread_id=thread_id, turn_id=turn_id, prefer="latest_active"),
+                STEER,
+                {"cwd": directory},
+            )
+            result.steer_accepted = bool(steer.get("steered"))
+        except Exception as exc:  # noqa: BLE001 - report, never crash
+            steer = {"error": f"{type(exc).__name__}: {exc}"}
+        result.steer_http_ms = int((time.monotonic() - steer_started) * 1000)
+        result.steer_sent_at_s = round(steer_started - started, 2)
+        result.steer_response = {k: v for k, v in steer.items() if k in ("steered", "turnId", "queued", "delivery", "confirmed", "error", "reason")}
+
+        while True:
+            progress = await client.progress_by_label(LabelQueryInput(thread_id=thread_id))
+            turns = progress.get("turns") or []
+            this_turn = next((t for t in turns if (t.get("turnId") or t.get("id")) == turn_id), None)
+            if this_turn is not None:
+                result.steer_recorded_on_turn = any(STEER[:20] in (s.get("text") or "") for s in (this_turn.get("steers") or []))
+                status = this_turn.get("status")
+            else:
+                status = progress.get("status")
+            result.final_status = status
+            result.extra_turns = len([t for t in turns if (t.get("turnId") or t.get("id")) != turn_id])
+            if result.ack_after_steer_s is None:
+                text = (this_turn or {}).get("lastUsefulMessage") or progress.get("lastUsefulMessage") or ""
+                if any(word in text.lower() for word in STEER_ACK_WORDS):
+                    result.ack_after_steer_s = round(time.monotonic() - steer_started, 2)
+            if status in ("completed", "failed", "cancelled"):
+                break
+            if time.monotonic() - started > deadline:
+                result.stuck_running = True
+                break
+            await asyncio.sleep(1.0)
+        result.files_final = list_files()
+        numbered = [f for f in result.files_final if f in ("three.txt", "four.txt", "five.txt")]
+        result.behaviour_changed = "README.md" in result.files_final and len(numbered) <= 1
+    except Exception as exc:  # noqa: BLE001
+        result.error = f"{type(exc).__name__}: {exc}"
+    finally:
+        if client is not None:
+            close = getattr(client, "close", None)
+            if close is not None:
+                try:
+                    await close()
+                except Exception:  # noqa: BLE001
+                    pass
+    result.total_s = round(time.monotonic() - started, 2)
+    return result
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--api", required=True, help="local API base, e.g. http://127.0.0.1:7999")
-    parser.add_argument("--token-file", required=True, help="file holding the local API token")
+    parser.add_argument("--api", help="local API base, e.g. http://127.0.0.1:7999")
+    parser.add_argument("--token-file", help="file holding the local API token")
+    parser.add_argument("--inprocess", choices=["claude_code", "codex"], help="drive super-agents directly instead of the API")
+    parser.add_argument("--store", default=None, help="in-process mode: scratch Super Agents store path")
     parser.add_argument("--directory", required=True, help="project folder on the API host (must exist)")
     parser.add_argument("--backend", default=None)
     parser.add_argument("--model", default=None)
@@ -214,19 +308,36 @@ def main(argv: list[str] | None = None) -> int:
         out = subprocess.run(shlex.split(args.list_files_cmd), capture_output=True, text=True, timeout=20)
         return sorted(line.strip() for line in out.stdout.splitlines() if line.strip())
 
-    with open(args.token_file) as handle:
-        token = handle.read().strip()
-    api = Api(args.api, token)
-    result = run_once(
-        api,
-        directory=args.directory,
-        backend=args.backend,
-        model=args.model,
-        pause=args.pause,
-        steer_after=args.steer_after,
-        deadline=args.deadline,
-        list_files=list_files,
-    )
+    if args.inprocess:
+        import asyncio
+
+        result = asyncio.run(
+            run_inprocess(
+                backend=args.inprocess,
+                directory=args.directory,
+                store_path=args.store or f"{args.directory}/.steer-harness-store.sqlite3",
+                pause=args.pause,
+                steer_after=args.steer_after,
+                deadline=args.deadline,
+                list_files=list_files,
+            )
+        )
+    else:
+        if not args.api or not args.token_file:
+            parser.error("--api and --token-file are required unless --inprocess is given")
+        with open(args.token_file) as handle:
+            token = handle.read().strip()
+        api = Api(args.api, token)
+        result = run_once(
+            api,
+            directory=args.directory,
+            backend=args.backend,
+            model=args.model,
+            pause=args.pause,
+            steer_after=args.steer_after,
+            deadline=args.deadline,
+            list_files=list_files,
+        )
     payload = asdict(result)
     payload["passed"] = result.passed
     if args.json:
