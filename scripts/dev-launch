@@ -211,7 +211,7 @@ if [ "$LAUNCH_ELECTRON" = true ]; then
   <key>LSUIElement</key><true/>
 </dict></plist>
 PLIST
-  cat > "$APP_DIR/Contents/MacOS/Openbase" <<LAUNCH
+  cat > "$APP_DIR/Contents/Resources/launch-dashboard.sh" <<LAUNCH
 #!/bin/bash
 # Run-and-exit launcher. Staying alive is a trap either way: exec'ing Electron
 # keeps this LSUIElement identity, which swallows Finder/Spotlight reopens;
@@ -236,6 +236,9 @@ fi
 open -n -a "$ELECTRON_APP" --args "$DESKTOP_DIR" --openbase-dev-dashboard
 exit 0
 LAUNCH
+  # Give LaunchServices a native entry point while retaining the Bash launcher.
+  # Compile before publication so failure keeps the existing app intact.
+  xcrun clang -Wall -Wextra -Werror "$SCRIPT_DIR/dev-launch-main.c" -o "$APP_DIR/Contents/MacOS/Openbase"
   chmod +x "$APP_DIR/Contents/MacOS/Openbase"
   touch "$MARKER"
   codesign --force --sign - "$APP_DIR"
