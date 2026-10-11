@@ -72,3 +72,18 @@ test("setup proceeds on any patch release of the pinned major", (t) => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Setup complete/);
 });
+
+test("CI workflows that cannot read .nvmrc pin the same Node version", () => {
+  for (const workflow of ["../desktop/.github/workflows/electron-rebuild.yml", "../cli/.github/workflows/release-standalone.yml"]) {
+    let source;
+    try {
+      source = readFileSync(path.join(scripts, workflow), "utf8");
+    } catch (error) {
+      if (error.code === "ENOENT") continue; // repo not in this install set
+      throw error;
+    }
+    const versions = [...source.matchAll(/node-version:\s*"?([^"\s]+)"?/g)].map((match) => match[1]);
+    assert.ok(versions.length > 0, workflow);
+    for (const version of versions) assert.equal(version, pinned, workflow);
+  }
+});
