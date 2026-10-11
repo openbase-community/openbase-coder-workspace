@@ -686,6 +686,22 @@ async def run_probe(args) -> int:
     session.input.audio = audio_in
     session.output.audio = audio_out
 
+    # Mirrors livekit.py: any agent audio counts as audible to the gate, and
+    # the session's say records its words for the echo check.
+    if hasattr(speech_gate, "agent_state_changed"):
+        session.on(
+            "agent_state_changed",
+            lambda ev2: speech_gate.agent_state_changed(ev2.new_state),
+        )
+        session_say = session.say
+
+        def say_and_note_words(text, *a, **k):
+            if isinstance(text, str):
+                speech_gate.agent_said(text)
+            return session_say(text, *a, **k)
+
+        session.say = say_and_note_words
+
     def on_item(ev) -> None:
         item = getattr(ev, "item", None)
         r = rec()
