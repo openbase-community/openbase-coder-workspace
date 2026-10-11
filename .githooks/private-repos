@@ -1,0 +1,8 @@
+# Private repos in this workspace, as owner/name of their origin remote.
+# The workspace hooks' .reports guard skips these. Every other repo, including
+# one with no origin, is treated as public. Add new private repos here.
+openbase-community/openbase-ios
+openbase-community/openbase-android
+openbase-community/netmesh-go
+openbase-community/netmesh-macos
+openbase-community/openbase-sync

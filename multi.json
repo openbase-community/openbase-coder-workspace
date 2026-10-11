@@ -1,5 +1,8 @@
 {
   "allowSymlinks": false,
+  "hooks": {
+    "path": ".githooks"
+  },
   "repos": [
     {
       "name": "allauth-client-swift",
@@ -108,6 +111,15 @@
       "fixedBranch": "main",
       "url": "https://github.com/openbase-community/netmesh-macos",
       "description": "Openbase Netmesh macOS menu-bar VPN app, helper, and desktop companion (closed source; desktop builds fall back to the signed prebuilt artifact)",
+      "installSets": [
+        "internal"
+      ]
+    },
+    {
+      "name": "sync",
+      "fixedBranch": "main",
+      "url": "https://github.com/openbase-community/openbase-sync",
+      "description": "Openbase Sync daemon: hub/edge file, git and database mirror over netmesh (private, proprietary; spec in docs/)",
       "installSets": [
         "internal"
       ]

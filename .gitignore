@@ -7,6 +7,7 @@ settings.local.json
 .pytest_cache/
 .ruff_cache/
 .reports/
+node_modules
 node_modules/
 dist/
 .playwright-cli/
@@ -46,6 +47,8 @@ install-tests/electron-macos/last-result.json
 /netmesh-go
 /netmesh-macos/
 /netmesh-macos
+/sync/
+/sync
 /super-agents/
 /super-agents
 /multi-react/

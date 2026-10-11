@@ -22,6 +22,17 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_DIR="$(cd "$HERE/../.." && pwd)"
 CLI_DIR="$WORKSPACE_DIR/cli"
+# This script runs pnpm install and electron-builder inside its own workspace,
+# which dirties it. The trunk checkouts are shared with other agents and the
+# installed runtime, so only an MWW or a throwaway worktree may host a build
+# (2026-10-09: a trunk build left pnpm placeholders behind and blocked merges).
+case "$WORKSPACE_DIR" in
+  *-worktrees/*) ;;
+  *)
+    echo "build-app.sh: refusing to build in the trunk checkout $WORKSPACE_DIR." >&2
+    echo "Run it from an MWW (multi worktree add <name>) or a throwaway worktree under a *-worktrees/ folder." >&2
+    exit 2 ;;
+esac
 DESKTOP_DIR="$WORKSPACE_DIR/desktop"
 
 LIVEKIT_BIN="$HOME/.openbase/bin/livekit-server"

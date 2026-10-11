@@ -30,6 +30,10 @@ tail -n 360 ~/.openbase/logs/livekit-agent.log | rg -i 'received job request|Con
 tail -n 360 ~/.openbase/logs/livekit-server.log | rg -i 'participant active|without connection|SIGNAL_SOURCE_CLOSE|dtls timeout|ice connection state change'
 ```
 
+Container and Maritime (cloud DevSpace) workspaces keep the same files under the data directory (`$OPENBASE_CODER_CLI_DATA_DIR/logs/<service>.log`, `/data/openbase/logs/` on Maritime): the entrypoint supervisor mirrors each service's output through `services/container_log_sink.py`, which trims a file back to its tail once it passes 4 MiB. Before that sink (2026-10-09) service output went only to the VM serial console and was unrecoverable after a call, so a workspace booted on an older image has no such files. Read them through Maritime exec with the same bounded tails; Maritime's own `GET /api/agents/<id>/logs` returns only its start/stop/build events, never service output.
+
+For a live-engine call, every bridge line ends in `call=<room name>` and the stages `live_forced_delegation` (utterance decision, `key=`), `live_delegation_turn_bound` (`key=` → Super Agents `turn_id=`), `live_append_commentary|thinking|instructions` (what was handed to GPT-Live, hashed) and `live_call_summary` (counts for the whole call, on close) join one call across the service log, the Super Agents turn store and the Cloud gateway's `live_voice_session_started|ended` lines (which carry the user id and GPT-Live session id). Spoken text itself is never logged, only its length and hash.
+
 Useful connectivity checks:
 
 ```sh
@@ -170,7 +174,7 @@ openbase-coder restart --service livekit-server
 
 Restarting `livekit-server` already includes its dependent `livekit-agent`: the restart plan stops the agent before the server, then starts the server before the agent. The command schedules this sequence asynchronously; do not schedule a separate agent restart alongside it.
 
-The stale-pool variant is self-healing. The `sync-workers` service runs a `livekit_pool_watchdog` job (in `cli/openbase_coder_cli/services/livekit_pool_watchdog.py`) that tails `livekit-agent.log`, and on a newly-written `wait_pc_connection timed out` bounces `livekit-agent` automatically — escalating to bouncing `livekit-server` + `livekit-agent` if the signature recurs within 15 minutes. It also proactively recycles the idle agent every ~45 minutes so the stale pre-warmed pool never forms in the first place. Both paths are gated by an active-call guard (never bounces mid-call; a signature that fires during a live call is deferred and bounced once the call ends) and a rolling rate limit (max 3 bounces / 30 min). A bounce cannot repair a running LiveKit config that lacks the preserved loopback candidate, so confirm the config before treating the watchdog as recovery.
+The stale-pool variant is self-healing. The `sync-workers` service runs a `livekit_pool_watchdog` job (in `cli/openbase_coder_cli/services/livekit_pool_watchdog.py`) that tails `livekit-agent.log`, and on a newly-written `wait_pc_connection timed out` bounces `livekit-agent` automatically — escalating to bouncing `livekit-server` + `livekit-agent` if the signature recurs within 15 minutes. On hosts, it also proactively recycles the agent after ~45 minutes without activity. Issued call tokens, newly created rooms, observed calls, dispatcher/thread turn events (including completion), and agent job starts reset that clock. A five-minute minimum grace after token issuance protects room join and dispatch even with a shorter configured idle interval; token publication and watchdog restarts share a process lock. Docker/Cloud containers (`OPENBASE_CODER_SERVICE_SUPERVISOR=external`) skip proactive recycling: cloud idle sleep handles their lifecycle, and the host sleep/network churn prevention does not justify interrupting fresh cloud calls. Failure-signature recovery stays enabled there. Both paths defer during the token grace or an active/recent room and share a rolling rate limit (max 3 bounces / 30 min); unreadable activity or room state cannot authorize an idle restart. A bounce cannot repair a running LiveKit config that lacks the preserved loopback candidate, so confirm the config before treating the watchdog as recovery.
 
 Look for its activity in the sync-workers log:
 
@@ -206,11 +210,61 @@ The user speaks, hears nothing back for a long stretch, and the server log shows
 
 ### This Mute Is Intended — Do Not Report It As A Bug
 
-The client muting its microphone here is the designed voice-delivery flow, not a stuck state: after the user goes quiet and their utterance is accepted, the agent emits `safe_to_mute_user` (see the voice lifecycle packet entry in `GLOSSARY.md` and the `voice_delivery.py` module docstring), the client mutes, and the mic reopens on `safe_to_unmute` after the agent's spoken reply. A slow coding-backend turn stretches that muted window for the turn's full duration — 2026-09-04 field example: a wedged first model call took 148s, the mic stayed muted throughout, then the reply played and the mic reopened correctly. Confirmed intended behavior; do not add unmute watchdogs or "fix" the sustained mute.
+The client muting its microphone around the agent's audio is the designed voice-delivery flow: after the user goes quiet and their utterance is accepted, the agent emits `safe_to_mute_user` (see the voice lifecycle packet entry in `GLOSSARY.md` and the `voice_delivery.py` module docstring) and the client mutes. Since 2026-10-11 the mic is released again (`safe_to_unmute`, reason `backend_working`) as soon as the request is committed to the coding backend, so the caller can steer the running turn by voice; it closes again with the reply's `agent_audio_started` and reopens on `safe_to_unmute` after the spoken reply. A call that stays muted through a long backend turn is therefore a bug on a current build (look for `mic_released_for_backend` in the delivery log), not the old deliberate sustained mute.
 
 ### What To Actually Investigate
 
 The delay itself. Read the thread's rollout under `~/.codex/sessions/` (or `super_agents_progress` for the turn) and compare `task_started` → first `AgentMessage` timestamps. A single multi-minute gap with no tool calls or retries, followed by fast subsequent turns, is a stalled model API request (seen after the app-server sits idle for hours — dead keep-alive socket signature), not a voice-pipeline problem: once text arrives, TTS flush→first-audio runs in under a second.
+
+## User's Words Get Chopped Or Dropped When The Phone Roams Off Wi-Fi
+
+### Symptoms Seen
+
+Part of a spoken message (or a whole utterance — e.g. a project subdirectory name said once) never reaches the dispatcher when the user walks out of Wi-Fi range. The user believes they said it; the agent never saw it.
+
+### Root cause
+
+Transcription is entirely server-side: the phone streams **raw audio** to LiveKit and the `cli` livekit-agent runs STT — the phone never holds the transcript text. So a roam (Wi-Fi→cellular handoff, ICE/TURN path change, packet loss) drops **audio frames in transit**, and the transcriber simply never receives those words. There is no dropped transcript to recover; the words are lost *upstream of transcription*. This is not the intended mid-conversation mute above.
+
+### Diagnosis (correlate the two sides)
+
+The signal to look for is: the phone mic was capturing speech while the server's audio input starved, in the same wall-clock window.
+
+- **Desktop** (`livekit-agent.log`): `dispatch_timing stage=stt_audio_gap gap_ms=…` — inbound audio frames stopped arriving for `gap_ms` (WARNING level). Every `dispatch_timing` line now carries `wall_ms=<epoch_ms>` for cross-device alignment.
+- **iOS** (AuthDiagnostics journal / upload): `local audio capture callback` with `above_threshold=true` and `event_kind=transition` marks the spoken window (`callback_unix_ms` epoch clock); `local network degraded during capture` and the `room reconnecting`/`reconnect started` lines now carry `mic_above_threshold`/`mic_captured_seconds` so you can see speech coinciding with the transport event.
+- **Automated correlation**: after capturing a session with the `voice-tests` harness, run `python voice-tests/drop_correlation.py <session-dir>` — it overlaps desktop `stt_audio_gap` events with iOS speech windows on the shared timeline and writes `drop-correlation.json` (heuristic; assumes NTP-synced clocks). `voice-tests/plots.py` renders the aligned iOS/server lanes for a visual timeline.
+
+### Fix
+
+There is no transcript to recover after the fact — mitigation is transport-level (audio buffering/FEC, reconnect handling). Use the diagnostics above to confirm a roam drop before treating a "missing message" as a dispatcher bug.
+
+## codex-app-server Crash-Loops Behind Codex's Managed Daemon, Or Skew Restarts Never Resolve
+
+### Symptoms Seen
+
+`launchctl print gui/$(id -u)/com.openbase.coder.codex-app-server` shows `runs` in the thousands; `~/.openbase/logs/codex-app-server.log` is megabytes of one repeated traceback ending in `RuntimeError: Codex control socket ... already has a live owner; refusing to replace or kill it`; `~/.openbase/logs/sync-workers.log` repeats `codex_version_skew waiting services=['codex-app-server'] blockers=[...]` (or logged `auto_restart services=['codex-app-server']` with a running version *higher* than the installed one). Users see Codex's "Background server has incompatible feature settings" dialog on every new session.
+
+### Diagnosis
+
+`ls -l ~/.codex/app-server-control/app-server-control.sock` is a **symlink**: Codex's own self-updating managed daemon (`codex app-server --managed-daemon`, binary under `~/.codex/packages/app-server-daemon/releases/`) owns the standard socket, and `codex app-server daemon version` shows `appServerVersion` ahead of `cliVersion`. Both symptoms are the same split, handled in cli since 2026-10-08: the `codex-app-server` runner idles (one log line, re-probing every 15 s) while `shared_codex_daemon_ready` is true instead of exiting 1 into launchd's `KeepAlive` loop, each runner start caps its own log at 4 MB, and `codex_version_skew` treats a server that is newer than the installed CLI, or served through the daemon's symlink, as advisory (`cli_outdated` in the tick summary, `codex-cli-outdated:<service>` in the health banner, a `no_restart` warning logged once per version pair) rather than scheduling a restart. On an install predating that, the fix is the same CLI upgrade; do not restart services to "catch up" to the daemon, and never pick "Restart with these settings" in Codex's dialog (it restarts the shared daemon under every attached session). User-facing write-up: `cli/docs/troubleshooting.md`, "Codex Says the Background Server Has Incompatible Feature Settings".
+
+### Fix
+
+Upgrade the npm Codex CLI to the daemon's version (`npm install -g @openai/codex@<appServerVersion>`), then confirm `codex app-server daemon version` reports equal versions and `openbase-coder services status` shows `codex-app-server available through the shared Codex daemon` with no mismatch. A crash-loop that is still running on an older cli stops on its own after the next `openbase-coder update`; trimming the oversized log by hand is safe (launchd appends).
+
+## macOS Asks Again For Desktop/Documents/Local Network Access After Every Update
+
+### Symptoms Seen
+
+After a CLI self-update, a voice request such as "what's on my desktop" hangs or fails until someone clicks Allow on a `"python3.12" would like to access files in your Desktop folder` dialog; `openbase-tunneld` re-asks for Local Network; six "Background Items Added" notifications fire during the update.
+
+### Diagnosis
+
+The launchd job's process is what macOS keys the grant on. Check what it is: `launchctl print gui/$(id -u)/com.openbase.coder.django-cli | grep -A3 arguments` must list `.../current/libexec/Openbase Services.app/Contents/MacOS/openbase-services` first; if it goes straight to `~/.openbase/launchd/django-cli.sh`, the installed release predates the launcher or the package shipped without it. Then `codesign -dvv "$HOME/.openbase/packages/standalone/current/libexec/Openbase Services.app" 2>&1 | grep -E 'Identifier|TeamIdentifier'`: `TeamIdentifier=not set` means the release was built without the Apple signing secrets, so its identity is a per-build cdhash and every update is a new client. The TCC row itself: `sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" "select client, client_type from access where service = 'kTCCServiceSystemPolicyDesktopFolder'"` should show `cloud.openbase.coder.services|0`, not a `python3.12` path.
+
+### Fix
+
+Ship a release built with the signing secrets in place (`MACOS_SERVICE_IDENTITY.md` lists them and the verification recipe); nothing on the user's machine can repair an unsigned identity. One further prompt and one Background Items notification per service are expected on the first update that introduces the launcher.
 
 ## livekit-server Crash-Loops With No Log Output (Code Signature Invalid)
 
@@ -244,7 +298,7 @@ Also check the livekit-agent: while the server was down it may have exhausted it
 
 ### Symptoms Seen
 
-`netmesh-ctl status` hangs indefinitely instead of erroring; the console shows the critical warning "This device's registration has no Openbase VPN identity"; `livekit-server.log` fills with `LIVEKIT_NODE_IP is required for Tailscale LiveKit signaling and media` and the service crash-loops (no listener on 7880, iOS calls can't connect); `openbase-coder setup` reports "The netmesh companion did not become ready: timed out" and `serve-set`/`status` netmesh-ctl invocations time out. Meanwhile the VPN data plane still works — the previously started root `tailscaled` keeps forwarding, so tailnet ping/SSH succeed, which makes the control-plane hang easy to misread.
+`netmesh-ctl status` hangs indefinitely instead of erroring; the console shows the critical warning "This device's registration has no Openbase VPN identity"; `livekit-server.log` shows `No tailnet IP yet (VPN not enrolled); serving LiveKit on loopback until the VPN connects.` on a machine that is already paired (7880 listens on loopback only, so iOS calls can't connect; before 2026-10-09 the service instead crash-looped on `LIVEKIT_NODE_IP is required for Tailscale LiveKit signaling and media`); `openbase-coder setup` reports "The netmesh companion did not become ready: timed out" and `serve-set`/`status` netmesh-ctl invocations time out. Meanwhile the VPN data plane still works — the previously started root `tailscaled` keeps forwarding, so tailnet ping/SSH succeed, which makes the control-plane hang easy to misread.
 
 ### Diagnosis
 
@@ -252,7 +306,7 @@ Also check the livekit-agent: while the server was down it may have exhausted it
 launchctl print system/cloud.openbase.netmesh.helper | grep -E 'state|last exit|runs'
 ```
 
-The tell is `last exit code = 78: EX_CONFIG` with a climbing `runs` count and `state = spawn scheduled`: launchd cannot spawn the registered SMAppService helper, typically because the `OpenbaseNetmeshCompanion.app` bundle it points into (`desktop/companion-build/`) was replaced or re-signed underneath the registration (e.g. by a concurrent desktop/companion rebuild). launchd keeps the Mach endpoint alive while spawns fail, so every XPC client — `netmesh-ctl`, the companion, and `tailscale_ip()` (LiveKit's node-IP lookup) — blocks forever instead of failing fast. A running `livekit-server` survives (it resolved its IP at startup); any restart while the helper is wedged puts it into the crash loop above.
+The tell is `last exit code = 78: EX_CONFIG` with a climbing `runs` count and `state = spawn scheduled`: launchd cannot spawn the registered SMAppService helper, typically because the `OpenbaseNetmeshCompanion.app` bundle it points into (`desktop/companion-build/`) was replaced or re-signed underneath the registration (e.g. by a concurrent desktop/companion rebuild). launchd keeps the Mach endpoint alive while spawns fail, so every XPC client — `netmesh-ctl`, the companion, and `tailscale_ip()` (LiveKit's node-IP lookup) — blocks forever instead of failing fast. A running `livekit-server` survives (it resolved its IP at startup); any restart while the helper is wedged drops it to the loopback-only mode above until the `tailnet_transition` sync-workers job sees the address again.
 
 `helper_launchd_health()` in `openbase_coder_cli/services/netmesh_companion.py` automates this probe, and `openbase-coder setup` runs it before the services phase so a wedged helper fails setup loudly instead of silently taking LiveKit down.
 
@@ -296,18 +350,13 @@ Before cli/desktop staging 2026-07-20, onboarding surfaces only checked that `~/
 
 Run `openbase-coder auth status --json`. If `login_expired`, the stored refresh token was rejected — run `openbase-coder login` again. If surfaces still disagree, the install predates the consolidation; update it.
 
-## Stale Peer Trees, Resurrected Deleted Files, Or Branch Switches Not Propagating (Syncthing Stall)
+## Stale Peer Trees Or Changes Not Propagating (Openbase Sync)
 
-The user-facing explanation, the 2 GiB disk floor, where the stall surfaces (dashboard banner, Sync page, `sync status`, `/api/sync/status/`), and the baseline fix (free disk, restart `code-sync`) are canonical in `cli/docs/code-sync.md` ("File sync stalled" and "Reading the reconcile heartbeat"). Symptoms on a two-machine pair: the peer's checkouts lag; files a commit deleted reappear as *untracked* copies with pre-deletion mtimes (breaking builds on files nobody edited); `*.sync-conflict-*` copies pile up; branch switches stop mirroring — because git-state sync rides Syncthing (repository manifests are synced files), a file-sync stall freezes both layers.
+The user-facing troubleshooting (daemon not answering, no peer, conflicts) is canonical in `cli/docs/code-sync.md`. Agent-side diagnosis:
 
-Agent-side diagnosis beyond the user doc:
-
-1. `openbase-coder sync status` — a red `ERROR:` under a folder names the stall; a climbing `Reconcile: awaiting_files` means files are behind git state.
-2. Engine detail: `curl -H "X-API-Key: $(sed -n 's/.*<apikey>\(.*\)<\/apikey>.*/\1/p' ~/.openbase/code-sync/config.xml)" "http://127.0.0.1:8385/rest/db/status?folder=<folder-id>"` — the `error` field names the stall reason.
-3. Reconcile heartbeat: `grep "code_sync tick_complete" ~/.openbase/logs/sync-workers.log | tail`
-   — no lines means the sync-workers service is down; `errors>0` lines are explained by an adjacent `code_sync tick_errors` warning naming the repo.
-
-Remedy beyond the baseline: the classic low-disk cause is often Docker VM images under `~/Library/Containers/com.docker.docker` (multi-hundred-GB). After freeing disk and restarting `code-sync`, if a deleted file was resurrected, remove the stray untracked copies on **both** machines (SSH to the peer) or Syncthing round-trips them back.
+1. `openbase-coder sync status --json` — no answer means the `sync-daemon` service is down (`openbase-coder services status`, `openbase-coder services logs sync-daemon`); an empty peer list means the edge cannot reach the hub over Openbase VPN; per-root pending transfers that never drain point at the transport.
+2. `openbase-coder sync conflicts` — a diverged branch or a both-sides edit holds that path until someone picks a side; nothing is overwritten silently.
+3. A machine still running the previous Syncthing-based sync (a `code-sync` service or a `~/.openbase/code-sync` directory) has not been migrated: run `openbase-coder sync migrate-from-syncthing` and then `--apply` on it.
 
 ## Openbase Direct Stays In `NeedsLogin` Or Reports `invalid pre auth key`
 
@@ -340,6 +389,27 @@ tart run <sip-enabled-source> --recovery
 
 Then clone VPN-exercising field tests from that maintained SIP-enabled source. See the shared `field-testing` skill and `install-tests/electron-macos/README.md` for the current VM lifecycle. Openbase Direct avoids the VPN companion, and current desktop packages are required to include `openbase-tunneld`.
 
+## Phone VPN Down After An App Update, Onboarded User Back On "Pair your devices"
+
+### Symptoms Seen
+
+The Openbase VPN was connected; a new build was installed over the app (devicectl/Xcode, TestFlight, App Store, or an APK update on Android); on the next launch the tunnel is down and, on iOS, the app shows onboarding at "Pair your devices" even though the VPN profile is still present and enabled in Settings (live demo, 2026-10-08, staging). The iOS trace (`Documents/netmesh-vpn.log`, pulled with `devicectl device copy from --domain-type appDataContainer`) shows `launch: ... new-install` followed by `status: 1` (disconnected).
+
+### Diagnosis
+
+Replacing the app bundle kills the packet-tunnel extension process (or stops it with `NEProviderStopReason.appUpdate`), and iOS never restarts a tunnel on its own without on-demand rules. The onboarding gate asks the VPN controller for the phone's tailnet identity, which is nil while the tunnel is down, so `localTailscaleDetected` is false and the required step snaps back to pairing.
+
+Both apps now restart the saved tunnel themselves from the authenticated shell (launch, foreground, and the onboarding gate's identity poll all join one in-flight attempt, which waits a bounded time for the tunnel). The restart reuses the enrolled node: no enrolment call and no new pre-auth key. Whether to restart is decided by `NetmeshTunnelResumePolicy` (iOS, `ios/Openbase/Services/NetmeshTunnelResumePolicy.swift`) and `shouldRecoverManagedNetwork` (Android, `android/.../settings/ManagedNetworkRecovery.kt`), with this heuristic for telling a user disconnect from a kill:
+
+- **iOS.** The packet-tunnel extension overwrites `status.json` in the App Group once a second with `phase: "running"` while up, and with `phase: "stopped", reason: <NEProviderStopReason>` from `stopTunnel`. When the OS reports the tunnel disconnected, a file still in a running/start phase means the process died without `stopTunnel` (install over the app, jetsam, reboot): restart. A `stopped` file carries the OS reason: `userInitiated`, `userLogout`, `userSwitch`, `authenticationCanceled` (the user's choice, including the VPN toggle in iOS Settings) and `superceded`, `configurationDisabled`, `configurationRemoved`, `providerDisabled` (another VPN configuration took over) are left alone; `appUpdate`, `providerFailed`, `sleep`, `idleTimeout`, network-loss reasons and `none` are restarted. Disconnect in the app additionally sets a `userDisconnected` default that Connect clears. A disabled profile (`isEnabled == false`, iOS's "another VPN is active" marker) and a node flagged for a post-sign-out reset or enrolled by a different account are never auto-started. Three consecutive failures (with 10 s then 30 s backoff between them) stop the automatic attempts and the pairing card shows the error with Connect as the way forward. The trace logs one `resume[<trigger>]: <decision>` line per evaluation.
+- **Android.** `VpnService.prepare()` returning an intent means consent was revoked or another VPN took the slot (`onRevoke`): recovery is skipped. The app's Disconnect sets a `user_disconnected` preference in the netmesh VPN prefs that `connect` clears, and recovery is skipped while it is set. Everything else (APK update, process death, network loss) resumes the persisted node from the saved control URL, enrolling once only when that node cannot resume.
+
+A restarted tunnel must not hand the engine the saved pre-auth key: the key is single-use, and a start that re-submits it makes the engine regenerate its node key and loop on `authkey already used` (extension `engine.log` under `Library/Application Support`, `backendState` stuck at `NoState`, no IP, while the OS reports the tunnel connected). That happened on every existing-tunnel restart, including the VPN toggle in iOS Settings, before 2026-10-08. The app passes `useAuthKey` in the start options only for the start that follows an enrolment; every other start (automatic resume, Settings toggle) resumes the persisted node, and `tunnel-events.log` records which (`authKey=enrolment` vs `authKey=none(persisted node)`). A resume whose OS status reaches connected but whose node never publishes an IP within the wait counts as a failed attempt, so the card never says Connected while pairing waits on the VPN.
+
+### Fix
+
+Nothing to repair by hand on a current build: open the app and wait for the pairing card's status. If it reports the VPN did not reconnect after the attempts, tap Connect (iOS) or reconnect from onboarding/Settings (Android); that path re-enrols only when the node needs it. If a user deliberately turned the VPN off in iOS Settings, the app does not fight it: Connect in the pairing card is the only way back.
+
 ## `openbase-coder user say` Fails With "Unable to publish announcer message"
 
 ### Symptoms Seen
@@ -366,3 +436,65 @@ phone notification instead of dropping the message.
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:7880/   # expect 200
 openbase-coder user say "<agent>" "test"                          # expect spoken or phone fallback, exit 0
 ```
+
+## Live Voice (GPT-Live) Engine: Call Runs On The Classic Pipeline, Or Ends Mid-Conversation
+
+The default voice model is `gpt-live-1` (the Live Voice engine, `dev-docs/live-voice.md`): the LiveKit agent runs the call on OpenAI GPT-Live through the Openbase Cloud live voice gateway and answers the model's client delegations with Super Agent turns. It fails soft: when a prerequisite is missing the call silently runs on the classic STT → turn → TTS pipeline for that call, the clients get a `live_voice_unavailable` status packet (`severity: warning`, not fatal) and the participant attribute `openbase.voice.engine` reads `pipeline`. The agent log carries exactly one line explaining why: `Live voice is unavailable for this call (reason=<reason>); falling back to the pipeline voice engine: <detail>`.
+
+Reasons and what they mean: `login_required` (no Cloud login / machine token on this install; `openbase-coder login`, then restart the Openbase services); `cloud_live_voice_unknown` (the Cloud usage summary at `/api/openbase/audio/usage/` has no `live_voice_*` fields, so the gateway is not deployed on the backend this install talks to; nothing to fix locally, point `OPENBASE_CLOUD_LIVE_BASE_URL` at staging if you need live voice before the production rollout); `subscription_required` (live voice credits for the month are used up); `gateway_not_deployed` / `gateway_http_401` / `gateway_http_403` (the websocket handshake at `{base_url}/live/sessions` answered 404 / 401 / 403); `gateway_close_4401` / `gateway_close_4403` (the gateway accepted the socket and immediately closed it: 4401 = token rejected, 4403 = spend or capacity denied, matching the audio proxies); `gateway_unreachable` (connection refused or timed out); `plugin_import_failed` (`livekit-plugins-openai` is missing or broken in the agent's venv: re-run the install, the package is a pinned dependency since livekit-agents 1.8.4); `live_session_start_failed` (`AgentSession.start` raised after the probe passed).
+
+A call that was live and then ends with the status code `live_voice_provider_failed` lost its GPT-Live websocket mid-conversation. The gateway spec notes that a cloud deploy cuts hour-long sockets (the ASGI drain window is shorter than a long call) and that the plugin reconnects only within its retry budget, so a deploy during a call ends it; the phone shows the packet detail and the user calls again. Also check the Cloud side for a 4403 close (spend cap reached mid-session) before blaming the network.
+
+```bash
+tail -n 400 ~/.openbase/logs/livekit-agent.log | rg -i 'Live voice is unavailable|voice_engine=|live_voice_unavailable|live_voice_provider_failed|gpt-live|OpenAI Live API'
+./.venv/bin/openbase-coder defaults voice-model          # which voice model this install asks for
+```
+
+To force the classic engine while debugging, set the voice model to `pipeline` (`openbase-coder defaults voice-model pipeline`); it applies to the next call, no restart. Unit tests never need a key or the gateway: `cli/tests/test_live_voice.py` runs a fake gateway on loopback.
+
+## Agent Turns Fail A Minute After They Start ("didn't reach the coding agent", "couldn't start on your computer")
+
+### Symptoms Seen
+
+Every Claude Code turn on a Mac (a Tart VM, a developer install) fails about 60 s after it starts with no answer text. The voice side says "Sorry — that request didn't reach the coding agent" and the stall watcher adds "Heads up — <agent> couldn't start on your computer"; the Super Agents store shows `last_error = Control request timeout: initialize`. The Dispatcher (cwd `~`) keeps working. `pgrep -fl _bundled/claude` lists one stuck `claude` process per failed turn, each about 4 MB, 0 % CPU. VM2, 2026-10-11 03:19–03:40Z.
+
+### Root cause
+
+A pending macOS folder-consent dialog for `Openbase Services` (the signed launcher every service runs through, TCC client `cloud.openbase.coder.services`). The first access to Desktop, Documents or Downloads blocks inside the kernel until the dialog is answered, and tccd serialises prompts, so a pending Documents prompt also holds every later Desktop open. A Claude Code process spawned into `~/Desktop/<project>` hangs in `getcwd()` before it can answer the SDK's initialize request. On a headless VM nobody clicks the dialog, so the hang is permanent.
+
+### Diagnosis
+
+```bash
+sample <claude pid> 2 | head -40                      # stuck in __getcwd → open$NOCANCEL = waiting on TCC
+sudo sqlite3 ~/Library/Application\ Support/com.apple.TCC/TCC.db \
+  "select service, client, auth_value from access where client like '%openbase%'"   # auth_value 2 = allowed
+perl -e 'alarm 5; exec "ls", "$ENV{HOME}/Documents"' || echo blocked                # hangs while the prompt is pending
+rg -n 'claude_cwd_access_blocked|blocked_permission_dialog' ~/.openbase/logs/django-cli.log ~/.openbase/logs/livekit-agent.log | tail
+```
+
+Since super-agents 6af0383 the spawning service probes the folder first, so instead of a 60 s failure the thread's observed state reads "macOS is waiting for permission: Openbase Services needs access to your Desktop folder. Click Allow …" within 2 s (turn `errorKind` `blocked_permission_dialog`), the stall watcher speaks it in a call (cli 676f081), and the same turn continues by itself once the dialog is answered. The local API also lists the three folders once at start-up so the dialogs show at setup time.
+
+### Fix
+
+Click Allow on the Mac. On a headless VM, grant it in the user TCC database by cloning an existing allowed row (keeps the code requirement) and restarting tccd, then kill the stuck processes (they survive SIGTERM):
+
+```bash
+DB="$HOME/Library/Application Support/com.apple.TCC/TCC.db"
+for svc in kTCCServiceSystemPolicyDocumentsFolder kTCCServiceSystemPolicyDownloadsFolder; do
+  sudo sqlite3 "$DB" "insert or replace into access select '$svc', client, client_type, auth_value, auth_reason, auth_version, csreq, policy_id, indirect_object_identifier_type, indirect_object_identifier, indirect_object_code_identity, flags, strftime('%s','now'), pid, pid_version, boot_uuid, last_reminded from access where service='kTCCServiceSystemPolicyDesktopFolder' and client='cloud.openbase.coder.services'"
+done
+sudo killall tccd
+pkill -9 -f _bundled/claude
+```
+
+## Steering Diagnostics (Is A Mid-Turn Message Reaching The Agent?)
+
+`scripts/steer_harness.py` (workspace root) measures steering end to end without a phone: it starts a paced multi-file turn, steers it part-way through, and reports whether the steer was accepted, how long until the agent acknowledged it, whether behaviour changed, and whether anything was lost, duplicated, queued to the end or left running. Against a local API (a VM through an SSH tunnel, a Maritime workspace):
+
+```bash
+ssh -N -L 17999:127.0.0.1:7999 admin@<vm-ip> &
+python3 scripts/steer_harness.py --api http://127.0.0.1:17999 --token-file <copy of the host's ~/.openbase/local-api-token> \
+  --directory /Users/admin/Desktop/steer-harness/run1 --list-files-cmd "ssh admin@<vm-ip> ls /Users/admin/Desktop/steer-harness/run1"
+```
+
+Against a developer's own backends with no local API, drive super-agents directly (`cd super-agents && uv run --extra claude python ../scripts/steer_harness.py --inprocess claude_code|codex --directory <scratch dir> --list-files-cmd "ls <scratch dir>"`). `--inject "<shell command>"` runs a failure injection just before the steer (restart django-cli on the host, `pkill -9 -P $PPID -f _bundled/claude`, …) and `--expect clean_failure` passes when the turn ends in a terminal state instead of sticking at running. Healthy numbers on 2026-10-11: steer accepted in 10–20 ms, acknowledged in 5–10 s, same turn, nothing queued.

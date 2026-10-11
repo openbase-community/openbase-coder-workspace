@@ -75,10 +75,22 @@ check_existing_installation
 # "command not found".
 MISSING_PREREQ=false
 
+# `uv tool install` (multi) and the standalone uv installer (uv itself) put
+# their executables in uv's tool bin dir, which a fresh macOS shell does not
+# have on PATH. Reporting those as "not installed" sends the user into a loop
+# (reinstalling says it is already installed), so use the tool from there for
+# this run and print the PATH fix instead.
+UV_TOOL_BIN="${UV_TOOL_BIN_DIR:-${XDG_BIN_HOME:-${HOME}/.local/bin}}"
+OFF_PATH_TOOLS=""
+
 require_command() {
   local cmd="$1"
   local fix="$2"
   if ! command -v "$cmd" >/dev/null 2>&1; then
+    if [ -x "$UV_TOOL_BIN/$cmd" ]; then
+      OFF_PATH_TOOLS="${OFF_PATH_TOOLS:+$OFF_PATH_TOOLS, }$cmd"
+      return
+    fi
     echo "Error: '$cmd' is required but was not found on PATH. Install it with:" >&2
     echo "  $fix" >&2
     MISSING_PREREQ=true
@@ -90,7 +102,22 @@ require_command multi "uv tool install multi-workspace"
 # Developer installs build the embedded Openbase Direct transport from the
 # checked-out Go source. Check this up front with the other workspace tools so
 # choosing Direct cannot fail after the console and Python environment build.
-require_command go "Download the current Go toolchain from https://go.dev/dl/"
+require_command go "brew install go   # or download the current toolchain from https://go.dev/dl/"
+# Internal checkouts build the Swift menu-bar UI from netmesh-macos when setup
+# launches the developer app; check its tools now rather than at the end.
+if [ "$(uname -s)" = "Darwin" ] && [ -d "$ROOT_DIR/netmesh-macos" ]; then
+  require_command xcodegen "brew install xcodegen"
+  require_command xcodebuild "Install Xcode from the App Store, then run: sudo xcode-select -s /Applications/Xcode.app"
+fi
+
+if [ -n "$OFF_PATH_TOOLS" ]; then
+  export PATH="$UV_TOOL_BIN:$PATH"
+  echo "Note: found ${OFF_PATH_TOOLS} in ${UV_TOOL_BIN}, which is not on your PATH." >&2
+  echo "Setup uses ${OFF_PATH_TOOLS} from there for this run. To fix PATH for new terminals, run:" >&2
+  echo "  uv tool update-shell   # then open a new terminal" >&2
+  echo "or add this line to your shell profile:" >&2
+  echo "  export PATH=\"${UV_TOOL_BIN}:\$PATH\"" >&2
+fi
 
 # The dev-workspace console build hard-requires pnpm (pnpm workspace with
 # workspace:* deps — npm is not a fallback). Check the same locations the CLI
@@ -115,22 +142,29 @@ require_pnpm() {
 
 require_pnpm
 
-# The console build (Vite) and workspace tooling need a modern Node. CI
-# builds on Node 22; 20 is the supported floor.
-MIN_NODE_MAJOR=20
+# The workspace pins one tested Node LTS in .nvmrc (the single source of
+# truth; package.json "engines" mirrors its major). Newer majors are not
+# drop-in: Node 26 broke Electron's install-time extraction. nvm is a shell
+# function, so setup cannot switch versions itself; it prints the commands.
+NVMRC_PATH="$ROOT_DIR/.nvmrc"
 require_node() {
+  local pinned pinned_major
+  pinned="$(tr -d '[:space:]' < "$NVMRC_PATH")"
+  pinned="${pinned#v}"
+  pinned_major="${pinned%%.*}"
+  local fix="  nvm install && nvm use   # run in ${ROOT_DIR}; reads .nvmrc (Node ${pinned})"
   if ! command -v node >/dev/null 2>&1; then
-    echo "Error: 'node' (>= ${MIN_NODE_MAJOR}) is required but was not found on PATH. Install it with:" >&2
-    echo "  brew install node   # or: pnpm env use --global 22" >&2
+    echo "Error: 'node' ${pinned} is required but was not found on PATH. Install nvm (see the developer setup docs), then run:" >&2
+    echo "$fix" >&2
     MISSING_PREREQ=true
     return
   fi
   local node_version node_major
   node_version="$(node --version 2>/dev/null)"
   node_major="$(printf '%s' "$node_version" | sed -nE 's/^v([0-9]+)\..*/\1/p')"
-  if [ -z "$node_major" ] || [ "$node_major" -lt "$MIN_NODE_MAJOR" ]; then
-    echo "Error: Node >= ${MIN_NODE_MAJOR} is required (found ${node_version:-unknown}). Upgrade with:" >&2
-    echo "  brew upgrade node   # or: pnpm env use --global 22" >&2
+  if [ "$node_major" != "$pinned_major" ]; then
+    echo "Error: this workspace pins Node ${pinned} in .nvmrc, but 'node' on PATH is ${node_version:-unknown} ($(command -v node)). Switch with:" >&2
+    echo "$fix" >&2
     MISSING_PREREQ=true
   fi
 }
@@ -156,6 +190,10 @@ fi
 # managed ignores and makes the remaining dev repos appear untracked. A fresh
 # public checkout still uses default and does not require private repo access.
 INSTALL_SET="$(node "$SCRIPT_DIR/detect-install-set.mjs" "$ROOT_DIR")"
+if [ -z "$INSTALL_SET" ]; then
+  echo "Error: could not detect the Multi install set for $ROOT_DIR." >&2
+  exit 1
+fi
 echo "Syncing the Multi '${INSTALL_SET}' install set."
 pushd "$ROOT_DIR"
 multi sync --install-set "$INSTALL_SET"
@@ -203,28 +241,58 @@ if [ "$USER_ARG_COUNT" -eq 0 ] && [ -t 0 ]; then
   prepend_setup_args --interactive
 fi
 
+# The ℹ️ setup summaries and then the phone-app QR code are the last things
+# setup prints, after the developer app is built and launched, so the CLI step
+# leaves them to this script.
+SETUP_NOTES_FILE="$(mktemp "${TMPDIR:-/tmp}/openbase-setup-notes.XXXXXX")"
+trap 'rm -f "$SETUP_NOTES_FILE"' EXIT
+prepend_setup_args --defer-app-qr --deferred-notes-file "$SETUP_NOTES_FILE"
+
 pushd "${ROOT_DIR}"/cli
 uv run openbase-coder setup "${SETUP_ARGS[@]}"
 popd
 
-echo "Setup complete. The Openbase services and browser dashboard are ready."
+# Launch GUI apps only in a logged-in macOS desktop session (not over SSH or
+# from a background job). OPENBASE_SETUP_NO_LAUNCH=1 opts out.
+has_gui_session() {
+  [ "$(uname -s)" = "Darwin" ] || return 1
+  [ "${OPENBASE_SETUP_NO_LAUNCH:-0}" != "1" ] || return 1
+  [ "$(launchctl managername 2>/dev/null)" = "Aqua" ]
+}
 
-# Visual developer surfaces are optional. Electron never owns setup in a
-# source-workspace install: dev-launch forces dashboard-only mode, while this
-# script remains the sole setup authority.
-if [ "$USER_ARG_COUNT" -eq 0 ] && [ -t 0 ] && [ -d "$ROOT_DIR/desktop" ]; then
-  printf "Build the optional Openbase developer app (dashboard in /Applications) and Swift menu-bar UI now? [y/N] "
-  DEV_LAUNCH_REPLY=""
-  read -r DEV_LAUNCH_REPLY || true
-  case "$DEV_LAUNCH_REPLY" in
-    y|Y|yes|YES)
-      exec "$ROOT_DIR/scripts/dev-launch" --all
-      ;;
-    *)
-      echo "You can build the developer app any time later:"
-      echo "  ./scripts/dev-launch --electron    # dashboard app (thin launcher in /Applications)"
-      echo "  ./scripts/dev-launch --menu-bar    # Swift status menu-bar UI"
-      echo "  ./scripts/dev-launch --all         # both"
-      ;;
-  esac
+# The Electron developer app is a required part of a source install, not an
+# optional extra: verify/repair its runtime (any platform) and, on macOS, build
+# the renderer, publish the /Applications launcher and launch it together with
+# the Swift menu-bar UI. Each step fails setup loudly; "Setup complete" is only
+# printed once the app is built.
+if [ -f "$ROOT_DIR/desktop/package.json" ]; then
+  node "$SCRIPT_DIR/ensure-electron-runtime.mjs" "$ROOT_DIR"
+  if [ "$(uname -s)" = "Darwin" ]; then
+    APP_PATH="/Applications/Openbase.app"
+    # dev-launch runs Electron in the foreground when a packaged app occupies
+    # /Applications, which would hold setup open; only launch the launcher.
+    if [ -e "$APP_PATH" ] && [ ! -f "$APP_PATH/Contents/Resources/.openbase-dev-launcher" ] && [ "${OPENBASE_DEV_DASHBOARD_REPLACE_APP:-0}" != "1" ]; then
+      PACKAGED_APP_PRESENT=true
+    else
+      PACKAGED_APP_PRESENT=false
+    fi
+    if has_gui_session && [ "$PACKAGED_APP_PRESENT" = false ]; then
+      # Electron never owns setup in a source-workspace install: dev-launch
+      # forces dashboard-only mode; this script stays the setup authority.
+      "$ROOT_DIR/scripts/dev-launch" --all
+    else
+      "$ROOT_DIR/scripts/dev-launch" --build-only
+      echo "Launch the developer app and the Swift menu-bar UI with:"
+      echo "  ./scripts/dev-launch --all"
+    fi
+  fi
 fi
+
+echo "Setup complete. The Openbase services, browser dashboard and developer app are ready."
+cat "$SETUP_NOTES_FILE"
+echo
+
+pushd "${ROOT_DIR}"/cli >/dev/null
+uv run openbase-coder app-download-qr
+popd >/dev/null
+echo "Last step: install the Openbase iOS or Android app from the link above and sign in."

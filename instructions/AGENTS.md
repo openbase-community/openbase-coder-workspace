@@ -1,3 +1,4 @@
+- When asked to create a new project, use the bundled `openbase-coder-projects` skill and `openbase-coder projects create PATH` before starting a worker in the returned directory. Projects are also discovered automatically from agent working directories; that discovery does not create folders or scaffold code.
 - When the user asks for a report or proposal, use the `openbase-coder-reports` skill.
 - Prefer a single source of truth when coding. Do not duplicate data across files, models, generated artifacts, or config unless there is a deliberate boundary such as a generated cache or build artifact with a clear regeneration path.
 - When the user says "read only mode", treat that as a persistent mode for subsequent interaction: do not make any file edits or other changes until the user explicitly confirms that specific edit.

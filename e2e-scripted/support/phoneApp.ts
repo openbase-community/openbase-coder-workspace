@@ -49,28 +49,54 @@ export async function configureBackendIfUiIsAvailable(baseUrl: string): Promise<
   return false;
 }
 
-export async function openCallSurfaceIfAvailable(): Promise<boolean> {
-  const selectors = ["~nav.call", "~Call", "~Open Call", "~Open call"];
+// There is no separate Call page any more: calls start from the composer on
+// the chat screen (call.start) and are controlled from the same composer
+// (call.mute / call.unmute / call.end); speaker lives in the call settings
+// sheet behind call.settings.
+const CALL_SURFACE_MARKERS = ["~call.start", "~call.end", "~call.settings"];
+
+async function anyExists(selectors: string[]): Promise<boolean> {
   for (const selector of selectors) {
-    const element = await $(selector);
-    if (await element.isExisting()) {
-      await element.click();
+    if (await (await $(selector)).isExisting()) {
       return true;
     }
   }
   return false;
 }
 
+export async function openCallSurfaceIfAvailable(): Promise<boolean> {
+  if (await anyExists(CALL_SURFACE_MARKERS)) {
+    return true;
+  }
+  // Elsewhere in the app: open the drawer and choose "New chat".
+  for (const selector of ["~nav.open-sidebar", "~Open sidebar", "~Menu"]) {
+    const menu = await $(selector);
+    if (await menu.isExisting()) {
+      await menu.click();
+      break;
+    }
+  }
+  for (const selector of ["~nav.home", "~New chat", 'android=new UiSelector().text("New chat")']) {
+    const newChat = await $(selector);
+    if (await newChat.isExisting()) {
+      await newChat.click();
+      await browser.pause(500);
+      break;
+    }
+  }
+  return anyExists(CALL_SURFACE_MARKERS);
+}
+
 export async function openCallSurface(): Promise<void> {
   const opened = await openCallSurfaceIfAvailable();
   if (!opened) {
     const source = await browser.getPageSource();
-    throw new Error(`Unable to open call surface. Expected nav.call or Call control. Page source excerpt: ${source.slice(0, 1000)}`);
+    throw new Error(`Unable to open the new-chat home. Expected call.start, call.end, nav.home, or New chat. Page source excerpt: ${source.slice(0, 1000)}`);
   }
 }
 
 export async function startCallIfAvailable(): Promise<boolean> {
-  const selectors = ["~call.start", "~Start", "~Start call", "~Call"];
+  const selectors = ["~call.start", "~Start call", "~Start"];
   for (const selector of selectors) {
     const element = await $(selector);
     if (await element.isExisting()) {
@@ -91,13 +117,39 @@ export async function startCall(): Promise<void> {
 
 export async function enableSpeakerIfAvailable(): Promise<boolean> {
   // Calls start in receiver mode; one tap of the speaker toggle routes call
-  // audio to the loudspeaker so a human observer can follow the test.
-  const speakerButton = await $("~call.speaker");
-  if (await speakerButton.isExisting()) {
-    await speakerButton.click();
-    return true;
+  // audio to the loudspeaker so a human observer can follow the test. The
+  // toggle sits in the call settings sheet, opened from the chat header.
+  let speakerButton = await $("~call.speaker");
+  let openedSettings = false;
+  if (!(await speakerButton.isExisting())) {
+    const settings = await $("~call.settings");
+    if (!(await settings.isExisting())) {
+      return false;
+    }
+    await settings.click();
+    await browser.pause(500);
+    openedSettings = true;
+    speakerButton = await $("~call.speaker");
   }
-  return false;
+  if (!(await speakerButton.isExisting())) {
+    return false;
+  }
+  await speakerButton.click();
+  if (openedSettings) {
+    await closeCallSettingsIfOpen();
+  }
+  return true;
+}
+
+async function closeCallSettingsIfOpen(): Promise<void> {
+  for (const selector of ["~call.settings-done", "~Done", "~Close"]) {
+    const button = await $(selector);
+    if (await button.isExisting()) {
+      await button.click();
+      await browser.pause(300);
+      return;
+    }
+  }
 }
 
 export type CallMuteState = "muted" | "unmuted" | "unknown";

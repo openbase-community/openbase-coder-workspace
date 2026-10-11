@@ -58,7 +58,7 @@ export function loadDeviceEnv(options: LoadOptions = {}): DeviceEnv {
       "OPENBASE_E2E_CARTESIA_VOICE_ID",
       readEnv("CARTESIA_VOICE_ID", "9626c31c-bec5-4cca-baa8-f8ba9e84c8bc"),
     ),
-    cartesiaModelId: readEnv("OPENBASE_E2E_CARTESIA_MODEL_ID", "sonic-3.5"),
+    cartesiaModelId: readEnv("OPENBASE_E2E_CARTESIA_MODEL_ID", "sonic-3.6"),
     cartesiaVersion: readEnv("OPENBASE_E2E_CARTESIA_VERSION", "2026-03-01"),
     allowRealCodex: readBooleanEnv("OPENBASE_E2E_ALLOW_REAL_CODEX", false),
     confirmRealCodex: readBooleanEnv("OPENBASE_E2E_CONFIRM_REAL_CODEX", false),

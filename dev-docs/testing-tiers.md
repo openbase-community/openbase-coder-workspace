@@ -168,6 +168,12 @@ never has to be found twice.
 - Field-test operating procedure (clean-room VM, dedicated account, acoustic
   loop, sampling, logging, Slack, PRs): the workspace-local `field-testing`
   skill, `.agents/skills/field-testing/SKILL.md`.
+- Docker verification sandbox — an isolated parallel runtime for live-verifying
+  **uncommitted** cli/console changes (including restart-gated ones) without
+  touching the shared trunk services. Not a tier of record; explicitly cannot
+  test voice, native apps, or tailnet/peer paths. Procedure, isolation rules,
+  and scope table: the workspace-local `docker-verification` skill,
+  `.agents/skills/docker-verification/SKILL.md`.
 - Scripted-E2E suite map, environment reference, and run commands:
   `e2e-scripted/README.md`.
 - Disposable macOS VM harness used for clean-room installs:

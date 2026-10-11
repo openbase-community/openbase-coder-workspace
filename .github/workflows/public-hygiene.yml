@@ -12,6 +12,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
       # The script verifies the pre-push guard is installed locally; satisfy
       # that in CI so the tracked-path checks run.
       - name: Install hooks path

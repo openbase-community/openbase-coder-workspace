@@ -7,16 +7,19 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 INSTALLATION_PATH="${HOME}/.openbase/installation.json"
 LAUNCH_ELECTRON=false
 LAUNCH_MENU_BAR=false
+BUILD_ONLY=false
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/dev-launch [--all | --electron | --electron-dev | --menu-bar]
+Usage: ./scripts/dev-launch [--all | --electron | --electron-dev | --menu-bar | --build-only]
 
-Launch optional visual surfaces for an existing development installation.
+Launch visual surfaces for an existing development installation.
 Electron runs dashboard/status-only: it cannot invoke the bundled setup flow.
 --electron builds the renderer once and runs Electron alone (no vite dev
 server); --electron-dev runs the vite dev server + HMR for working on the
-dashboard UI itself.
+dashboard UI itself. --build-only verifies Electron, builds the renderer and
+publishes the /Applications launcher without launching anything; setup runs
+it as a required step.
 EOF
 }
 
@@ -40,6 +43,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --menu-bar)
       LAUNCH_MENU_BAR=true
+      ;;
+    --build-only)
+      LAUNCH_ELECTRON=true
+      BUILD_ONLY=true
       ;;
     --help|-h)
       usage
@@ -112,6 +119,12 @@ launch_menu_bar() {
   echo "Opened the Swift Openbase networking menu-bar UI."
 }
 
+# Check/repair Electron before building or publishing either visual surface.
+# This also covers --electron-dev and the packaged-app direct-launch fallback.
+if [ "$LAUNCH_ELECTRON" = true ]; then
+  node "$SCRIPT_DIR/ensure-electron-runtime.mjs" "$ROOT_DIR"
+fi
+
 if [ "$LAUNCH_MENU_BAR" = true ]; then
   launch_menu_bar
 fi
@@ -126,16 +139,6 @@ if [ "$LAUNCH_ELECTRON" = true ]; then
   # process: no dev server, no file watchers. Rebuild only when the renderer
   # sources are newer than the last build.
   DESKTOP_DIR="$ROOT_DIR/desktop"
-  # Unpackaged runs read the menu-bar app name from Electron's own bundle
-  # before any of our code executes; brand the dev bundle once per install.
-  ELECTRON_PLIST="$DESKTOP_DIR/node_modules/electron/dist/Electron.app/Contents/Info.plist"
-  if [ -f "$ELECTRON_PLIST" ] && [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$ELECTRON_PLIST" 2>/dev/null)" != "Openbase" ]; then
-    /usr/libexec/PlistBuddy -c 'Set :CFBundleName Openbase' "$ELECTRON_PLIST"
-    /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName Openbase' "$ELECTRON_PLIST" 2>/dev/null || \
-      /usr/libexec/PlistBuddy -c 'Add :CFBundleDisplayName string Openbase' "$ELECTRON_PLIST"
-    codesign --force --sign - "$DESKTOP_DIR/node_modules/electron/dist/Electron.app" >/dev/null 2>&1 || true
-    echo "Branded the dev Electron bundle as Openbase."
-  fi
   DIST_INDEX="$DESKTOP_DIR/dist/index.html"
   if [ ! -f "$DIST_INDEX" ] || ! node "$ROOT_DIR/scripts/check-renderer-freshness.cjs" "$ROOT_DIR" desktop || [ -n "$(find "$DESKTOP_DIR/src" "$DESKTOP_DIR/index.html" "$DESKTOP_DIR/vite.config"* "$ROOT_DIR/coder-react/src" "$ROOT_DIR/multi-react/src" "$ROOT_DIR/boilersync-react/src" -newer "$DIST_INDEX" -print -quit 2>/dev/null)" ]; then
     echo "Building the dashboard renderer…"
@@ -149,12 +152,26 @@ if [ "$LAUNCH_ELECTRON" = true ]; then
   APP_DIR="/Applications/Openbase.app"
   MARKER="$APP_DIR/Contents/Resources/.openbase-dev-launcher"
   if [ -e "$APP_DIR" ] && [ ! -f "$MARKER" ] && [ "${OPENBASE_DEV_DASHBOARD_REPLACE_APP:-0}" != "1" ]; then
+    if [ "$BUILD_ONLY" = true ]; then
+      echo "A packaged app already occupies $APP_DIR; built the dashboard without replacing it."
+      echo "(Set OPENBASE_DEV_DASHBOARD_REPLACE_APP=1 to replace it with the dev launcher.)"
+      exit 0
+    fi
     echo "A packaged app already occupies $APP_DIR; launching the dashboard directly."
     echo "(Set OPENBASE_DEV_DASHBOARD_REPLACE_APP=1 to replace it with the dev launcher.)"
     echo "Launching Electron in developer dashboard-only mode (setup is disabled)."
     exec pnpm --dir "$DESKTOP_DIR" start
   fi
-  rm -rf "$APP_DIR"
+  # The menu bar names the running bundle, so the launcher opens a branded
+  # clone of the workspace Electron. node_modules' upstream bundle is never
+  # modified; the clone is rebuilt only when that runtime changes.
+  ELECTRON_APP="$DESKTOP_DIR/dev-runtime/Openbase.app"
+  node "$SCRIPT_DIR/brand-dev-runtime.mjs" "$DESKTOP_DIR" "$ELECTRON_APP"
+  DESTINATION="$APP_DIR"
+  STAGING_DIR="$(mktemp -d "${TMPDIR:-/tmp}/openbase-dev-launch.XXXXXX")"
+  trap 'rm -rf "$STAGING_DIR"' EXIT
+  APP_DIR="$STAGING_DIR/Openbase.app"
+  MARKER="$APP_DIR/Contents/Resources/.openbase-dev-launcher"
   mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
   cp "$DESKTOP_DIR/assets/openbase-coder-icon.icns" "$APP_DIR/Contents/Resources/openbase.icns"
   cat > "$APP_DIR/Contents/Info.plist" <<PLIST
@@ -174,7 +191,6 @@ if [ "$LAUNCH_ELECTRON" = true ]; then
   <key>LSUIElement</key><true/>
 </dict></plist>
 PLIST
-  ELECTRON_APP="$(cd "$DESKTOP_DIR/node_modules/electron/dist/Electron.app" && pwd -P)"
   cat > "$APP_DIR/Contents/MacOS/Openbase" <<LAUNCH
 #!/bin/bash
 # Run-and-exit launcher. Staying alive is a trap either way: exec'ing Electron
@@ -202,7 +218,24 @@ exit 0
 LAUNCH
   chmod +x "$APP_DIR/Contents/MacOS/Openbase"
   touch "$MARKER"
-  codesign --force --sign - "$APP_DIR" >/dev/null 2>&1 || true
+  codesign --force --sign - "$APP_DIR"
+  # Reuse native staging's verified atomic publication. Preparation, signing or
+  # publication failure leaves the existing launcher intact; swapped bundles
+  # are retained so running code is never unlinked in place.
+  node --input-type=module - "$DESKTOP_DIR" "$APP_DIR" "$DESTINATION" <<'NODE'
+import { cpSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+import path from "node:path";
+const [desktop, prepared, destination] = process.argv.slice(2);
+const { stageNativeBundle } = await import(pathToFileURL(path.join(desktop, "scripts/native-bundle-staging.mjs")));
+stageNativeBundle(destination, (incoming) => cpSync(prepared, incoming, { recursive: true }));
+NODE
+  rm -rf "$STAGING_DIR"
+  trap - EXIT
+  if [ "$BUILD_ONLY" = true ]; then
+    echo "Built the Openbase developer app: $DESTINATION"
+    exit 0
+  fi
   echo "Launching the Openbase dev dashboard (setup is disabled)."
-  exec open "$APP_DIR"
+  exec open "$DESTINATION"
 fi
