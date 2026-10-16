@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+
+# Bump the "Direct APK · vX.Y.Z" label on the marketing downloads page's
+# Android mini-card to the given version, commit ONLY that file in the
+# marketing repo and push origin main (the push triggers the site deploy).
+#
+# The APK itself is published by the android repo's own CI
+# (.github/workflows/android-release.yml, on push to main) to a fixed
+# "latest" S3 object the page links, so the only thing left to do after a
+# release is this label. scripts/promote runs this once that CI run has
+# succeeded; scripts/publish-android-apk runs it after a manual upload.
+#
+# Usage: bump-android-downloads-card VERSION [--dry-run]
+#
+#   VERSION     The android versionName (e.g. 0.2.5; a leading "v" is
+#               stripped). Read it from the released commit:
+#               git -C android show origin/main:app/build.gradle.kts
+#   --dry-run   Print the label before/after and the commit/push that would
+#               happen without writing, committing or pushing anything.
+#
+# Failure model:
+#   - Hard failures (the label not matching the expected pattern exactly
+#     once, git commit/push failure) exit non-zero.
+#   - Soft skips (marketing checkout missing, or install.html has uncommitted
+#     local changes) print a loud WARNING and exit 0 — the APK is already
+#     live and we must not clobber someone else's in-progress edit.
+#     Unrelated untracked files in the marketing repo are ignored.
+#
+# MARKETING_REPO overrides the marketing checkout location (tests, nonstandard
+# workspace layouts); it defaults to the sibling Cloud Multi workspace.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+
+MARKETING_REPO="${MARKETING_REPO:-${ROOT_DIR}/../openbase-cloud-workspace/marketing}"
+INSTALL_HTML_REL="site-content/install.html"
+INSTALL_HTML="${MARKETING_REPO}/${INSTALL_HTML_REL}"
+
+usage() { sed -n '3,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+warn() { echo "WARNING: $*" >&2; }
+die()  { echo "ERROR: $*" >&2; exit 1; }
+
+DRY_RUN=0
+VERSION=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run) DRY_RUN=1 ;;
+        -h|--help) usage; exit 0 ;;
+        -*) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+        *)
+            [[ -z "$VERSION" ]] || { echo "Unexpected argument: $1" >&2; usage >&2; exit 2; }
+            VERSION="${1#v}"
+            ;;
+    esac
+    shift
+done
+[[ -n "$VERSION" ]] || { usage >&2; exit 2; }
+[[ "$VERSION" =~ ^[0-9][0-9A-Za-z._-]*$ ]] || die "'${VERSION}' does not look like an Android versionName."
+
+# The label prefix we own. Matches "Direct APK · v<version>" (any version) and
+# deliberately stops at the version so any trailing card copy (e.g.
+# " · prefer the Google Play beta above") is preserved by the sed replacement.
+LABEL_RE='Direct APK · v[0-9][0-9A-Za-z._-]*'
+NEW_LABEL="Direct APK · v${VERSION}"
+
+if [[ ! -d "$MARKETING_REPO/.git" ]]; then
+    warn "Marketing repo checkout missing at $MARKETING_REPO — skipping the downloads-card bump. Bump the card to v${VERSION} manually."
+    exit 0
+fi
+if [[ ! -f "$INSTALL_HTML" ]]; then
+    warn "install.html missing at $INSTALL_HTML — skipping the downloads-card bump."
+    exit 0
+fi
+
+# Refuse to clobber an in-progress edit to this one file (unrelated untracked
+# files elsewhere in the repo are fine and ignored).
+if [[ -n "$(git -C "$MARKETING_REPO" status --porcelain -- "$INSTALL_HTML_REL")" ]]; then
+    warn "$INSTALL_HTML_REL has uncommitted local changes — skipping the downloads-card bump to avoid clobbering other work."
+    exit 0
+fi
+
+match_count="$(grep -c "$LABEL_RE" "$INSTALL_HTML" || true)"
+if [[ "$match_count" != "1" ]]; then
+    die "Expected exactly one Android APK card label matching '${LABEL_RE}' in $INSTALL_HTML, found ${match_count}. Refusing to edit (the page markup changed — update this script's LABEL_RE)."
+fi
+
+current_label="$(grep -o "$LABEL_RE" "$INSTALL_HTML" | head -n 1)"
+
+if [[ "$current_label" == "$NEW_LABEL" ]]; then
+    echo "Marketing card already at '${NEW_LABEL}' — nothing to commit."
+    exit 0
+fi
+
+echo "Marketing card: '${current_label}' -> '${NEW_LABEL}'"
+
+if [[ "$DRY_RUN" == "1" ]]; then
+    echo "[dry-run] would write the updated label to $INSTALL_HTML_REL"
+    echo "[dry-run] would: git -C <marketing> add $INSTALL_HTML_REL"
+    echo "[dry-run] would: git commit -m 'Downloads page: bump Android APK card to v${VERSION}'  (no Agent-Thread-Id trailer — automation)"
+    echo "[dry-run] would: git push origin main  (triggers site deploy)"
+    exit 0
+fi
+
+updated="$(sed "s|${LABEL_RE}|${NEW_LABEL}|" "$INSTALL_HTML")"
+printf '%s\n' "$updated" > "$INSTALL_HTML"
+
+git -C "$MARKETING_REPO" add -- "$INSTALL_HTML_REL"
+git -C "$MARKETING_REPO" commit -m "Downloads page: bump Android APK card to v${VERSION}" \
+    || die "git commit failed in $MARKETING_REPO"
+git -C "$MARKETING_REPO" push origin main \
+    || die "git push origin main failed in $MARKETING_REPO"
+
+echo "Marketing downloads card bumped to v${VERSION} and pushed (site deploy triggered)."
