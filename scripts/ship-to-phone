@@ -176,7 +176,9 @@ ship_ios() {
         echo "$key" >"$CACHE/netmeshgo-ios.key"
     fi
 
-    key="$(cd "$ios" && { cat Project.swift Tuist/Package.swift Tuist/Package.resolved 2>/dev/null; ls Vendor; cat ../allauth-client-swift/Package.swift ../openbase-agent-ui-swift/Package.swift; } | shasum -a 256 | cut -c1-64)"
+    # Source file paths (not contents) are in the key: Project.swift globs
+    # these folders, so adding/removing/renaming a file needs a regenerate.
+    key="$(cd "$ios" && { cat Project.swift Tuist/Package.swift Tuist/Package.resolved 2>/dev/null; ls Vendor; cat ../allauth-client-swift/Package.swift ../openbase-agent-ui-swift/Package.swift; find Openbase PacketTunnel Shared OpenbaseTests OpenbaseUITests -type f ! -name .DS_Store 2>/dev/null | LC_ALL=C sort; } | shasum -a 256 | cut -c1-64)"
     if [[ "$(cat "$CACHE/tuist.key" 2>/dev/null)" != "$key" || ! -d "$ios/Openbase.xcworkspace" ]]; then
         step "tuist generate"
         ( cd "$ios" && tuist generate --no-open ) >"$CACHE/logs/tuist.log" 2>&1 \
