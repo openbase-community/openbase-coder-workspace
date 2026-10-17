@@ -20,11 +20,16 @@
 # their own workspaces (~/Projects/multi, ~/Projects/boilersync) first if
 # they changed.
 #
-# When a promotion into main/master actually moves the android repo, this
-# script runs scripts/publish-android-apk as its final step (build + upload
-# the APK to S3, bump the marketing downloads-card label). That runs after
-# every push, so a failure there never unwinds the promotions — it just prints
-# a loud error summary and exits non-zero at the end.
+# When a promotion into main/master actually moves the android repo, the
+# android repo's own CI (android-release.yml) rebuilds the netmesh VPN AAR
+# from netmesh-go main and publishes the APK to S3. This script never builds
+# the APK itself (a local build would run in the shared trunk checkout against
+# whatever AAR happens to be vendored there; on 2026-10-14 that shipped an
+# Oct 2 engine as "latest" until CI overwrote it). Instead, as its final
+# step, it waits for that CI run on the pushed android SHA and then bumps the
+# marketing downloads-card label (scripts/bump-android-downloads-card). That
+# runs after every push, so a failure there never unwinds the promotions — it
+# just prints a loud error summary and exits non-zero at the end.
 
 set -euo pipefail
 
@@ -156,8 +161,10 @@ Options:
                      release, e.g. --exclude desktop while the cli release
                      publishes, then re-run to promote desktop alone.
   -y, --yes          Push without the confirmation prompt.
-  --no-wait-ci       Do not sequence desktop behind the cli auto-release and
-                     do not watch the desktop rebuild (fire-and-forget).
+  --no-wait-ci       Do not sequence desktop behind the cli auto-release, do
+                     not watch the desktop rebuild, and do not wait for the
+                     android-release CI run (fire-and-forget; bump the Android
+                     downloads card yourself once that run succeeds).
   --agent-thread-id ID
                      Stamp synthesized exact-tree commits with this
                      Agent-Thread-Id trailer for deploy attribution. Defaults
@@ -446,6 +453,7 @@ fetch_all_repos() {
 declare -a PLAN_REPO PLAN_ACTION PLAN_DETAIL
 FAILED=0
 ANDROID_PROMOTED=0
+ANDROID_PUSHED_SHA=""
 
 echo "Planning promotion ${FROM} -> ${TO} ..."
 fetch_all_repos
@@ -588,7 +596,10 @@ push_plan_index() {
         git -C "$dir" push origin "origin/${FROM}:refs/heads/${TO}"
         LAST_PUSHED_SHA="$(git -C "$dir" rev-parse "origin/${FROM}")"
     fi
-    [[ "$repo" == "android" ]] && ANDROID_PROMOTED=1
+    if [[ "$repo" == "android" ]]; then
+        ANDROID_PROMOTED=1
+        ANDROID_PUSHED_SHA="$LAST_PUSHED_SHA"
+    fi
     # Keep the local TO ref current; best-effort (a checked-out TO in another
     # worktree, or a dirty tree, just leaves the local ref behind).
     if [[ "$(git -C "$dir" symbolic-ref --short --quiet HEAD || true)" == "$TO" ]]; then
@@ -719,20 +730,72 @@ fi
 
 echo "Promoted ${PUSH_COUNT} repo(s) ${FROM} -> ${TO}."
 
-# Auto-publish the Android APK + marketing downloads-card bump after a
-# production promotion, once the android repo has actually been promoted to
-# main. This runs LAST and on purpose does not unwind the promotions already
-# pushed above: a build/upload/marketing failure surfaces as a loud error
-# summary and a non-zero exit here, but every repo push already succeeded.
+# Android after a production promotion: the APK is published by the android
+# repo's CI (android-release.yml, triggered by the push above), never built
+# here. Wait for that run on the exact SHA we pushed, then bump the marketing
+# downloads-card label to the released versionName. This runs LAST and on
+# purpose does not unwind the promotions already pushed above: a CI failure or
+# a marketing failure surfaces as a loud error summary and a non-zero exit
+# here, but every repo push already succeeded.
+android_version_name() { # $1 = android commit; prints versionName from its app/build.gradle.kts
+    git -C "${ROOT_DIR}/android" show "$1:app/build.gradle.kts" 2>/dev/null \
+        | sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' | head -n 1
+}
+
+watch_android_release() { # $1 = pushed android sha
+    local slug sha run_id conclusion
+    slug="$(repo_slug "${ROOT_DIR}/android")"
+    sha="$1"
+    echo "Waiting for the android-release CI run of ${sha:0:8} on ${TO} ..."
+    run_id=""
+    for _ in $(seq 1 60); do
+        run_id="$(gh run list -R "$slug" --workflow android-release.yml --branch "$TO" --limit 10 \
+            --json databaseId,headSha -q "[.[] | select(.headSha == \"$sha\")][0].databaseId" 2>/dev/null || true)"
+        [[ -n "$run_id" && "$run_id" != "null" ]] && break
+        sleep 5
+    done
+    if [[ -z "$run_id" || "$run_id" == "null" ]]; then
+        echo "ERROR: no android-release run appeared for android@${sha:0:8} on ${TO}." >&2
+        echo "  (The workflow ignores pushes that only touch *.md or docs/; such a promotion needs no new APK.)" >&2
+        echo "  Dispatch one if the app changed: gh workflow run android-release.yml -R ${slug} --ref ${TO}" >&2
+        return 1
+    fi
+    echo "  android-release run ${run_id}: watching (~12-17 min; ~8 min less with the netmesh AAR cached) ..."
+    if ! gh run watch "$run_id" -R "$slug" --exit-status >/dev/null; then
+        conclusion="$(gh run view "$run_id" -R "$slug" --json conclusion -q .conclusion 2>/dev/null || true)"
+        if [[ "$conclusion" == "cancelled" ]]; then
+            echo "ERROR: android-release run ${run_id} was cancelled (a newer push to ${TO} supersedes it); the newer run publishes the APK." >&2
+        else
+            echo "ERROR: android-release run ${run_id} FAILED; the public APK was not updated." >&2
+        fi
+        echo "  Diagnose: gh run view ${run_id} -R ${slug}" >&2
+        return 1
+    fi
+    echo "  android-release succeeded: the public APK for ${sha:0:8} is live."
+    return 0
+}
+
 if [[ "$TO" == "main" || "$TO" == "master" ]] && [[ "$ANDROID_PROMOTED" == "1" ]]; then
     echo
-    echo "Publishing Android APK (android was promoted to ${TO}) ..."
-    if ! "$SCRIPT_DIR/publish-android-apk"; then
+    ANDROID_VERSION="$(android_version_name "$ANDROID_PUSHED_SHA")"
+    if [[ "$WAIT_CI" != "1" ]]; then
+        echo "note: --no-wait-ci: not watching the android-release CI run for android@${ANDROID_PUSHED_SHA:0:8}."
+        echo "  Once it succeeds, bump the downloads card: scripts/bump-android-downloads-card ${ANDROID_VERSION:-<versionName>}"
+    elif ! watch_android_release "$ANDROID_PUSHED_SHA"; then
         echo >&2
-        echo "ERROR: Android APK publish FAILED after the promotion completed." >&2
+        echo "ERROR: Android release did not complete after the promotion." >&2
         echo "  All ${PUSH_COUNT} repo(s) were promoted ${FROM} -> ${TO} successfully," >&2
-        echo "  but building/uploading the APK or bumping the marketing card did not." >&2
-        echo "  Fix the cause and re-run standalone: scripts/publish-android-apk" >&2
+        echo "  but the android-release CI run for android@${ANDROID_PUSHED_SHA:0:8} did not publish the APK." >&2
+        echo "  Fix or rerun that workflow, then: scripts/bump-android-downloads-card ${ANDROID_VERSION:-<versionName>}" >&2
+        exit 1
+    elif [[ -z "$ANDROID_VERSION" ]]; then
+        echo "ERROR: could not read versionName from android@${ANDROID_PUSHED_SHA:0:8} app/build.gradle.kts; the APK is live but the downloads card was not bumped." >&2
+        echo "  Bump it by hand: scripts/bump-android-downloads-card <versionName>" >&2
+        exit 1
+    elif ! "$SCRIPT_DIR/bump-android-downloads-card" "$ANDROID_VERSION"; then
+        echo >&2
+        echo "ERROR: the downloads-card bump FAILED after the Android release completed." >&2
+        echo "  The APK v${ANDROID_VERSION} is live; re-run standalone: scripts/bump-android-downloads-card ${ANDROID_VERSION}" >&2
         exit 1
     fi
 fi
